@@ -65,7 +65,7 @@ function RoomDetail() {
 
             <h3 className="font-serif text-2xl mb-4">Amenities</h3>
             <ul className="grid sm:grid-cols-2 gap-3 mb-10">
-              {room.amenities.map((a) => (
+              {room.amenities.map((a: string) => (
                 <li key={a} className="flex items-center gap-3 text-muted-foreground">
                   <Check size={16} className="text-gold" /> {a}
                 </li>
