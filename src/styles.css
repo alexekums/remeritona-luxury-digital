@@ -113,4 +113,11 @@
   .shadow-elegant { box-shadow: var(--shadow-elegant); }
   .border-gold { border-color: var(--gold); }
   .ring-gold { --tw-ring-color: var(--gold); }
+  .hover-glow:hover { box-shadow: 0 0 24px -2px var(--gold); }
+  .animate-pulse-slow { animation: pulse-slow 2.5s ease-in-out infinite; }
+}
+
+@keyframes pulse-slow {
+  0%, 100% { box-shadow: 0 0 0 0 oklch(0.78 0.15 78 / 0.6); }
+  50% { box-shadow: 0 0 0 14px oklch(0.78 0.15 78 / 0); }
 }
