@@ -1,6 +1,7 @@
 import { Outlet, Link, createRootRoute, HeadContent, Scripts } from "@tanstack/react-router";
 
 import appCss from "../styles.css?url";
+import { WhatsAppButton } from "@/components/WhatsAppButton";
 
 function NotFoundComponent() {
   return (
@@ -63,5 +64,10 @@ function RootShell({ children }: { children: React.ReactNode }) {
 }
 
 function RootComponent() {
-  return <Outlet />;
+  return (
+    <>
+      <Outlet />
+      <WhatsAppButton />
+    </>
+  );
 }
