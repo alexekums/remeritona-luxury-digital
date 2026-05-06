@@ -187,7 +187,7 @@ function BookingPage() {
                     <label className="text-xs uppercase tracking-widest text-gold">Guests</label>
                     <select value={guests} onChange={(e) => setGuests(Number(e.target.value))}
                       className="bg-onyx border border-border px-3 py-3 text-foreground focus:border-gold focus:outline-none">
-                      {[1, 2, 3, 4, 5, 6].map((n) => <option key={n} className="bg-charcoal">{n} {n === 1 ? "Guest" : "Guests"}</option>)}
+                      {[1, 2, 3, 4, 5, 6].map((n) => <option key={n} value={n} className="bg-charcoal">{n} {n === 1 ? "Guest" : "Guests"}</option>)}
                     </select>
                   </div>
                 </div>
