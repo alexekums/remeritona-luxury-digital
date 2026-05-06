@@ -1,10 +1,20 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { SiteHeader } from "@/components/SiteHeader";
 import { SiteFooter } from "@/components/SiteFooter";
 import { rooms, formatNaira, getRoom } from "@/data/rooms";
-import { Check, CreditCard } from "lucide-react";
+import { Check, CreditCard, Lock } from "lucide-react";
 import { z } from "zod";
+import PaystackPop from "@paystack/inline-js";
+
+const PAYSTACK_PUBLIC_KEY = "pk_test_a0160de54fc2cf9d624ee9b9451dbe1c8c96f52b";
+const FLUTTERWAVE_PUBLIC_KEY = "FLWPUBK_TEST-c7659059ed4e5f5f6aa1fbb96055e919-X";
+
+declare global {
+  interface Window {
+    FlutterwaveCheckout?: (config: Record<string, unknown>) => void;
+  }
+}
 
 const search = z.object({
   room: z.string().optional(),
@@ -31,11 +41,88 @@ function BookingPage() {
 
   const [checkIn, setCheckIn] = useState(sp.checkIn ?? today);
   const [checkOut, setCheckOut] = useState(sp.checkOut ?? tomorrow);
-  const [guests, setGuests] = useState(sp.guests ?? 2);
+  const [guests, setGuests] = useState<number>(
+    typeof sp.guests === "number" && Number.isFinite(sp.guests) ? sp.guests : 2
+  );
   const [selectedSlug, setSelectedSlug] = useState(sp.room ?? rooms[0].slug);
   const [step, setStep] = useState<1 | 2 | 3>(1);
   const [guest, setGuest] = useState({ name: "", email: "", phone: "", notes: "" });
   const [confirmed, setConfirmed] = useState(false);
+  const [paymentMethod, setPaymentMethod] = useState<"paystack" | "flutterwave">("paystack");
+  const [paymentError, setPaymentError] = useState<string | null>(null);
+  const [processing, setProcessing] = useState(false);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (document.getElementById("flutterwave-checkout-script")) return;
+    const s = document.createElement("script");
+    s.id = "flutterwave-checkout-script";
+    s.src = "https://checkout.flutterwave.com/v3.js";
+    s.async = true;
+    document.body.appendChild(s);
+  }, []);
+
+  const handlePaystack = () => {
+    setPaymentError(null);
+    try {
+      const popup = new PaystackPop();
+      const [firstName, ...rest] = guest.name.trim().split(" ");
+      popup.newTransaction({
+        key: PAYSTACK_PUBLIC_KEY,
+        email: guest.email,
+        amount: total * 100,
+        currency: "NGN",
+        firstName: firstName || guest.name,
+        lastName: rest.join(" ") || undefined,
+        phone: guest.phone,
+        metadata: { room: room.name, checkIn, checkOut, guests, nights },
+        onSuccess: () => setConfirmed(true),
+        onCancel: () => setPaymentError("Payment was cancelled. Please try again."),
+        onError: (err) => setPaymentError(err.message || "Payment failed. Please try again."),
+      });
+    } catch (e) {
+      setPaymentError("Could not open Paystack. Please try again.");
+    }
+  };
+
+  const handleFlutterwave = () => {
+    setPaymentError(null);
+    if (typeof window === "undefined" || !window.FlutterwaveCheckout) {
+      setPaymentError("Flutterwave is still loading. Please try again in a moment.");
+      return;
+    }
+    setProcessing(true);
+    window.FlutterwaveCheckout({
+      public_key: FLUTTERWAVE_PUBLIC_KEY,
+      tx_ref: `remeritona-${Date.now()}`,
+      amount: total,
+      currency: "NGN",
+      payment_options: "card,banktransfer,ussd",
+      customer: {
+        email: guest.email,
+        phone_number: guest.phone,
+        name: guest.name,
+      },
+      customizations: {
+        title: "Re Meritona Hotel & Suites",
+        description: `${room.name} · ${nights} night${nights > 1 ? "s" : ""}`,
+      },
+      callback: (response: { status: string }) => {
+        setProcessing(false);
+        if (response.status === "successful" || response.status === "completed") {
+          setConfirmed(true);
+        } else {
+          setPaymentError("Payment was not successful. Please try again.");
+        }
+      },
+      onclose: () => setProcessing(false),
+    });
+  };
+
+  const handleConfirm = () => {
+    if (paymentMethod === "paystack") handlePaystack();
+    else handleFlutterwave();
+  };
 
   const nights = useMemo(() => {
     const a = new Date(checkIn).getTime();
@@ -67,6 +154,7 @@ function BookingPage() {
               <Row label="Check-in" value={new Date(checkIn).toLocaleDateString()} />
               <Row label="Check-out" value={new Date(checkOut).toLocaleDateString()} />
               <Row label="Nights" value={String(nights)} />
+              <Row label="Guests" value={`${guests} ${guests === 1 ? "Guest" : "Guests"}`} />
               <Row label="Total Paid" value={formatNaira(total)} highlight />
             </div>
           </div>
@@ -100,7 +188,7 @@ function BookingPage() {
                     <label className="text-xs uppercase tracking-widest text-gold">Guests</label>
                     <select value={guests} onChange={(e) => setGuests(Number(e.target.value))}
                       className="bg-onyx border border-border px-3 py-3 text-foreground focus:border-gold focus:outline-none">
-                      {[1, 2, 3, 4, 5, 6].map((n) => <option key={n} className="bg-charcoal">{n} {n === 1 ? "Guest" : "Guests"}</option>)}
+                      {[1, 2, 3, 4, 5, 6].map((n) => <option key={n} value={n} className="bg-charcoal">{n} {n === 1 ? "Guest" : "Guests"}</option>)}
                     </select>
                   </div>
                 </div>
@@ -163,25 +251,42 @@ function BookingPage() {
 
             {step === 3 && (
               <Card title="3. Payment">
-                <p className="text-muted-foreground mb-6">Secure payment powered by Paystack & Flutterwave. Test mode for now — no card will be charged.</p>
-                <div className="grid grid-cols-2 gap-3 mb-6">
-                  <button className="p-4 border border-gold bg-onyx text-left">
-                    <p className="text-xs uppercase tracking-widest text-gold">Paystack</p>
-                    <p className="text-sm text-muted-foreground mt-1">Card · Bank · USSD</p>
+                <p className="text-muted-foreground mb-6">Choose your preferred secure payment method below. You'll complete payment in a popup window.</p>
+                <div className="grid sm:grid-cols-2 gap-3 mb-6">
+                  <button
+                    type="button"
+                    onClick={() => setPaymentMethod("paystack")}
+                    className={`p-4 border text-left transition-colors ${paymentMethod === "paystack" ? "border-gold bg-onyx" : "border-border hover:border-gold/40"}`}
+                  >
+                    <p className={`text-xs uppercase tracking-widest ${paymentMethod === "paystack" ? "text-gold" : ""}`}>Paystack</p>
+                    <p className="text-sm text-muted-foreground mt-1">Pay with Card, Bank Transfer or USSD</p>
                   </button>
-                  <button className="p-4 border border-border text-left hover:border-gold/40">
-                    <p className="text-xs uppercase tracking-widest">Flutterwave</p>
-                    <p className="text-sm text-muted-foreground mt-1">Card · Transfer</p>
+                  <button
+                    type="button"
+                    onClick={() => setPaymentMethod("flutterwave")}
+                    className={`p-4 border text-left transition-colors ${paymentMethod === "flutterwave" ? "border-gold bg-onyx" : "border-border hover:border-gold/40"}`}
+                  >
+                    <p className={`text-xs uppercase tracking-widest ${paymentMethod === "flutterwave" ? "text-gold" : ""}`}>Flutterwave</p>
+                    <p className="text-sm text-muted-foreground mt-1">Pay with Card or Bank Transfer</p>
                   </button>
                 </div>
-                <div className="flex justify-between">
+
+                {paymentError && (
+                  <p className="text-gold border border-gold/40 bg-onyx px-4 py-3 text-sm mb-4">{paymentError}</p>
+                )}
+
+                <div className="flex justify-between items-center">
                   <button onClick={() => setStep(2)} className="px-6 py-3 border border-border uppercase tracking-widest text-sm hover:border-gold">Back</button>
                   <button
-                    onClick={() => setConfirmed(true)}
-                    className="px-8 py-3 bg-gold text-primary-foreground font-semibold uppercase tracking-widest text-sm hover:bg-gold-soft inline-flex items-center gap-2">
-                    <CreditCard size={16} /> Confirm Booking
+                    onClick={handleConfirm}
+                    disabled={processing}
+                    className="px-8 py-3 bg-gold text-primary-foreground font-semibold uppercase tracking-widest text-sm hover:bg-gold-soft inline-flex items-center gap-2 disabled:opacity-50">
+                    <CreditCard size={16} /> {processing ? "Processing..." : "Confirm Booking"}
                   </button>
                 </div>
+                <p className="flex items-center justify-center gap-2 text-xs text-muted-foreground mt-4">
+                  <Lock size={12} className="text-gold" /> Secured & Encrypted Payment
+                </p>
               </Card>
             )}
           </div>
@@ -195,7 +300,7 @@ function BookingPage() {
                 <Row label="Check-in" value={new Date(checkIn).toLocaleDateString()} />
                 <Row label="Check-out" value={new Date(checkOut).toLocaleDateString()} />
                 <Row label="Nights" value={String(nights)} />
-                <Row label="Guests" value={String(guests)} />
+                <Row label="Guests" value={`${guests} ${guests === 1 ? "Guest" : "Guests"}`} />
               </div>
               <div className="border-t border-border mt-4 pt-4 space-y-2 text-sm">
                 <Row label={`${formatNaira(room.price)} × ${nights} nights`} value={formatNaira(subtotal)} />
