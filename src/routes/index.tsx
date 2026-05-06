@@ -3,20 +3,48 @@ import { SiteHeader } from "@/components/SiteHeader";
 import { SiteFooter } from "@/components/SiteFooter";
 import { BookingWidget } from "@/components/BookingWidget";
 import { rooms, formatNaira } from "@/data/rooms";
-import { galleryImages } from "@/data/gallery";
 import heroImage from "@/assets/hero-exterior.jpg";
-import lobbyImage from "@/assets/lobby.jpg";
-import { ArrowRight, Award, Sparkles, MapPin } from "lucide-react";
+import diningImage from "@/assets/dining.jpg";
+import poolImage from "@/assets/pool.jpg";
+import {
+  ArrowRight,
+  Waves,
+  UtensilsCrossed,
+  Wifi,
+  Sparkles,
+  Users,
+  BellRing,
+  Dumbbell,
+  Plane,
+  Star,
+} from "lucide-react";
 
 export const Route = createFileRoute("/")({
   head: () => ({
     meta: [
-      { title: "Remeritona Hotel and Suites — Luxury Stay in Abakaliki" },
-      { name: "description", content: "Book your stay at Remeritona Hotel and Suites — industrial-chic luxury in Abakaliki, Ebonyi State. Real-time availability, signature suites, fine dining." },
+      { title: "Re Meritona Hotel & Suites — Luxury Stay in Abakaliki" },
+      { name: "description", content: "Where elegance meets comfort in the heart of Abakaliki. Book luxurious rooms, fine dining and world-class amenities at Re Meritona Hotel & Suites." },
     ],
   }),
   component: Index,
 });
+
+const amenities = [
+  { icon: Waves, label: "Swimming Pool" },
+  { icon: UtensilsCrossed, label: "Restaurant & Bar" },
+  { icon: Wifi, label: "Free Wi-Fi" },
+  { icon: Sparkles, label: "Spa & Wellness" },
+  { icon: Users, label: "Conference Room" },
+  { icon: BellRing, label: "24hr Room Service" },
+  { icon: Dumbbell, label: "Gym" },
+  { icon: Plane, label: "Airport Shuttle" },
+];
+
+const testimonials = [
+  { quote: "An absolutely stunning hotel. The rooms are world-class and the staff incredibly warm.", name: "Chukwuemeka A.", city: "Enugu" },
+  { quote: "Best hospitality experience in Ebonyi State. I felt like royalty from check-in to checkout.", name: "Adaeze O.", city: "Abuja" },
+  { quote: "The pool, the food, the service — everything was perfect. We will definitely be back.", name: "James I.", city: "Lagos" },
+];
 
 function Index() {
   return (
@@ -24,176 +52,160 @@ function Index() {
       <SiteHeader />
 
       {/* Hero */}
-      <section className="relative min-h-[100vh] flex items-end overflow-hidden">
+      <section className="relative min-h-[100vh] flex items-center overflow-hidden">
         <img
           src={heroImage}
-          alt="Remeritona Hotel exterior at dusk"
+          alt="Re Meritona Hotel exterior in Abakaliki"
           className="absolute inset-0 w-full h-full object-cover"
           width={1920}
           height={1080}
         />
-        <div className="absolute inset-0 bg-gradient-overlay" />
-        <div className="absolute inset-0 bg-onyx/30" />
+        <div className="absolute inset-0 bg-black/60" />
 
-        <div className="relative z-10 max-w-7xl mx-auto px-6 pt-32 pb-12 w-full">
-          <div className="max-w-3xl mb-12">
-            <p className="text-gold text-xs uppercase tracking-[0.4em] mb-4">Abakaliki · Ebonyi State</p>
-            <h1 className="font-serif text-5xl md:text-7xl lg:text-8xl text-foreground leading-[1.05] mb-6">
-              Where heritage<br />meets <em className="text-gold not-italic">luxury</em>.
-            </h1>
-            <p className="text-foreground/85 text-lg md:text-xl max-w-xl leading-relaxed">
-              An industrial-chic sanctuary in the heart of Ebonyi State — refined rooms, soulful dining, and unmistakably Nigerian hospitality.
-            </p>
-          </div>
-
-          <BookingWidget />
-        </div>
-      </section>
-
-      {/* Story */}
-      <section className="py-24 px-6">
-        <div className="max-w-7xl mx-auto grid lg:grid-cols-2 gap-16 items-center">
-          <div>
-            <p className="text-gold text-xs uppercase tracking-[0.4em] mb-4">Our Story</p>
-            <h2 className="font-serif text-4xl md:text-5xl mb-6 leading-tight">
-              A modern landmark, rooted in Ebonyi.
-            </h2>
-            <p className="text-muted-foreground text-lg leading-relaxed mb-5">
-              Remeritona was conceived as a tribute to Abakaliki's industrious spirit — a place where raw materials, craftsmanship, and ambition come together. Every steel beam, every brick, every gold detail tells a story of Ebonyi rising.
-            </p>
-            <p className="text-muted-foreground text-lg leading-relaxed mb-8">
-              Today we welcome travelers, dignitaries and dreamers into a space that is unapologetically luxurious — and unmistakably ours.
-            </p>
-            <Link to="/about" className="inline-flex items-center gap-2 text-gold uppercase tracking-widest text-sm hover:gap-4 transition-all">
-              Read our story <ArrowRight size={16} />
+        <div className="relative z-10 max-w-5xl mx-auto px-6 pt-32 pb-20 w-full text-center">
+          <h1 className="font-serif text-4xl md:text-6xl lg:text-7xl font-black text-foreground leading-[1.1] mb-6">
+            Where Elegance Meets Comfort<br />in the Heart of Abakaliki
+          </h1>
+          <p className="text-gold italic font-serif text-2xl md:text-3xl mb-10">
+            ...love and refreshment
+          </p>
+          <div className="flex flex-col sm:flex-row gap-4 justify-center">
+            <Link
+              to="/booking"
+              className="px-8 py-4 bg-gold text-primary-foreground font-semibold uppercase tracking-widest text-sm hover:bg-gold-soft hover-glow transition-all"
+            >
+              Reserve Your Suite
+            </Link>
+            <Link
+              to="/rooms"
+              className="px-8 py-4 border-2 border-gold text-gold font-semibold uppercase tracking-widest text-sm hover:bg-gold hover:text-primary-foreground transition-all"
+            >
+              Explore Rooms
             </Link>
           </div>
-          <div className="relative">
-            <img src={lobbyImage} alt="Hotel lobby" className="w-full aspect-[4/5] object-cover" loading="lazy" width={1280} height={832} />
-            <div className="absolute -bottom-6 -left-6 bg-gold text-primary-foreground p-6 hidden md:block">
-              <p className="font-serif text-4xl">15+</p>
-              <p className="text-xs uppercase tracking-widest mt-1">Years of hospitality</p>
-            </div>
-          </div>
         </div>
       </section>
 
-      {/* Featured Rooms */}
-      <section className="py-24 px-6 bg-charcoal">
+      {/* Quick Booking Bar */}
+      <section className="bg-charcoal py-6 px-6 border-y border-gold/20">
         <div className="max-w-7xl mx-auto">
-          <div className="flex flex-col md:flex-row md:items-end justify-between mb-12 gap-4">
-            <div>
-              <p className="text-gold text-xs uppercase tracking-[0.4em] mb-4">Accommodations</p>
-              <h2 className="font-serif text-4xl md:text-5xl">Signature Rooms & Suites</h2>
-            </div>
-            <Link to="/rooms" className="text-gold uppercase tracking-widest text-sm inline-flex items-center gap-2 hover:gap-4 transition-all">
-              View all <ArrowRight size={16} />
-            </Link>
-          </div>
+          <BookingWidget variant="inline" />
+        </div>
+      </section>
 
+      {/* Rooms */}
+      <section className="py-24 px-6 bg-background">
+        <div className="max-w-7xl mx-auto">
+          <div className="text-center mb-14">
+            <p className="text-gold text-xs uppercase tracking-[0.4em] mb-4">Accommodations</p>
+            <h2 className="font-serif text-4xl md:text-5xl">Our Rooms & Suites</h2>
+          </div>
           <div className="grid md:grid-cols-3 gap-6">
             {rooms.map((room) => (
-              <Link
-                key={room.slug}
-                to="/rooms/$slug"
-                params={{ slug: room.slug }}
-                className="group bg-onyx border border-border hover:border-gold/50 transition-all"
-              >
+              <article key={room.slug} className="group bg-charcoal border border-border hover:border-gold/60 hover-glow transition-all overflow-hidden">
                 <div className="aspect-[4/3] overflow-hidden">
-                  <img src={room.image} alt={room.name} loading="lazy" width={1280} height={832}
-                    className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700" />
+                  <img src={room.image} alt={room.name} loading="lazy" className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700" />
                 </div>
                 <div className="p-6">
-                  <h3 className="font-serif text-2xl mb-2 group-hover:text-gold transition-colors">{room.name}</h3>
-                  <p className="text-sm text-muted-foreground mb-4 line-clamp-2">{room.tagline}</p>
+                  <h3 className="font-serif text-2xl mb-1 group-hover:text-gold transition-colors">{room.name}</h3>
+                  <p className="text-sm text-muted-foreground mb-5">{room.tagline}</p>
                   <div className="flex items-end justify-between pt-4 border-t border-border">
                     <div>
                       <p className="text-xs uppercase tracking-widest text-muted-foreground">From</p>
-                      <p className="text-gold font-serif text-2xl">{formatNaira(room.price)}</p>
+                      <p className="text-gold font-serif text-2xl">{formatNaira(room.price)}<span className="text-xs text-muted-foreground"> /night</span></p>
                     </div>
-                    <span className="text-xs uppercase tracking-widest text-gold inline-flex items-center gap-1.5">
-                      Book <ArrowRight size={14} />
-                    </span>
+                    <Link
+                      to="/booking"
+                      search={{ room: room.slug } as never}
+                      className="px-4 py-2.5 bg-gold text-primary-foreground text-xs uppercase tracking-widest font-semibold hover:bg-gold-soft transition-colors"
+                    >
+                      Book Now
+                    </Link>
                   </div>
                 </div>
-              </Link>
+              </article>
             ))}
           </div>
         </div>
       </section>
 
-      {/* Why Remeritona */}
-      <section className="py-24 px-6">
-        <div className="max-w-7xl mx-auto">
-          <div className="text-center mb-16">
-            <p className="text-gold text-xs uppercase tracking-[0.4em] mb-4">The Remeritona Difference</p>
-            <h2 className="font-serif text-4xl md:text-5xl">Crafted with intention</h2>
-          </div>
-          <div className="grid md:grid-cols-3 gap-10">
-            {[
-              { icon: <Award size={32} />, title: "Bespoke Service", desc: "A personal concierge anticipates every need, from arrival to farewell." },
-              { icon: <Sparkles size={32} />, title: "Industrial Elegance", desc: "Architectural detail meets warm Nigerian hospitality in every room." },
-              { icon: <MapPin size={32} />, title: "Prime Abakaliki", desc: "Steps from the city's business district, embassies and cultural sites." },
-            ].map((f) => (
-              <div key={f.title} className="text-center p-8 border border-border hover:border-gold/40 transition-colors">
-                <div className="text-gold inline-flex mb-5">{f.icon}</div>
-                <h3 className="font-serif text-2xl mb-3">{f.title}</h3>
-                <p className="text-muted-foreground leading-relaxed">{f.desc}</p>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* Offers strip */}
+      {/* Amenities */}
       <section className="py-24 px-6 bg-charcoal">
-        <div className="max-w-7xl mx-auto grid md:grid-cols-2 gap-8">
-          {[
-            { tag: "Weekend Escape", title: "20% off two-night stays", desc: "Friday – Sunday. Includes breakfast for two and a sundowner cocktail." },
-            { tag: "Extended Stay", title: "Stay 5, pay for 4", desc: "Perfect for business travelers and long-term visitors to Abakaliki." },
-          ].map((o) => (
-            <div key={o.title} className="p-10 border border-gold/30 bg-onyx hover:bg-onyx/60 transition-colors">
-              <p className="text-gold text-xs uppercase tracking-[0.4em] mb-3">{o.tag}</p>
-              <h3 className="font-serif text-3xl mb-3">{o.title}</h3>
-              <p className="text-muted-foreground mb-6">{o.desc}</p>
-              <Link to="/offers" className="text-gold uppercase tracking-widest text-sm inline-flex items-center gap-2 hover:gap-4 transition-all">
-                See offer <ArrowRight size={16} />
-              </Link>
-            </div>
-          ))}
-        </div>
-      </section>
-
-      {/* Instagram-style gallery */}
-      <section className="py-24 px-6">
         <div className="max-w-7xl mx-auto">
-          <div className="text-center mb-12">
-            <p className="text-gold text-xs uppercase tracking-[0.4em] mb-4">@remeritona</p>
-            <h2 className="font-serif text-4xl md:text-5xl">Moments from Remeritona</h2>
+          <div className="text-center mb-14">
+            <p className="text-gold text-xs uppercase tracking-[0.4em] mb-4">Amenities</p>
+            <h2 className="font-serif text-4xl md:text-5xl">All Under One Roof</h2>
           </div>
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-2">
-            {galleryImages.slice(0, 6).map((img, i) => (
-              <div key={i} className="aspect-square overflow-hidden group">
-                <img src={img.src} alt={img.alt} loading="lazy" className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" />
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
+            {amenities.map(({ icon: Icon, label }) => (
+              <div key={label} className="flex flex-col items-center text-center p-8 bg-background/40 border border-border hover:border-gold/50 hover-glow transition-all">
+                <Icon size={40} className="text-gold mb-4" />
+                <p className="text-sm uppercase tracking-widest text-foreground">{label}</p>
               </div>
             ))}
           </div>
-          <div className="text-center mt-10">
-            <Link to="/gallery" className="inline-block px-8 py-3 border border-gold text-gold uppercase tracking-widest text-sm hover:bg-gold hover:text-primary-foreground transition-colors">
-              View full gallery
+        </div>
+      </section>
+
+      {/* Dining */}
+      <section className="py-24 px-6 bg-background">
+        <div className="max-w-7xl mx-auto grid lg:grid-cols-2 gap-12 items-center">
+          <img src={diningImage} alt="The Foundry Restaurant" className="w-full aspect-[4/3] object-cover" loading="lazy" />
+          <div>
+            <p className="text-gold text-xs uppercase tracking-[0.4em] mb-4">Dining</p>
+            <h2 className="font-serif text-4xl md:text-5xl mb-6">The Foundry Restaurant</h2>
+            <p className="text-muted-foreground text-lg leading-relaxed mb-8">
+              Experience refined Nigerian cuisine and continental favorites in an elegant setting. Open daily for breakfast, lunch and dinner.
+            </p>
+            <Link
+              to="/dining"
+              className="inline-flex items-center gap-2 px-7 py-3.5 bg-gold text-primary-foreground font-semibold uppercase tracking-widest text-sm hover:bg-gold-soft hover-glow transition-all"
+            >
+              View Dining <ArrowRight size={16} />
             </Link>
           </div>
         </div>
       </section>
 
-      {/* CTA */}
-      <section className="py-24 px-6 bg-gradient-gold text-primary-foreground">
-        <div className="max-w-4xl mx-auto text-center">
-          <h2 className="font-serif text-4xl md:text-6xl mb-6">Reserve your stay</h2>
-          <p className="text-lg mb-8 opacity-90">Real-time availability. Best rate guaranteed when you book direct.</p>
-          <Link to="/booking" className="inline-block px-10 py-4 bg-onyx text-gold uppercase tracking-widest text-sm font-semibold hover:bg-charcoal transition-colors">
-            Check availability
-          </Link>
+      {/* Pool teaser */}
+      <section className="relative min-h-[60vh] flex items-center justify-center overflow-hidden">
+        <img src={poolImage} alt="Pool at Re Meritona" className="absolute inset-0 w-full h-full object-cover" loading="lazy" />
+        <div className="absolute inset-0 bg-black/65" />
+        <div className="relative z-10 text-center px-6 max-w-3xl">
+          <h2 className="font-serif text-4xl md:text-5xl mb-4 text-foreground">
+            Unwind at Abakaliki's Most Beautiful Poolside
+          </h2>
+          <p className="text-lg text-foreground/85">
+            Rooftop bar, spa, gym and more — all at Re Meritona
+          </p>
+        </div>
+      </section>
+
+      {/* Testimonials */}
+      <section className="py-24 px-6 bg-charcoal">
+        <div className="max-w-7xl mx-auto">
+          <div className="text-center mb-14">
+            <p className="text-gold text-xs uppercase tracking-[0.4em] mb-4">Reviews</p>
+            <h2 className="font-serif text-4xl md:text-5xl">What Our Guests Say</h2>
+          </div>
+          <div className="grid md:grid-cols-3 gap-6">
+            {testimonials.map((t) => (
+              <figure key={t.name} className="p-8 bg-background/60 border border-border hover:border-gold/40 transition-colors flex flex-col">
+                <div className="flex gap-1 mb-4">
+                  {Array.from({ length: 5 }).map((_, i) => (
+                    <Star key={i} size={18} className="text-gold" fill="currentColor" />
+                  ))}
+                </div>
+                <blockquote className="text-foreground/90 text-lg leading-relaxed mb-6 flex-1">
+                  "{t.quote}"
+                </blockquote>
+                <figcaption className="pt-4 border-t border-border">
+                  <p className="font-serif text-gold">{t.name}</p>
+                  <p className="text-xs uppercase tracking-widest text-muted-foreground mt-1">{t.city}</p>
+                </figcaption>
+              </figure>
+            ))}
+          </div>
         </div>
       </section>
 
