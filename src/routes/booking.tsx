@@ -154,6 +154,7 @@ function BookingPage() {
               <Row label="Check-in" value={new Date(checkIn).toLocaleDateString()} />
               <Row label="Check-out" value={new Date(checkOut).toLocaleDateString()} />
               <Row label="Nights" value={String(nights)} />
+              <Row label="Guests" value={`${guests} ${guests === 1 ? "Guest" : "Guests"}`} />
               <Row label="Total Paid" value={formatNaira(total)} highlight />
             </div>
           </div>
