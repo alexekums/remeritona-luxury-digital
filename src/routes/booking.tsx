@@ -250,25 +250,42 @@ function BookingPage() {
 
             {step === 3 && (
               <Card title="3. Payment">
-                <p className="text-muted-foreground mb-6">Secure payment powered by Paystack & Flutterwave. Test mode for now — no card will be charged.</p>
-                <div className="grid grid-cols-2 gap-3 mb-6">
-                  <button className="p-4 border border-gold bg-onyx text-left">
-                    <p className="text-xs uppercase tracking-widest text-gold">Paystack</p>
-                    <p className="text-sm text-muted-foreground mt-1">Card · Bank · USSD</p>
+                <p className="text-muted-foreground mb-6">Choose your preferred secure payment method below. You'll complete payment in a popup window.</p>
+                <div className="grid sm:grid-cols-2 gap-3 mb-6">
+                  <button
+                    type="button"
+                    onClick={() => setPaymentMethod("paystack")}
+                    className={`p-4 border text-left transition-colors ${paymentMethod === "paystack" ? "border-gold bg-onyx" : "border-border hover:border-gold/40"}`}
+                  >
+                    <p className={`text-xs uppercase tracking-widest ${paymentMethod === "paystack" ? "text-gold" : ""}`}>Paystack</p>
+                    <p className="text-sm text-muted-foreground mt-1">Pay with Card, Bank Transfer or USSD</p>
                   </button>
-                  <button className="p-4 border border-border text-left hover:border-gold/40">
-                    <p className="text-xs uppercase tracking-widest">Flutterwave</p>
-                    <p className="text-sm text-muted-foreground mt-1">Card · Transfer</p>
+                  <button
+                    type="button"
+                    onClick={() => setPaymentMethod("flutterwave")}
+                    className={`p-4 border text-left transition-colors ${paymentMethod === "flutterwave" ? "border-gold bg-onyx" : "border-border hover:border-gold/40"}`}
+                  >
+                    <p className={`text-xs uppercase tracking-widest ${paymentMethod === "flutterwave" ? "text-gold" : ""}`}>Flutterwave</p>
+                    <p className="text-sm text-muted-foreground mt-1">Pay with Card or Bank Transfer</p>
                   </button>
                 </div>
-                <div className="flex justify-between">
+
+                {paymentError && (
+                  <p className="text-gold border border-gold/40 bg-onyx px-4 py-3 text-sm mb-4">{paymentError}</p>
+                )}
+
+                <div className="flex justify-between items-center">
                   <button onClick={() => setStep(2)} className="px-6 py-3 border border-border uppercase tracking-widest text-sm hover:border-gold">Back</button>
                   <button
-                    onClick={() => setConfirmed(true)}
-                    className="px-8 py-3 bg-gold text-primary-foreground font-semibold uppercase tracking-widest text-sm hover:bg-gold-soft inline-flex items-center gap-2">
-                    <CreditCard size={16} /> Confirm Booking
+                    onClick={handleConfirm}
+                    disabled={processing}
+                    className="px-8 py-3 bg-gold text-primary-foreground font-semibold uppercase tracking-widest text-sm hover:bg-gold-soft inline-flex items-center gap-2 disabled:opacity-50">
+                    <CreditCard size={16} /> {processing ? "Processing..." : "Confirm Booking"}
                   </button>
                 </div>
+                <p className="flex items-center justify-center gap-2 text-xs text-muted-foreground mt-4">
+                  <Lock size={12} className="text-gold" /> Secured & Encrypted Payment
+                </p>
               </Card>
             )}
           </div>
