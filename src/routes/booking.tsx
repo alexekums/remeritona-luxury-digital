@@ -1,10 +1,20 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { SiteHeader } from "@/components/SiteHeader";
 import { SiteFooter } from "@/components/SiteFooter";
 import { rooms, formatNaira, getRoom } from "@/data/rooms";
-import { Check, CreditCard } from "lucide-react";
+import { Check, CreditCard, Lock } from "lucide-react";
 import { z } from "zod";
+import PaystackPop from "@paystack/inline-js";
+
+const PAYSTACK_PUBLIC_KEY = "pk_test_a0160de54fc2cf9d624ee9b9451dbe1c8c96f52b";
+const FLUTTERWAVE_PUBLIC_KEY = "FLWPUBK_TEST-c7659059ed4e5f5f6aa1fbb96055e919-X";
+
+declare global {
+  interface Window {
+    FlutterwaveCheckout?: (config: Record<string, unknown>) => void;
+  }
+}
 
 const search = z.object({
   room: z.string().optional(),
