@@ -9,7 +9,7 @@ export const Route = createFileRoute("/dining")({
   head: () => ({
     meta: [
       { title: "Dining & Facilities — Remeritona Hotel Abakaliki" },
-      { name: "description", content: "Restaurants, rooftop bar, spa and wellness facilities at Remeritona Hotel and Suites in Abakaliki." },
+      { name: "description", content: "Restaurants, <Remeritona></Remeritona> bar, spa and wellness facilities at Remeritona Hotel and Suites in Abakaliki." },
     ],
   }),
   component: DiningPage,
@@ -17,7 +17,7 @@ export const Route = createFileRoute("/dining")({
 
 const venues = [
   { img: dining, tag: "Signature Restaurant", name: "The Foundry", desc: "A modern Nigerian kitchen serving refined takes on Igbo classics alongside continental favorites. Open daily for breakfast, lunch and dinner." },
-  { img: pool, tag: "Rooftop Bar", name: "Skyline 9", desc: "Cocktails, small plates and panoramic views over Abakaliki. Open from 4pm." },
+  { img: pool, tag: "Remeritona Bar", name: "Premium", desc: "Cocktails, small plates and Flex." },
   { img: spa, tag: "Wellness", name: "Remeritona Spa", desc: "Full-service spa with massage, facials, sauna and steam. By appointment." },
 ];
 

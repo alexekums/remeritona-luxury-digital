@@ -3,16 +3,35 @@ import { useEffect, useMemo, useState } from "react";
 import { SiteHeader } from "@/components/SiteHeader";
 import { SiteFooter } from "@/components/SiteFooter";
 import { rooms, formatNaira, getRoom } from "@/data/rooms";
-import { Check, CreditCard, Lock } from "lucide-react";
+import { Check, CreditCard, Lock, Plus } from "lucide-react";
 import { z } from "zod";
-import PaystackPop from "@paystack/inline-js";
+import { Resend } from 'resend';
+import BookingEmail from "@/components/BookingEmail";
+
+// Initialize Resend
+const resend = new Resend("re_H329kVbZ_6HHvRmnyuFcW3nM4MQT9w1mF");
 
 const PAYSTACK_PUBLIC_KEY = "pk_test_a0160de54fc2cf9d624ee9b9451dbe1c8c96f52b";
 const FLUTTERWAVE_PUBLIC_KEY = "FLWPUBK_TEST-c7659059ed4e5f5f6aa1fbb96055e919-X";
 
+// ==================== ADD-ONS (Pay on Arrival) ====================
+const ADD_ONS = [
+  { id: "pickup_morning", label: "Airport/Venue Pickup (Every Morning)", price: 7000 },
+  { id: "drop", label: "Airport/Venue Drop", price: 7000 },
+  { id: "full_transfer", label: "Airport Pickup + Drop", price: 100000 },
+  { id: "flowers", label: "Bouquet of Flowers in Room", price: 25000 },
+  { id: "breakfast", label: "Breakfast Included (Per Person)", price: 5500 },
+  { id: "cake", label: "Cake & Decoration", price: 30000 },
+  { id: "champagne", label: "Champagne on Arrival", price: 250000 },
+] as const;
+// ===============================================================
+
 declare global {
   interface Window {
-    FlutterwaveCheckout?: (config: Record<string, unknown>) => void;
+    FlutterwaveCheckout?: (config: Record<string, unknown>) => { close: () => void };
+    PaystackPop?: {
+      setup: (config: Record<string, unknown>) => { openIframe: () => void };
+    };
   }
 }
 
@@ -47,11 +66,14 @@ function BookingPage() {
   const [selectedSlug, setSelectedSlug] = useState(sp.room ?? rooms[0].slug);
   const [step, setStep] = useState<1 | 2 | 3>(1);
   const [guest, setGuest] = useState({ name: "", email: "", phone: "", notes: "" });
+  const [selectedAddons, setSelectedAddons] = useState<string[]>([]);
   const [confirmed, setConfirmed] = useState(false);
   const [paymentMethod, setPaymentMethod] = useState<"paystack" | "flutterwave">("paystack");
   const [paymentError, setPaymentError] = useState<string | null>(null);
   const [processing, setProcessing] = useState(false);
+  const [paystackReady, setPaystackReady] = useState(false);
 
+  // Load Flutterwave script
   useEffect(() => {
     if (typeof window === "undefined") return;
     if (document.getElementById("flutterwave-checkout-script")) return;
@@ -62,37 +84,168 @@ function BookingPage() {
     document.body.appendChild(s);
   }, []);
 
-  const handlePaystack = () => {
-    setPaymentError(null);
+  // Load Paystack script properly
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (document.getElementById("paystack-script")) {
+      setPaystackReady(true);
+      return;
+    }
+    const s = document.createElement("script");
+    s.id = "paystack-script";
+    s.src = "https://js.paystack.co/v1/inline.js";
+    s.async = true;
+    s.onload = () => setPaystackReady(true);
+    document.body.appendChild(s);
+  }, []);
+
+  const nights = useMemo(() => {
+    const a = new Date(checkIn).getTime();
+    const b = new Date(checkOut).getTime();
+    return Math.max(1, Math.round((b - a) / 86400000));
+  }, [checkIn, checkOut]);
+
+  const room = getRoom(selectedSlug)!;
+  const subtotal = room.price * nights;
+  const tax = Math.round(subtotal * 0.075);
+  
+  const addonsTotal = useMemo(() => {
+    return selectedAddons.reduce((sum, id) => {
+      const addon = ADD_ONS.find(a => a.id === id);
+      return sum + (addon?.price || 0);
+    }, 0);
+  }, [selectedAddons]);
+
+  const total = subtotal + tax + addonsTotal;
+
+  const toggleAddon = (id: string) => {
+    setSelectedAddons(prev =>
+      prev.includes(id) ? prev.filter(a => a !== id) : [...prev, id]
+    );
+  };
+
+  // ==================== NEW: SEND BOOKING EMAILS ====================
+  const sendBookingEmails = async (reference: string) => {
+    const selectedAddonDetails = selectedAddons.map(id => {
+      const addon = ADD_ONS.find(a => a.id === id);
+      return { label: addon?.label || "", price: addon?.price || 0 };
+    });
+
+    const emailData = {
+      guestName: guest.name,
+      roomName: room.name,
+      checkIn: new Date(checkIn).toLocaleDateString("en-NG", { dateStyle: "long" }),
+      checkOut: new Date(checkOut).toLocaleDateString("en-NG", { dateStyle: "long" }),
+      nights,
+      guests,
+      total,
+      addons: selectedAddonDetails,
+      notes: guest.notes,
+      reference,
+    };
+
     try {
-      const popup = new PaystackPop();
+      // Send to Guest
+      await resend.emails.send({
+        from: "Remeritona Hotel <onboarding@resend.dev>",
+        to: guest.email,
+        subject: `Booking Confirmed - ${room.name}`,
+        react: BookingEmail(emailData),
+      });
+
+      // Send to Hotel (alexekums@gmail.com)
+      await resend.emails.send({
+        from: "Remeritona Hotel <onboarding@resend.dev>",
+        to: "alexekums@gmail.com",
+        subject: `New Booking Alert - ${guest.name}`,
+        html: `
+          <h2>New Booking Received</h2>
+          <p><strong>Guest:</strong> ${guest.name}</p>
+          <p><strong>Email:</strong> ${guest.email}</p>
+          <p><strong>Phone:</strong> ${guest.phone}</p>
+          <p><strong>Room:</strong> ${room.name}</p>
+          <p><strong>Dates:</strong> ${emailData.checkIn} - ${emailData.checkOut} (${nights} nights)</p>
+          <p><strong>Total Paid:</strong> ${formatNaira(total)}</p>
+          <p><strong>Add-ons:</strong> ${selectedAddonDetails.map(a => a.label).join(", ") || "None"}</p>
+          <p><strong>Special Requests:</strong> ${guest.notes || "None"}</p>
+          <p><strong>Reference:</strong> ${reference}</p>
+        `,
+      });
+    } catch (error) {
+      console.error("Failed to send emails:", error);
+    }
+  };
+  // ============================================================
+
+    const handlePaystack = () => {
+    setPaymentError(null);
+
+    console.log("Paystack button clicked");
+    console.log("PaystackReady:", paystackReady);
+    console.log("window.PaystackPop:", window.PaystackPop);
+
+    if (!paystackReady || !window.PaystackPop) {
+      setPaymentError("Paystack is still loading. Please wait a moment and try again.");
+      return;
+    }
+
+    if (!guest.email) {
+      setPaymentError("Please go back and enter your email address.");
+      return;
+    }
+
+    try {
       const [firstName, ...rest] = guest.name.trim().split(" ");
-      popup.newTransaction({
+      const handler = window.PaystackPop.setup({
         key: PAYSTACK_PUBLIC_KEY,
         email: guest.email,
         amount: total * 100,
         currency: "NGN",
-        firstName: firstName || guest.name,
-        lastName: rest.join(" ") || undefined,
+        firstname: firstName || guest.name,
+        lastname: rest.join(" ") || "",
         phone: guest.phone,
-        metadata: { room: room.name, checkIn, checkOut, guests, nights },
-        onSuccess: () => setConfirmed(true),
-        onCancel: () => setPaymentError("Payment was cancelled. Please try again."),
-        onError: (err) => setPaymentError(err.message || "Payment failed. Please try again."),
+        ref: `remeritona-${Date.now()}`,
+        metadata: {
+          custom_fields: [
+            { display_name: "Room", variable_name: "room", value: room.name },
+            { display_name: "Check-in", variable_name: "checkin", value: checkIn },
+            { display_name: "Check-out", variable_name: "checkout", value: checkOut },
+            { display_name: "Nights", variable_name: "nights", value: String(nights) },
+          ],
+        },
+        callback: async (response: { reference: string }) => {
+          if (response.reference) {
+            await sendBookingEmails(response.reference);
+            setConfirmed(true);
+          }
+        },
+        onClose: () => {
+          setPaymentError("Payment was cancelled. Please try again.");
+        },
       });
+      handler.openIframe();
     } catch (e) {
-      setPaymentError("Could not open Paystack. Please try again.");
+      console.error("Paystack error:", e);
+      setPaymentError("Could not open Paystack. Please refresh the page and try again.");
     }
   };
 
   const handleFlutterwave = () => {
     setPaymentError(null);
-    if (typeof window === "undefined" || !window.FlutterwaveCheckout) {
+
+    if (!window.FlutterwaveCheckout) {
       setPaymentError("Flutterwave is still loading. Please try again in a moment.");
       return;
     }
+
+    if (!guest.email) {
+      setPaymentError("Please go back and enter your email address.");
+      return;
+    }
+
     setProcessing(true);
-    window.FlutterwaveCheckout({
+
+    const modal = window.FlutterwaveCheckout({
       public_key: FLUTTERWAVE_PUBLIC_KEY,
       tx_ref: `remeritona-${Date.now()}`,
       amount: total,
@@ -106,16 +259,27 @@ function BookingPage() {
       customizations: {
         title: "Re Meritona Hotel & Suites",
         description: `${room.name} · ${nights} night${nights > 1 ? "s" : ""}`,
+        logo: "/src/assets/logo.png",
       },
-      callback: (response: { status: string }) => {
+      callback: async (response: { status: string }) => {
         setProcessing(false);
         if (response.status === "successful" || response.status === "completed") {
-          setConfirmed(true);
+          const reference = `remeritona-${Date.now()}`;
+          await sendBookingEmails(reference);
+          
+          setTimeout(() => {
+            if (modal && typeof modal.close === "function") {
+              modal.close();
+            }
+            setConfirmed(true);
+          }, 3000);
         } else {
           setPaymentError("Payment was not successful. Please try again.");
         }
       },
-      onclose: () => setProcessing(false),
+      onclose: () => {
+        setProcessing(false);
+      },
     });
   };
 
@@ -123,17 +287,6 @@ function BookingPage() {
     if (paymentMethod === "paystack") handlePaystack();
     else handleFlutterwave();
   };
-
-  const nights = useMemo(() => {
-    const a = new Date(checkIn).getTime();
-    const b = new Date(checkOut).getTime();
-    return Math.max(1, Math.round((b - a) / 86400000));
-  }, [checkIn, checkOut]);
-
-  const room = getRoom(selectedSlug)!;
-  const subtotal = room.price * nights;
-  const tax = Math.round(subtotal * 0.075);
-  const total = subtotal + tax;
 
   if (confirmed) {
     return (
@@ -155,6 +308,9 @@ function BookingPage() {
               <Row label="Check-out" value={new Date(checkOut).toLocaleDateString()} />
               <Row label="Nights" value={String(nights)} />
               <Row label="Guests" value={`${guests} ${guests === 1 ? "Guest" : "Guests"}`} />
+              {selectedAddons.length > 0 && (
+                <Row label="Add-ons" value={selectedAddons.map(id => ADD_ONS.find(a => a.id === id)?.label).join(", ")} />
+              )}
               <Row label="Total Paid" value={formatNaira(total)} highlight />
             </div>
           </div>
@@ -186,9 +342,16 @@ function BookingPage() {
                   <Input label="Check Out" type="date" value={checkOut} min={checkIn} onChange={(v) => setCheckOut(v)} />
                   <div className="flex flex-col gap-1.5">
                     <label className="text-xs uppercase tracking-widest text-gold">Guests</label>
-                    <select value={guests} onChange={(e) => setGuests(Number(e.target.value))}
-                      className="bg-onyx border border-border px-3 py-3 text-foreground focus:border-gold focus:outline-none">
-                      {[1, 2, 3, 4, 5, 6].map((n) => <option key={n} value={n} className="bg-charcoal">{n} {n === 1 ? "Guest" : "Guests"}</option>)}
+                    <select
+                      value={guests}
+                      onChange={(e) => setGuests(Number(e.target.value))}
+                      className="bg-onyx border border-border px-3 py-3 text-foreground focus:border-gold focus:outline-none"
+                    >
+                      {[1, 2, 3, 4, 5, 6].map((n) => (
+                        <option key={n} value={n} className="bg-charcoal">
+                          {n} {n === 1 ? "Guest" : "Guests"}
+                        </option>
+                      ))}
                     </select>
                   </div>
                 </div>
@@ -210,14 +373,19 @@ function BookingPage() {
                           <p className="font-serif text-lg">{r.name}</p>
                           <p className="text-xs text-muted-foreground">{r.size} · {r.beds} · up to {r.capacity}</p>
                         </div>
-                        <p className="text-gold font-serif text-xl">{formatNaira(r.price)}<span className="text-xs text-muted-foreground">/night</span></p>
+                        <p className="text-gold font-serif text-xl">
+                          {formatNaira(r.price)}<span className="text-xs text-muted-foreground">/night</span>
+                        </p>
                       </div>
                     </button>
                   ))}
                 </div>
 
                 <div className="flex justify-end mt-8">
-                  <button onClick={() => setStep(2)} className="px-8 py-3 bg-gold text-primary-foreground font-semibold uppercase tracking-widest text-sm hover:bg-gold-soft">
+                  <button
+                    onClick={() => setStep(2)}
+                    className="px-8 py-3 bg-gold text-primary-foreground font-semibold uppercase tracking-widest text-sm hover:bg-gold-soft"
+                  >
                     Continue
                   </button>
                 </div>
@@ -233,16 +401,56 @@ function BookingPage() {
                 </div>
                 <div className="mt-4">
                   <label className="text-xs uppercase tracking-widest text-gold">Special requests</label>
-                  <textarea value={guest.notes} onChange={(e) => setGuest({ ...guest, notes: e.target.value })}
-                    rows={3} maxLength={500}
-                    className="w-full bg-onyx border border-border px-3 py-2 text-foreground focus:border-gold focus:outline-none mt-1.5" />
+                  <textarea
+                    value={guest.notes}
+                    onChange={(e) => setGuest({ ...guest, notes: e.target.value })}
+                    rows={3}
+                    maxLength={500}
+                    className="w-full bg-onyx border border-border px-3 py-2 text-foreground focus:border-gold focus:outline-none mt-1.5"
+                  />
                 </div>
+
+                {/* ==================== ADD-ONS SECTION ==================== */}
+                <div className="mt-10">
+                  <h3 className="font-serif text-xl mb-4 flex items-center gap-2">
+                    <Plus className="text-gold" /> Add-ons (Pay on Arrival)
+                  </h3>
+                  <p className="text-sm text-muted-foreground mb-4">Select any extra services you would like.</p>
+                  
+                  <div className="grid gap-3">
+                    {ADD_ONS.map((addon) => (
+                      <label
+                        key={addon.id}
+                        className={`flex items-center justify-between p-4 border rounded-lg cursor-pointer transition-all hover:border-gold/50 ${selectedAddons.includes(addon.id) ? 'border-gold bg-onyx' : 'border-border'}`}
+                      >
+                        <div className="flex items-center gap-3">
+                          <input
+                            type="checkbox"
+                            checked={selectedAddons.includes(addon.id)}
+                            onChange={() => toggleAddon(addon.id)}
+                            className="w-5 h-5 accent-gold"
+                          />
+                          <span>{addon.label}</span>
+                        </div>
+                        <span className="font-medium text-gold">{formatNaira(addon.price)}</span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+                {/* ==================================================== */}
+
                 <div className="flex justify-between mt-8">
-                  <button onClick={() => setStep(1)} className="px-6 py-3 border border-border uppercase tracking-widest text-sm hover:border-gold">Back</button>
+                  <button
+                    onClick={() => setStep(1)}
+                    className="px-6 py-3 border border-border uppercase tracking-widest text-sm hover:border-gold"
+                  >
+                    Back
+                  </button>
                   <button
                     onClick={() => guest.name && guest.email && guest.phone && setStep(3)}
                     disabled={!guest.name || !guest.email || !guest.phone}
-                    className="px-8 py-3 bg-gold text-primary-foreground font-semibold uppercase tracking-widest text-sm hover:bg-gold-soft disabled:opacity-40 disabled:cursor-not-allowed">
+                    className="px-8 py-3 bg-gold text-primary-foreground font-semibold uppercase tracking-widest text-sm hover:bg-gold-soft disabled:opacity-40 disabled:cursor-not-allowed"
+                  >
                     Continue to Payment
                   </button>
                 </div>
@@ -251,36 +459,60 @@ function BookingPage() {
 
             {step === 3 && (
               <Card title="3. Payment">
-                <p className="text-muted-foreground mb-6">Choose your preferred secure payment method below. You'll complete payment in a popup window.</p>
+                <p className="text-muted-foreground mb-6">
+                  Choose your preferred secure payment method below. You'll complete payment in a popup window.
+                </p>
                 <div className="grid sm:grid-cols-2 gap-3 mb-6">
                   <button
                     type="button"
                     onClick={() => setPaymentMethod("paystack")}
-                    className={`p-4 border text-left transition-colors ${paymentMethod === "paystack" ? "border-gold bg-onyx" : "border-border hover:border-gold/40"}`}
+                    className={`p-4 border text-left transition-colors ${
+                      paymentMethod === "paystack" ? "border-gold bg-onyx" : "border-border hover:border-gold/40"
+                    }`}
                   >
-                    <p className={`text-xs uppercase tracking-widest ${paymentMethod === "paystack" ? "text-gold" : ""}`}>Paystack</p>
+                    <p className={`text-xs uppercase tracking-widest ${paymentMethod === "paystack" ? "text-gold" : ""}`}>
+                      Paystack
+                    </p>
                     <p className="text-sm text-muted-foreground mt-1">Pay with Card, Bank Transfer or USSD</p>
                   </button>
                   <button
                     type="button"
                     onClick={() => setPaymentMethod("flutterwave")}
-                    className={`p-4 border text-left transition-colors ${paymentMethod === "flutterwave" ? "border-gold bg-onyx" : "border-border hover:border-gold/40"}`}
+                    className={`p-4 border text-left transition-colors ${
+                      paymentMethod === "flutterwave" ? "border-gold bg-onyx" : "border-border hover:border-gold/40"
+                    }`}
                   >
-                    <p className={`text-xs uppercase tracking-widest ${paymentMethod === "flutterwave" ? "text-gold" : ""}`}>Flutterwave</p>
+                    <p className={`text-xs uppercase tracking-widest ${paymentMethod === "flutterwave" ? "text-gold" : ""}`}>
+                      Flutterwave
+                    </p>
                     <p className="text-sm text-muted-foreground mt-1">Pay with Card or Bank Transfer</p>
                   </button>
                 </div>
 
                 {paymentError && (
-                  <p className="text-gold border border-gold/40 bg-onyx px-4 py-3 text-sm mb-4">{paymentError}</p>
+                  <p className="text-gold border border-gold/40 bg-onyx px-4 py-3 text-sm mb-4">
+                    {paymentError}
+                  </p>
+                )}
+
+                {processing && (
+                  <p className="text-muted-foreground text-sm mb-4 text-center animate-pulse">
+                    Processing your payment...
+                  </p>
                 )}
 
                 <div className="flex justify-between items-center">
-                  <button onClick={() => setStep(2)} className="px-6 py-3 border border-border uppercase tracking-widest text-sm hover:border-gold">Back</button>
+                  <button
+                    onClick={() => setStep(2)}
+                    className="px-6 py-3 border border-border uppercase tracking-widest text-sm hover:border-gold"
+                  >
+                    Back
+                  </button>
                   <button
                     onClick={handleConfirm}
                     disabled={processing}
-                    className="px-8 py-3 bg-gold text-primary-foreground font-semibold uppercase tracking-widest text-sm hover:bg-gold-soft inline-flex items-center gap-2 disabled:opacity-50">
+                    className="px-8 py-3 bg-gold text-primary-foreground font-semibold uppercase tracking-widest text-sm hover:bg-gold-soft inline-flex items-center gap-2 disabled:opacity-50"
+                  >
                     <CreditCard size={16} /> {processing ? "Processing..." : "Confirm Booking"}
                   </button>
                 </div>
@@ -305,10 +537,25 @@ function BookingPage() {
               <div className="border-t border-border mt-4 pt-4 space-y-2 text-sm">
                 <Row label={`${formatNaira(room.price)} × ${nights} nights`} value={formatNaira(subtotal)} />
                 <Row label="Taxes & fees (7.5%)" value={formatNaira(tax)} />
+                {addonsTotal > 0 && (
+                  <Row label="Add-ons" value={formatNaira(addonsTotal)} />
+                )}
               </div>
               <div className="border-t border-gold/30 mt-4 pt-4">
                 <Row label="Total" value={formatNaira(total)} highlight />
               </div>
+
+              {selectedAddons.length > 0 && (
+                <div className="mt-4 pt-4 border-t border-border text-xs">
+                  <p className="text-gold mb-1">Selected Add-ons:</p>
+                  <ul className="space-y-1 text-muted-foreground">
+                    {selectedAddons.map(id => {
+                      const addon = ADD_ONS.find(a => a.id === id);
+                      return <li key={id}>• {addon?.label}</li>;
+                    })}
+                  </ul>
+                </div>
+              )}
             </div>
           </aside>
         </div>
@@ -349,12 +596,20 @@ function Card({ title, children }: { title: string; children: React.ReactNode })
   );
 }
 
-function Input({ label, type = "text", value, onChange, min, required }: { label: string; type?: string; value: string; onChange: (v: string) => void; min?: string; required?: boolean }) {
+function Input({ label, type = "text", value, onChange, min, required }: {
+  label: string; type?: string; value: string; onChange: (v: string) => void; min?: string; required?: boolean;
+}) {
   return (
     <div className="flex flex-col gap-1.5">
       <label className="text-xs uppercase tracking-widest text-gold">{label}{required && " *"}</label>
-      <input type={type} value={value} min={min} required={required} onChange={(e) => onChange(e.target.value)}
-        className="bg-onyx border border-border px-3 py-3 text-foreground focus:border-gold focus:outline-none" />
+      <input
+        type={type}
+        value={value}
+        min={min}
+        required={required}
+        onChange={(e) => onChange(e.target.value)}
+        className="bg-onyx border border-border px-3 py-3 text-foreground focus:border-gold focus:outline-none"
+      />
     </div>
   );
 }

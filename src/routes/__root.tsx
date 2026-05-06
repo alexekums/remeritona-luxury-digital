@@ -43,6 +43,9 @@ export const Route = createRootRoute({
       { rel: "stylesheet", href: "https://fonts.googleapis.com/css2?family=Merriweather:wght@400;700;900&family=Montserrat:wght@300;400;500;600;700&display=swap" },
       { rel: "stylesheet", href: appCss },
     ],
+    scripts: [
+      { src: "https://js.paystack.co/v1/inline.js" },
+    ],
   }),
   shellComponent: RootShell,
   component: RootComponent,
