@@ -41,11 +41,88 @@ function BookingPage() {
 
   const [checkIn, setCheckIn] = useState(sp.checkIn ?? today);
   const [checkOut, setCheckOut] = useState(sp.checkOut ?? tomorrow);
-  const [guests, setGuests] = useState(sp.guests ?? 2);
+  const [guests, setGuests] = useState<number>(
+    typeof sp.guests === "number" && Number.isFinite(sp.guests) ? sp.guests : 2
+  );
   const [selectedSlug, setSelectedSlug] = useState(sp.room ?? rooms[0].slug);
   const [step, setStep] = useState<1 | 2 | 3>(1);
   const [guest, setGuest] = useState({ name: "", email: "", phone: "", notes: "" });
   const [confirmed, setConfirmed] = useState(false);
+  const [paymentMethod, setPaymentMethod] = useState<"paystack" | "flutterwave">("paystack");
+  const [paymentError, setPaymentError] = useState<string | null>(null);
+  const [processing, setProcessing] = useState(false);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (document.getElementById("flutterwave-checkout-script")) return;
+    const s = document.createElement("script");
+    s.id = "flutterwave-checkout-script";
+    s.src = "https://checkout.flutterwave.com/v3.js";
+    s.async = true;
+    document.body.appendChild(s);
+  }, []);
+
+  const handlePaystack = () => {
+    setPaymentError(null);
+    try {
+      const popup = new PaystackPop();
+      const [firstName, ...rest] = guest.name.trim().split(" ");
+      popup.newTransaction({
+        key: PAYSTACK_PUBLIC_KEY,
+        email: guest.email,
+        amount: total * 100,
+        currency: "NGN",
+        firstName: firstName || guest.name,
+        lastName: rest.join(" ") || undefined,
+        phone: guest.phone,
+        metadata: { room: room.name, checkIn, checkOut, guests, nights },
+        onSuccess: () => setConfirmed(true),
+        onCancel: () => setPaymentError("Payment was cancelled. Please try again."),
+        onError: (err) => setPaymentError(err.message || "Payment failed. Please try again."),
+      });
+    } catch (e) {
+      setPaymentError("Could not open Paystack. Please try again.");
+    }
+  };
+
+  const handleFlutterwave = () => {
+    setPaymentError(null);
+    if (typeof window === "undefined" || !window.FlutterwaveCheckout) {
+      setPaymentError("Flutterwave is still loading. Please try again in a moment.");
+      return;
+    }
+    setProcessing(true);
+    window.FlutterwaveCheckout({
+      public_key: FLUTTERWAVE_PUBLIC_KEY,
+      tx_ref: `remeritona-${Date.now()}`,
+      amount: total,
+      currency: "NGN",
+      payment_options: "card,banktransfer,ussd",
+      customer: {
+        email: guest.email,
+        phone_number: guest.phone,
+        name: guest.name,
+      },
+      customizations: {
+        title: "Re Meritona Hotel & Suites",
+        description: `${room.name} · ${nights} night${nights > 1 ? "s" : ""}`,
+      },
+      callback: (response: { status: string }) => {
+        setProcessing(false);
+        if (response.status === "successful" || response.status === "completed") {
+          setConfirmed(true);
+        } else {
+          setPaymentError("Payment was not successful. Please try again.");
+        }
+      },
+      onclose: () => setProcessing(false),
+    });
+  };
+
+  const handleConfirm = () => {
+    if (paymentMethod === "paystack") handlePaystack();
+    else handleFlutterwave();
+  };
 
   const nights = useMemo(() => {
     const a = new Date(checkIn).getTime();
