@@ -53,8 +53,19 @@ export function SiteFooter() {
       </div>
 
       <div className="border-t border-border">
-        <div className="max-w-7xl mx-auto px-6 py-6 text-xs text-muted-foreground text-center">
-          <p>© 2025 Re Meritona Hotel & Suites. All rights reserved.</p>
+        <div className="max-w-7xl mx-auto px-6 py-6 text-xs text-muted-foreground text-center space-y-1">
+          <p>© 2026 Re Meritona Hotel & Suites. All rights reserved.</p>
+          <p className="text-gold">
+            Designed by{" "}
+            <a
+              href="https://wa.me/2349169616205"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="underline hover:text-gold-soft"
+            >
+              Lex TX
+            </a>
+          </p>
         </div>
       </div>
     </footer>
