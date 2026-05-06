@@ -299,7 +299,7 @@ function BookingPage() {
                 <Row label="Check-in" value={new Date(checkIn).toLocaleDateString()} />
                 <Row label="Check-out" value={new Date(checkOut).toLocaleDateString()} />
                 <Row label="Nights" value={String(nights)} />
-                <Row label="Guests" value={String(guests)} />
+                <Row label="Guests" value={`${guests} ${guests === 1 ? "Guest" : "Guests"}`} />
               </div>
               <div className="border-t border-border mt-4 pt-4 space-y-2 text-sm">
                 <Row label={`${formatNaira(room.price)} × ${nights} nights`} value={formatNaira(subtotal)} />
