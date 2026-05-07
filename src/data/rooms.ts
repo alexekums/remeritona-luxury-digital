@@ -1,6 +1,13 @@
 import deluxe from "@/assets/room-deluxe.jpg";
 import executive from "@/assets/room-executive.jpg";
 import presidential from "@/assets/room-presidential.jpg";
+import extra1 from "@/assets/room-extra-1.jpg";
+import extra2 from "@/assets/room-extra-2.jpg";
+import extra3 from "@/assets/room-extra-3.jpg";
+import extra4 from "@/assets/room-extra-4.jpg";
+import extra5 from "@/assets/room-extra-5.jpg";
+
+export const roomGalleryExtras = [extra1, extra2, extra3, extra4, extra5];
 
 export type Room = {
   slug: string;
@@ -12,6 +19,7 @@ export type Room = {
   beds: string;
   capacity: number;
   image: string;
+  gallery?: string[];
   amenities: string[];
 };
 
