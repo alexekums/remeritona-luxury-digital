@@ -40,6 +40,8 @@ const search = z.object({
   checkIn: z.string().optional(),
   checkOut: z.string().optional(),
   guests: z.coerce.number().optional(),
+  adults: z.coerce.number().optional(),
+  children: z.coerce.number().optional(),
 });
 
 export const Route = createFileRoute("/booking")({
@@ -60,9 +62,13 @@ function BookingPage() {
 
   const [checkIn, setCheckIn] = useState(sp.checkIn ?? today);
   const [checkOut, setCheckOut] = useState(sp.checkOut ?? tomorrow);
-  const [guests, setGuests] = useState<number>(
-    typeof sp.guests === "number" && Number.isFinite(sp.guests) ? sp.guests : 2
+  const [adults, setAdults] = useState<number>(
+    typeof sp.adults === "number" && Number.isFinite(sp.adults) ? Math.min(2, Math.max(1, sp.adults)) : 2
   );
+  const [children, setChildren] = useState<number>(
+    typeof sp.children === "number" && Number.isFinite(sp.children) ? Math.min(1, Math.max(0, sp.children)) : 0
+  );
+  const guests = adults + children;
   const [selectedSlug, setSelectedSlug] = useState(sp.room ?? rooms[0].slug);
   const [step, setStep] = useState<1 | 2 | 3>(1);
   const [guest, setGuest] = useState({ name: "", email: "", phone: "", notes: "" });
@@ -349,24 +355,41 @@ function BookingPage() {
           <div className="lg:col-span-2 space-y-8">
             {step === 1 && (
               <Card title="1. Dates & Guests">
-                <div className="grid sm:grid-cols-3 gap-4">
+                <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
                   <Input label="Check In" type="date" value={checkIn} min={today} onChange={(v) => setCheckIn(v)} />
                   <Input label="Check Out" type="date" value={checkOut} min={checkIn} onChange={(v) => setCheckOut(v)} />
                   <div className="flex flex-col gap-1.5">
-                    <label className="text-xs uppercase tracking-widest text-gold">Guests</label>
+                    <label className="text-xs uppercase tracking-widest text-gold">Adults</label>
                     <select
-                      value={guests}
-                      onChange={(e) => setGuests(Number(e.target.value))}
+                      value={adults}
+                      onChange={(e) => setAdults(Number(e.target.value))}
                       className="bg-onyx border border-border px-3 py-3 text-foreground focus:border-gold focus:outline-none"
                     >
-                      {[1, 2, 3, 4, 5, 6].map((n) => (
+                      {[1, 2].map((n) => (
                         <option key={n} value={n} className="bg-charcoal">
-                          {n} {n === 1 ? "Guest" : "Guests"}
+                          {n} {n === 1 ? "Adult" : "Adults"}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="flex flex-col gap-1.5">
+                    <label className="text-xs uppercase tracking-widest text-gold">Children</label>
+                    <select
+                      value={children}
+                      onChange={(e) => setChildren(Number(e.target.value))}
+                      className="bg-onyx border border-border px-3 py-3 text-foreground focus:border-gold focus:outline-none"
+                    >
+                      {[0, 1].map((n) => (
+                        <option key={n} value={n} className="bg-charcoal">
+                          {n} {n === 1 ? "Child" : "Children"}
                         </option>
                       ))}
                     </select>
                   </div>
                 </div>
+                <p className="text-xs text-muted-foreground mt-3">
+                  Maximum occupancy per room: 2 Adults + 1 Extra Bed + 1 Child.
+                </p>
 
                 <h3 className="font-serif text-2xl mt-8 mb-4">Select a room</h3>
                 <div className="space-y-3">
@@ -383,7 +406,7 @@ function BookingPage() {
                       <div className="flex-1 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                         <div>
                           <p className="font-serif text-lg">{r.name}</p>
-                          <p className="text-xs text-muted-foreground">{r.size} · {r.beds} · up to {r.capacity}</p>
+                          <p className="text-xs text-muted-foreground">{r.size} · {r.beds} · {r.occupancy}</p>
                         </div>
                         <p className="text-gold font-serif text-xl">
                           {formatNaira(r.price)}<span className="text-xs text-muted-foreground">/night</span>

@@ -12,10 +12,13 @@ import {
   UtensilsCrossed,
   Wifi,
   Sparkles,
-  Users,
-  BellRing,
+  Music,
+  Shirt,
   Dumbbell,
-  Plane,
+  Wine,
+  ArrowUpDown,
+  Accessibility,
+  Snowflake,
   Star,
 } from "lucide-react";
 
@@ -30,14 +33,17 @@ export const Route = createFileRoute("/")({
 });
 
 const amenities = [
-  { icon: Waves, label: "Swimming Pool" },
-  { icon: UtensilsCrossed, label: "Restaurant & Bar" },
   { icon: Wifi, label: "Free Wi-Fi" },
-  { icon: Sparkles, label: "Spa & Wellness" },
-  { icon: Users, label: "Conference Room" },
-  { icon: BellRing, label: "24hr Room Service" },
-  { icon: Dumbbell, label: "Gym" },
-  { icon: Plane, label: "Airport Shuttle" },
+  { icon: Music, label: "Night Club" },
+  { icon: Shirt, label: "Laundry" },
+  { icon: Dumbbell, label: "Fitness Center" },
+  { icon: Sparkles, label: "Spa" },
+  { icon: Wine, label: "Mini Bar / Lounge" },
+  { icon: ArrowUpDown, label: "Elevator" },
+  { icon: Accessibility, label: "Facility for the Disabled" },
+  { icon: UtensilsCrossed, label: "Restaurant" },
+  { icon: Snowflake, label: "Air Conditioning" },
+  { icon: Waves, label: "Swimming Pool" },
 ];
 
 const testimonials = [

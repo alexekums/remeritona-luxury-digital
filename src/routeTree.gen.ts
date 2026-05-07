@@ -10,6 +10,7 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as RoomsRouteImport } from './routes/rooms'
+import { Route as PoliciesRouteImport } from './routes/policies'
 import { Route as OffersRouteImport } from './routes/offers'
 import { Route as GalleryRouteImport } from './routes/gallery'
 import { Route as DiningRouteImport } from './routes/dining'
@@ -22,6 +23,11 @@ import { Route as RoomsSlugRouteImport } from './routes/rooms.$slug'
 const RoomsRoute = RoomsRouteImport.update({
   id: '/rooms',
   path: '/rooms',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const PoliciesRoute = PoliciesRouteImport.update({
+  id: '/policies',
+  path: '/policies',
   getParentRoute: () => rootRouteImport,
 } as any)
 const OffersRoute = OffersRouteImport.update({
@@ -73,6 +79,7 @@ export interface FileRoutesByFullPath {
   '/dining': typeof DiningRoute
   '/gallery': typeof GalleryRoute
   '/offers': typeof OffersRoute
+  '/policies': typeof PoliciesRoute
   '/rooms': typeof RoomsRouteWithChildren
   '/rooms/$slug': typeof RoomsSlugRoute
 }
@@ -84,6 +91,7 @@ export interface FileRoutesByTo {
   '/dining': typeof DiningRoute
   '/gallery': typeof GalleryRoute
   '/offers': typeof OffersRoute
+  '/policies': typeof PoliciesRoute
   '/rooms': typeof RoomsRouteWithChildren
   '/rooms/$slug': typeof RoomsSlugRoute
 }
@@ -96,6 +104,7 @@ export interface FileRoutesById {
   '/dining': typeof DiningRoute
   '/gallery': typeof GalleryRoute
   '/offers': typeof OffersRoute
+  '/policies': typeof PoliciesRoute
   '/rooms': typeof RoomsRouteWithChildren
   '/rooms/$slug': typeof RoomsSlugRoute
 }
@@ -109,6 +118,7 @@ export interface FileRouteTypes {
     | '/dining'
     | '/gallery'
     | '/offers'
+    | '/policies'
     | '/rooms'
     | '/rooms/$slug'
   fileRoutesByTo: FileRoutesByTo
@@ -120,6 +130,7 @@ export interface FileRouteTypes {
     | '/dining'
     | '/gallery'
     | '/offers'
+    | '/policies'
     | '/rooms'
     | '/rooms/$slug'
   id:
@@ -131,6 +142,7 @@ export interface FileRouteTypes {
     | '/dining'
     | '/gallery'
     | '/offers'
+    | '/policies'
     | '/rooms'
     | '/rooms/$slug'
   fileRoutesById: FileRoutesById
@@ -143,6 +155,7 @@ export interface RootRouteChildren {
   DiningRoute: typeof DiningRoute
   GalleryRoute: typeof GalleryRoute
   OffersRoute: typeof OffersRoute
+  PoliciesRoute: typeof PoliciesRoute
   RoomsRoute: typeof RoomsRouteWithChildren
 }
 
@@ -153,6 +166,13 @@ declare module '@tanstack/react-router' {
       path: '/rooms'
       fullPath: '/rooms'
       preLoaderRoute: typeof RoomsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/policies': {
+      id: '/policies'
+      path: '/policies'
+      fullPath: '/policies'
+      preLoaderRoute: typeof PoliciesRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/offers': {
@@ -232,6 +252,7 @@ const rootRouteChildren: RootRouteChildren = {
   DiningRoute: DiningRoute,
   GalleryRoute: GalleryRoute,
   OffersRoute: OffersRoute,
+  PoliciesRoute: PoliciesRoute,
   RoomsRoute: RoomsRouteWithChildren,
 }
 export const routeTree = rootRouteImport
