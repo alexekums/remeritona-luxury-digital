@@ -310,6 +310,21 @@ function BookingPage() {
               )}
               <Row label="Total Paid" value={formatNaira(total)} highlight />
             </div>
+            <div className="mt-8 flex flex-col sm:flex-row gap-3 justify-center">
+              <button
+                onClick={() => {
+                  setConfirmed(false);
+                  setStep(1);
+                  setSelectedAddons([]);
+                  setGuest({ name: "", email: "", phone: "", notes: "" });
+                  setPaymentError(null);
+                  window.scrollTo({ top: 0, behavior: "smooth" });
+                }}
+                className="px-8 py-3 bg-gold text-primary-foreground font-semibold uppercase tracking-widest text-sm hover:bg-gold-soft"
+              >
+                Book Another Stay
+              </button>
+            </div>
           </div>
         </section>
         <SiteFooter />
