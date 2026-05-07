@@ -67,6 +67,7 @@ function BookingPage() {
   const [step, setStep] = useState<1 | 2 | 3>(1);
   const [guest, setGuest] = useState({ name: "", email: "", phone: "", notes: "" });
   const [selectedAddons, setSelectedAddons] = useState<string[]>([]);
+  const [showAllAddons, setShowAllAddons] = useState(false);
   const [confirmed, setConfirmed] = useState(false);
   const [paymentMethod, setPaymentMethod] = useState<"paystack" | "flutterwave">("paystack");
   const [paymentError, setPaymentError] = useState<string | null>(null);
