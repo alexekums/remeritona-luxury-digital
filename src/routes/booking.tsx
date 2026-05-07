@@ -62,9 +62,13 @@ function BookingPage() {
 
   const [checkIn, setCheckIn] = useState(sp.checkIn ?? today);
   const [checkOut, setCheckOut] = useState(sp.checkOut ?? tomorrow);
-  const [guests, setGuests] = useState<number>(
-    typeof sp.guests === "number" && Number.isFinite(sp.guests) ? sp.guests : 2
+  const [adults, setAdults] = useState<number>(
+    typeof sp.adults === "number" && Number.isFinite(sp.adults) ? Math.min(2, Math.max(1, sp.adults)) : 2
   );
+  const [children, setChildren] = useState<number>(
+    typeof sp.children === "number" && Number.isFinite(sp.children) ? Math.min(1, Math.max(0, sp.children)) : 0
+  );
+  const guests = adults + children;
   const [selectedSlug, setSelectedSlug] = useState(sp.room ?? rooms[0].slug);
   const [step, setStep] = useState<1 | 2 | 3>(1);
   const [guest, setGuest] = useState({ name: "", email: "", phone: "", notes: "" });
