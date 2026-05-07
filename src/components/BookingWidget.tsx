@@ -21,7 +21,7 @@ export function BookingWidget({ variant = "hero" }: { variant?: "hero" | "inline
   return (
     <form
       onSubmit={handleSubmit}
-      className={`grid grid-cols-1 md:grid-cols-4 gap-3 p-5 ${
+      className={`grid grid-cols-1 md:grid-cols-5 gap-3 p-5 ${
         variant === "hero" ? "bg-onyx/85 backdrop-blur border border-gold/30 shadow-elegant" : "bg-charcoal border border-border"
       }`}
     >
@@ -43,15 +43,28 @@ export function BookingWidget({ variant = "hero" }: { variant?: "hero" | "inline
           className="w-full bg-transparent text-foreground text-sm focus:outline-none"
         />
       </Field>
-      <Field icon={<Users size={16} />} label="Guests">
+      <Field icon={<Users size={16} />} label="Adults">
         <select
-          value={guests}
-          onChange={(e) => setGuests(Number(e.target.value))}
+          value={adults}
+          onChange={(e) => setAdults(Number(e.target.value))}
           className="w-full bg-transparent text-foreground text-sm focus:outline-none"
         >
-          {[1, 2, 3, 4, 5, 6].map((n) => (
+          {[1, 2].map((n) => (
             <option key={n} value={n} className="bg-charcoal">
-              {n} {n === 1 ? "Guest" : "Guests"}
+              {n} {n === 1 ? "Adult" : "Adults"}
+            </option>
+          ))}
+        </select>
+      </Field>
+      <Field icon={<Users size={16} />} label="Children">
+        <select
+          value={children}
+          onChange={(e) => setChildren(Number(e.target.value))}
+          className="w-full bg-transparent text-foreground text-sm focus:outline-none"
+        >
+          {[0, 1].map((n) => (
+            <option key={n} value={n} className="bg-charcoal">
+              {n} {n === 1 ? "Child" : "Children"}
             </option>
           ))}
         </select>
