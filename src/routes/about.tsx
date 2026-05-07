@@ -54,17 +54,18 @@ function AboutPage() {
         <div className="max-w-7xl mx-auto grid md:grid-cols-2 gap-12 items-center">
           <img src={lobby} alt="Hotel lobby" className="w-full aspect-[4/3] object-cover" loading="lazy" />
           <div>
-            <p className="text-gold text-xs uppercase tracking-[0.4em] mb-4">Our Location</p>
+            <p className="text-gold text-xs uppercase tracking-[0.4em] mb-4">Nearby Landmarks</p>
             <h2 className="font-serif text-4xl mb-4">In the heart of Abakaliki</h2>
             <p className="text-muted-foreground text-lg leading-relaxed mb-4">
-              Set on Refinery Road in central Abakaliki, Remeritona is moments from the State
-              Government House, the Ebonyi State University, and the city's growing business
-              district. The international airport is a short drive away.
+              Set in central Abakaliki, Remeritona is moments from Ebonyi's leading institutions,
+              markets and venues — making it the ideal base for business and leisure travellers alike.
             </p>
             <ul className="space-y-2 text-muted-foreground">
-              <li>· 5 min to Government House</li>
-              <li>· 10 min to Ebonyi State University</li>
-              <li>· 25 min to Akanu Ibiam Airport (Enugu)</li>
+              <li>· Ebonyi State University (Permanent Site)</li>
+              <li>· Abakaliki International Market (Kpirikpiri Market)</li>
+              <li>· Ebonyi State Stadium (Pa Ngele Oruta Stadium)</li>
+              <li>· Ebonyi Shopping Mall (Shoprite Abakaliki)</li>
+              <li>· Abakaliki Rice Mill</li>
             </ul>
           </div>
         </div>
