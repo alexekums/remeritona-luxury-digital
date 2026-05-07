@@ -35,6 +35,7 @@ export const rooms: Room[] = [
     beds: "1 King Bed",
     capacity: 2,
     image: deluxe,
+    gallery: [deluxe, extra1, extra2, extra3, extra4, extra5],
     amenities: ["King bed", "Smart TV", "Workspace", "Minibar", "Free Wi-Fi", "Rain shower"],
   },
   {
@@ -48,6 +49,7 @@ export const rooms: Room[] = [
     beds: "1 King + Sofa Bed",
     capacity: 3,
     image: executive,
+    gallery: [executive, extra2, extra5, extra1, extra3, extra4],
     amenities: ["Separate living room", "Club lounge access", "Espresso machine", "Bathtub", "City view", "Premium toiletries"],
   },
   {
@@ -61,6 +63,7 @@ export const rooms: Room[] = [
     beds: "1 King + Living & Dining",
     capacity: 4,
     image: presidential,
+    gallery: [presidential, extra3, extra5, extra2, extra1, extra4],
     amenities: ["Private butler", "Dining for 6", "Panoramic windows", "Walk-in wardrobe", "Spa bath", "Chauffeur service"],
   },
 ];
