@@ -406,7 +406,7 @@ function BookingPage() {
                       <div className="flex-1 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                         <div>
                           <p className="font-serif text-lg">{r.name}</p>
-                          <p className="text-xs text-muted-foreground">{r.size} · {r.beds} · up to {r.capacity}</p>
+                          <p className="text-xs text-muted-foreground">{r.size} · {r.beds} · {r.occupancy}</p>
                         </div>
                         <p className="text-gold font-serif text-xl">
                           {formatNaira(r.price)}<span className="text-xs text-muted-foreground">/night</span>
