@@ -16,8 +16,8 @@ const FLUTTERWAVE_PUBLIC_KEY = "FLWPUBK_TEST-c7659059ed4e5f5f6aa1fbb96055e919-X"
 
 // ==================== ADD-ONS (Pay on Arrival) ====================
 const ADD_ONS = [
-  { id: "pickup_morning", label: "Airport/Venue Pickup (Every Morning)", price: 7000 },
-  { id: "drop", label: "Airport/Venue Drop", price: 7000 },
+  { id: "pickup_morning", label: "Venue Pickup (Every Morning)", price: 7000 },
+  { id: "drop", label: "Venue Drop", price: 7000 },
   { id: "full_transfer", label: "Airport Pickup + Drop", price: 100000 },
   { id: "flowers", label: "Bouquet of Flowers in Room", price: 25000 },
   { id: "breakfast", label: "Breakfast Included (Per Person)", price: 5500 },
@@ -180,10 +180,6 @@ function BookingPage() {
     const handlePaystack = () => {
     setPaymentError(null);
 
-    console.log("Paystack button clicked");
-    console.log("PaystackReady:", paystackReady);
-    console.log("window.PaystackPop:", window.PaystackPop);
-
     if (!paystackReady || !window.PaystackPop) {
       setPaymentError("Paystack is still loading. Please wait a moment and try again.");
       return;
@@ -213,9 +209,9 @@ function BookingPage() {
             { display_name: "Nights", variable_name: "nights", value: String(nights) },
           ],
         },
-        callback: async (response: { reference: string }) => {
+        callback: function(response: { reference: string }) {
           if (response.reference) {
-            await sendBookingEmails(response.reference);
+            sendBookingEmails(response.reference);   // Removed 'await' here
             setConfirmed(true);
           }
         },
@@ -383,11 +379,14 @@ function BookingPage() {
 
                 <div className="flex justify-end mt-8">
                   <button
-                    onClick={() => setStep(2)}
-                    className="px-8 py-3 bg-gold text-primary-foreground font-semibold uppercase tracking-widest text-sm hover:bg-gold-soft"
-                  >
-                    Continue
-                  </button>
+  onClick={() => {
+    setStep(2);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }}
+  className="px-8 py-3 bg-gold text-primary-foreground font-semibold uppercase tracking-widest text-sm hover:bg-gold-soft"
+>
+  Continue
+</button>
                 </div>
               </Card>
             )}
