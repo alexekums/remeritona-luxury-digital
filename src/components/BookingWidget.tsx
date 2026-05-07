@@ -9,11 +9,13 @@ export function BookingWidget({ variant = "hero" }: { variant?: "hero" | "inline
 
   const [checkIn, setCheckIn] = useState(today);
   const [checkOut, setCheckOut] = useState(tomorrow);
-  const [guests, setGuests] = useState(2);
+  const [adults, setAdults] = useState(2);
+  const [children, setChildren] = useState(0);
+  const guests = adults + children;
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    navigate({ to: "/booking", search: { checkIn, checkOut, guests } as never });
+    navigate({ to: "/booking", search: { checkIn, checkOut, guests, adults, children } as never });
   };
 
   return (
