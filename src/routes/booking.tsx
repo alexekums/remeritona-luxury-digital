@@ -571,6 +571,36 @@ function BookingPage() {
                 </div>
               )}
             </div>
+
+            {/* Mobile-only continue button below summary */}
+            <div className="lg:hidden mt-6">
+              {step === 1 && (
+                <button
+                  onClick={() => { setStep(2); window.scrollTo({ top: 0, behavior: 'smooth' }); }}
+                  className="w-full py-4 bg-gold text-primary-foreground font-semibold uppercase tracking-widest text-sm hover:bg-gold-soft"
+                >
+                  Continue
+                </button>
+              )}
+              {step === 2 && (
+                <button
+                  onClick={() => guest.name && guest.email && guest.phone && (setStep(3), window.scrollTo({ top: 0, behavior: 'smooth' }))}
+                  disabled={!guest.name || !guest.email || !guest.phone}
+                  className="w-full py-4 bg-gold text-primary-foreground font-semibold uppercase tracking-widest text-sm hover:bg-gold-soft disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  Continue to Payment
+                </button>
+              )}
+              {step === 3 && (
+                <button
+                  onClick={handleConfirm}
+                  disabled={processing}
+                  className="w-full py-4 bg-gold text-primary-foreground font-semibold uppercase tracking-widest text-sm hover:bg-gold-soft inline-flex items-center justify-center gap-2 disabled:opacity-50"
+                >
+                  <CreditCard size={16} /> {processing ? "Processing..." : "Confirm Booking"}
+                </button>
+              )}
+            </div>
           </aside>
         </div>
       </section>
