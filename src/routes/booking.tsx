@@ -411,14 +411,18 @@ function BookingPage() {
                 </div>
 
                 {/* ==================== ADD-ONS SECTION ==================== */}
-                <div className="mt-10">
+                <div
+                  className="mt-10 group"
+                  onMouseEnter={() => setShowAllAddons(true)}
+                  onMouseLeave={() => setShowAllAddons(false)}
+                >
                   <h3 className="font-serif text-xl mb-4 flex items-center gap-2">
                     <Plus className="text-gold" /> Add-ons (Pay on Arrival)
                   </h3>
                   <p className="text-sm text-muted-foreground mb-4">Select any extra services you would like.</p>
-                  
+
                   <div className="grid gap-3">
-                    {ADD_ONS.map((addon) => (
+                    {(showAllAddons ? ADD_ONS : ADD_ONS.slice(0, 3)).map((addon) => (
                       <label
                         key={addon.id}
                         className={`flex items-center justify-between p-4 border rounded-lg cursor-pointer transition-all hover:border-gold/50 ${selectedAddons.includes(addon.id) ? 'border-gold bg-onyx' : 'border-border'}`}
@@ -436,6 +440,16 @@ function BookingPage() {
                       </label>
                     ))}
                   </div>
+
+                  {ADD_ONS.length > 3 && (
+                    <button
+                      type="button"
+                      onClick={() => setShowAllAddons((v) => !v)}
+                      className="mt-3 w-full py-3 border border-gold/40 text-gold uppercase tracking-widest text-xs hover:bg-gold/10 transition-colors"
+                    >
+                      {showAllAddons ? "Show less" : `Show ${ADD_ONS.length - 3} more add-ons`}
+                    </button>
+                  )}
                 </div>
                 {/* ==================================================== */}
 
