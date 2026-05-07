@@ -40,6 +40,8 @@ const search = z.object({
   checkIn: z.string().optional(),
   checkOut: z.string().optional(),
   guests: z.coerce.number().optional(),
+  adults: z.coerce.number().optional(),
+  children: z.coerce.number().optional(),
 });
 
 export const Route = createFileRoute("/booking")({
