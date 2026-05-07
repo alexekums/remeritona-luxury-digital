@@ -67,6 +67,7 @@ function BookingPage() {
   const [step, setStep] = useState<1 | 2 | 3>(1);
   const [guest, setGuest] = useState({ name: "", email: "", phone: "", notes: "" });
   const [selectedAddons, setSelectedAddons] = useState<string[]>([]);
+  const [showAllAddons, setShowAllAddons] = useState(false);
   const [confirmed, setConfirmed] = useState(false);
   const [paymentMethod, setPaymentMethod] = useState<"paystack" | "flutterwave">("paystack");
   const [paymentError, setPaymentError] = useState<string | null>(null);
@@ -309,6 +310,21 @@ function BookingPage() {
               )}
               <Row label="Total Paid" value={formatNaira(total)} highlight />
             </div>
+            <div className="mt-8 flex flex-col sm:flex-row gap-3 justify-center">
+              <button
+                onClick={() => {
+                  setConfirmed(false);
+                  setStep(1);
+                  setSelectedAddons([]);
+                  setGuest({ name: "", email: "", phone: "", notes: "" });
+                  setPaymentError(null);
+                  window.scrollTo({ top: 0, behavior: "smooth" });
+                }}
+                className="px-8 py-3 bg-gold text-primary-foreground font-semibold uppercase tracking-widest text-sm hover:bg-gold-soft"
+              >
+                Book Another Stay
+              </button>
+            </div>
           </div>
         </section>
         <SiteFooter />
@@ -410,14 +426,18 @@ function BookingPage() {
                 </div>
 
                 {/* ==================== ADD-ONS SECTION ==================== */}
-                <div className="mt-10">
+                <div
+                  className="mt-10 group"
+                  onMouseEnter={() => setShowAllAddons(true)}
+                  onMouseLeave={() => setShowAllAddons(false)}
+                >
                   <h3 className="font-serif text-xl mb-4 flex items-center gap-2">
                     <Plus className="text-gold" /> Add-ons (Pay on Arrival)
                   </h3>
                   <p className="text-sm text-muted-foreground mb-4">Select any extra services you would like.</p>
-                  
+
                   <div className="grid gap-3">
-                    {ADD_ONS.map((addon) => (
+                    {(showAllAddons ? ADD_ONS : ADD_ONS.slice(0, 3)).map((addon) => (
                       <label
                         key={addon.id}
                         className={`flex items-center justify-between p-4 border rounded-lg cursor-pointer transition-all hover:border-gold/50 ${selectedAddons.includes(addon.id) ? 'border-gold bg-onyx' : 'border-border'}`}
@@ -435,6 +455,16 @@ function BookingPage() {
                       </label>
                     ))}
                   </div>
+
+                  {ADD_ONS.length > 3 && (
+                    <button
+                      type="button"
+                      onClick={() => setShowAllAddons((v) => !v)}
+                      className="mt-3 w-full py-3 border border-gold/40 text-gold uppercase tracking-widest text-xs hover:bg-gold/10 transition-colors"
+                    >
+                      {showAllAddons ? "Show less" : `Show ${ADD_ONS.length - 3} more add-ons`}
+                    </button>
+                  )}
                 </div>
                 {/* ==================================================== */}
 
@@ -554,6 +584,36 @@ function BookingPage() {
                     })}
                   </ul>
                 </div>
+              )}
+            </div>
+
+            {/* Mobile-only continue button below summary */}
+            <div className="lg:hidden mt-6">
+              {step === 1 && (
+                <button
+                  onClick={() => { setStep(2); window.scrollTo({ top: 0, behavior: 'smooth' }); }}
+                  className="w-full py-4 bg-gold text-primary-foreground font-semibold uppercase tracking-widest text-sm hover:bg-gold-soft"
+                >
+                  Continue
+                </button>
+              )}
+              {step === 2 && (
+                <button
+                  onClick={() => guest.name && guest.email && guest.phone && (setStep(3), window.scrollTo({ top: 0, behavior: 'smooth' }))}
+                  disabled={!guest.name || !guest.email || !guest.phone}
+                  className="w-full py-4 bg-gold text-primary-foreground font-semibold uppercase tracking-widest text-sm hover:bg-gold-soft disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  Continue to Payment
+                </button>
+              )}
+              {step === 3 && (
+                <button
+                  onClick={handleConfirm}
+                  disabled={processing}
+                  className="w-full py-4 bg-gold text-primary-foreground font-semibold uppercase tracking-widest text-sm hover:bg-gold-soft inline-flex items-center justify-center gap-2 disabled:opacity-50"
+                >
+                  <CreditCard size={16} /> {processing ? "Processing..." : "Confirm Booking"}
+                </button>
               )}
             </div>
           </aside>

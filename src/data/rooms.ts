@@ -1,6 +1,13 @@
 import deluxe from "@/assets/room-deluxe.jpg";
 import executive from "@/assets/room-executive.jpg";
 import presidential from "@/assets/room-presidential.jpg";
+import extra1 from "@/assets/room-extra-1.jpg";
+import extra2 from "@/assets/room-extra-2.jpg";
+import extra3 from "@/assets/room-extra-3.jpg";
+import extra4 from "@/assets/room-extra-4.jpg";
+import extra5 from "@/assets/room-extra-5.jpg";
+
+export const roomGalleryExtras = [extra1, extra2, extra3, extra4, extra5];
 
 export type Room = {
   slug: string;
@@ -12,6 +19,7 @@ export type Room = {
   beds: string;
   capacity: number;
   image: string;
+  gallery?: string[];
   amenities: string[];
 };
 
@@ -27,6 +35,7 @@ export const rooms: Room[] = [
     beds: "1 King Bed",
     capacity: 2,
     image: deluxe,
+    gallery: [deluxe, extra1, extra2, extra3, extra4, extra5],
     amenities: ["King bed", "Smart TV", "Workspace", "Minibar", "Free Wi-Fi", "Rain shower"],
   },
   {
@@ -40,6 +49,7 @@ export const rooms: Room[] = [
     beds: "1 King + Sofa Bed",
     capacity: 3,
     image: executive,
+    gallery: [executive, extra2, extra5, extra1, extra3, extra4],
     amenities: ["Separate living room", "Club lounge access", "Espresso machine", "Bathtub", "City view", "Premium toiletries"],
   },
   {
@@ -53,6 +63,7 @@ export const rooms: Room[] = [
     beds: "1 King + Living & Dining",
     capacity: 4,
     image: presidential,
+    gallery: [presidential, extra3, extra5, extra2, extra1, extra4],
     amenities: ["Private butler", "Dining for 6", "Panoramic windows", "Walk-in wardrobe", "Spa bath", "Chauffeur service"],
   },
 ];
