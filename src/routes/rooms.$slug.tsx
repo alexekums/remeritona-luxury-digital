@@ -67,7 +67,7 @@ function RoomDetail() {
               <div className="mb-10">
                 <h3 className="font-serif text-2xl mb-4">Gallery</h3>
                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                  {room.gallery.map((src, i) => (
+                  {room.gallery.map((src: string, i: number) => (
                     <a key={i} href={src} target="_blank" rel="noreferrer" className="group block overflow-hidden aspect-[4/3]">
                       <img src={src} alt={`${room.name} view ${i + 1}`} loading="lazy" className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700" />
                     </a>
