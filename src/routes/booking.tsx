@@ -671,7 +671,7 @@ function BookingPage() {
             <div className="lg:hidden mt-6">
               {step === 1 && (
                 <button
-                  onClick={() => { setStep(2); window.scrollTo({ top: 0, behavior: 'smooth' }); }}
+                  onClick={() => { setStep(2); scrollToStep(); }}
                   className="w-full py-4 bg-gold text-primary-foreground font-semibold uppercase tracking-widest text-sm hover:bg-gold-soft"
                 >
                   Continue
@@ -679,7 +679,7 @@ function BookingPage() {
               )}
               {step === 2 && (
                 <button
-                  onClick={() => guest.name && guest.email && guest.phone && (setStep(3), window.scrollTo({ top: 0, behavior: 'smooth' }))}
+                  onClick={() => { if (guest.name && guest.email && guest.phone) { setStep(3); scrollToStep(); } }}
                   disabled={!guest.name || !guest.email || !guest.phone}
                   className="w-full py-4 bg-gold text-primary-foreground font-semibold uppercase tracking-widest text-sm hover:bg-gold-soft disabled:opacity-40 disabled:cursor-not-allowed"
                 >
