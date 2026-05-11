@@ -376,7 +376,7 @@ function BookingPage() {
 
       <section className="py-16 px-6">
         <div className="max-w-7xl mx-auto grid lg:grid-cols-3 gap-10">
-          <div className="lg:col-span-2 space-y-8">
+          <div ref={stepRef} className="lg:col-span-2 space-y-8 scroll-mt-28">
             {step === 1 && (
               <Card title="1. Dates & Guests">
                 <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
