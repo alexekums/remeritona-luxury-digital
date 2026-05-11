@@ -632,7 +632,7 @@ function BookingPage() {
             )}
           </div>
 
-          <aside>
+          <aside ref={summaryRef} className="scroll-mt-28">
             <div className="bg-charcoal border border-gold/30 p-6 lg:sticky lg:top-28">
               <p className="text-gold text-xs uppercase tracking-[0.4em] mb-4">Reservation Summary</p>
               <img src={room.image} alt={room.name} className="w-full aspect-video object-cover mb-4" />
