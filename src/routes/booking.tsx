@@ -478,14 +478,11 @@ function BookingPage() {
 
                 <div className="flex justify-end mt-8">
                   <button
-  onClick={() => {
-    setStep(2);
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-  }}
-  className="px-8 py-3 bg-gold text-primary-foreground font-semibold uppercase tracking-widest text-sm hover:bg-gold-soft"
->
-  Continue
-</button>
+                    onClick={() => { setStep(2); scrollToStep(); }}
+                    className="px-8 py-3 bg-gold text-primary-foreground font-semibold uppercase tracking-widest text-sm hover:bg-gold-soft"
+                  >
+                    Continue
+                  </button>
                 </div>
               </Card>
             )}
