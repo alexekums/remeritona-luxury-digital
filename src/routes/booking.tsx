@@ -1,9 +1,9 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { SiteHeader } from "@/components/SiteHeader";
 import { SiteFooter } from "@/components/SiteFooter";
 import { rooms, formatNaira, getRoom } from "@/data/rooms";
-import { Check, CreditCard, Lock, Plus } from "lucide-react";
+import { Check, CreditCard, Lock, Plus, Users, Briefcase, User } from "lucide-react";
 import { z } from "zod";
 import { Resend } from 'resend';
 import BookingEmail from "@/components/BookingEmail";
