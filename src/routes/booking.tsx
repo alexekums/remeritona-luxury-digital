@@ -641,10 +641,12 @@ function BookingPage() {
                 <Row label="Check-in" value={new Date(checkIn).toLocaleDateString()} />
                 <Row label="Check-out" value={new Date(checkOut).toLocaleDateString()} />
                 <Row label="Nights" value={String(nights)} />
+                <Row label="Rooms" value={String(numRooms)} />
                 <Row label="Guests" value={`${guests} ${guests === 1 ? "Guest" : "Guests"}`} />
+                <Row label="Booking type" value={bookingType === "self" ? "Myself" : bookingType === "family" ? "Family & friends" : "Corporate team"} />
               </div>
               <div className="border-t border-border mt-4 pt-4 space-y-2 text-sm">
-                <Row label={`${formatNaira(room.price)} × ${nights} nights`} value={formatNaira(subtotal)} />
+                <Row label={`${formatNaira(room.price)} × ${nights} nights × ${numRooms} ${numRooms === 1 ? "room" : "rooms"}`} value={formatNaira(subtotal)} />
                 <Row label="Taxes & fees (7.5%)" value={formatNaira(tax)} />
                 {addonsTotal > 0 && (
                   <Row label="Add-ons" value={formatNaira(addonsTotal)} />
