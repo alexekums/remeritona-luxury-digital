@@ -77,9 +77,9 @@ function AboutPage() {
           <h2 className="font-serif text-4xl md:text-5xl mb-12">All under one roof</h2>
           <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-6">
             {[
-              { t: "Fine Dining", d: "Two restaurants, one rooftop bar." },
+              { t: "Fine Dining", d: "Two restaurants, one exclusive bar." },
               { t: "Spa & Wellness", d: "Full-service spa and treatment rooms." },
-              { t: "Infinity Pool", d: "Rooftop pool with skyline views." },
+              { t: "Infinity Pool", d: "Infinity pool with skyline views." },
               { t: "Events", d: "500-seat ballroom + boardrooms." },
               { t: "Fitness", d: "24-hour gym with personal trainers." },
               { t: "Concierge", d: "Bespoke city tours and transfers." },

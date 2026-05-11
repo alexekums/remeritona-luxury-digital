@@ -237,9 +237,17 @@ function BookingPage() {
     setPaymentError(null);
 
     if (!window.FlutterwaveCheckout) {
-      setPaymentError("Flutterwave is still loading. Please try again in a moment.");
-      return;
+  setPaymentError("Loading payment... please wait.");
+  setTimeout(() => {
+    if (window.FlutterwaveCheckout) {
+      setPaymentError(null);
+      handleFlutterwave();
+    } else {
+      setPaymentError("Payment could not load. Please refresh the page and try again.");
     }
+  }, 2000);
+  return;
+}
 
     if (!guest.email) {
       setPaymentError("Please go back and enter your email address.");

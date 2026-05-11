@@ -21,7 +21,7 @@ export const galleryImages = [
   { src: dining, alt: "Restaurant interior", category: "Dining" },
   { src: executive, alt: "Executive suite living area", category: "Rooms" },
   { src: extra3, alt: "Spacious bedroom with workspace", category: "Rooms" },
-  { src: pool, alt: "Rooftop infinity pool", category: "Facilities" },
+  { src: pool, alt: "Infinity pool", category: "Facilities" },
   { src: extra4, alt: "Bedroom seating area", category: "Rooms" },
   { src: presidential, alt: "Presidential suite at dusk", category: "Rooms" },
   { src: extra5, alt: "Luxury suite with leather headboard", category: "Rooms" },

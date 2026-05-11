@@ -14,7 +14,7 @@ export const Route = createFileRoute("/offers")({
 });
 
 const offers = [
-  { tag: "Weekend Escape", title: "20% off two-night weekends", desc: "Stay Friday to Sunday and enjoy daily breakfast for two and a complimentary sundowner cocktail at our rooftop bar.", terms: "Subject to availability. Non-refundable." },
+  { tag: "Weekend Escape", title: "20% off two-night weekends", desc: "Stay Friday to Sunday and enjoy daily breakfast for two and a complimentary sundowner cocktail at our exclusive bar.", terms: "Subject to availability. Non-refundable." },
   { tag: "Extended Stay", title: "Stay 5, pay for 4", desc: "Designed for visiting executives and long-term travelers. Includes laundry, daily breakfast, and 25% off dining.", terms: "Minimum 5-night stay. Excludes Presidential Suite." },
   { tag: "Honeymoon", title: "Romance Package", desc: "Champagne on arrival, a couple's spa treatment, in-suite candlelit dinner, and late checkout.", terms: "Available in Executive and Presidential suites." },
   { tag: "Government & Corporate", title: "Negotiated rates", desc: "Bespoke rates and meeting space for state delegations, ministries and corporate accounts.", terms: "Contact our sales team to set up an account." },

@@ -182,7 +182,7 @@ function Index() {
             Unwind at Abakaliki's Most Beautiful Poolside
           </h2>
           <p className="text-lg text-foreground/85">
-            Rooftop bar, spa, gym and more — all at Re Meritona
+            Exclusive bar, spa, gym and more — all at Re Meritona
           </p>
         </div>
       </section>
