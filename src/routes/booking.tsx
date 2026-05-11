@@ -129,7 +129,7 @@ function BookingPage() {
   }, [checkIn, checkOut]);
 
   const room = getRoom(selectedSlug)!;
-  const subtotal = room.price * nights;
+  const subtotal = room.price * nights * numRooms;
   const tax = Math.round(subtotal * 0.075);
   
   const addonsTotal = useMemo(() => {
