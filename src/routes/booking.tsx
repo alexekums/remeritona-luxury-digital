@@ -1,9 +1,9 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { SiteHeader } from "@/components/SiteHeader";
 import { SiteFooter } from "@/components/SiteFooter";
 import { rooms, formatNaira, getRoom } from "@/data/rooms";
-import { Check, CreditCard, Lock, Plus } from "lucide-react";
+import { Check, CreditCard, Lock, Plus, Users, Briefcase, User } from "lucide-react";
 import { z } from "zod";
 import { Resend } from 'resend';
 import BookingEmail from "@/components/BookingEmail";
@@ -63,12 +63,14 @@ function BookingPage() {
   const [checkIn, setCheckIn] = useState(sp.checkIn ?? today);
   const [checkOut, setCheckOut] = useState(sp.checkOut ?? tomorrow);
   const [adults, setAdults] = useState<number>(
-    typeof sp.adults === "number" && Number.isFinite(sp.adults) ? Math.min(2, Math.max(1, sp.adults)) : 2
+    typeof sp.adults === "number" && Number.isFinite(sp.adults) ? Math.min(2, Math.max(1, sp.adults)) : 1
   );
   const [children, setChildren] = useState<number>(
     typeof sp.children === "number" && Number.isFinite(sp.children) ? Math.min(1, Math.max(0, sp.children)) : 0
   );
   const guests = adults + children;
+  const [bookingType, setBookingType] = useState<"self" | "family" | "corporate">("self");
+  const [numRooms, setNumRooms] = useState<number>(1);
   const [selectedSlug, setSelectedSlug] = useState(sp.room ?? rooms[0].slug);
   const [step, setStep] = useState<1 | 2 | 3>(1);
   const [guest, setGuest] = useState({ name: "", email: "", phone: "", notes: "" });
@@ -79,6 +81,16 @@ function BookingPage() {
   const [paymentError, setPaymentError] = useState<string | null>(null);
   const [processing, setProcessing] = useState(false);
   const [paystackReady, setPaystackReady] = useState(false);
+
+  const stepRef = useRef<HTMLDivElement>(null);
+  const summaryRef = useRef<HTMLElement>(null);
+
+  const scrollToStep = () => {
+    setTimeout(() => {
+      stepRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }, 50);
+  };
+  
 
   // Load Flutterwave script
   useEffect(() => {
@@ -113,7 +125,7 @@ function BookingPage() {
   }, [checkIn, checkOut]);
 
   const room = getRoom(selectedSlug)!;
-  const subtotal = room.price * nights;
+  const subtotal = room.price * nights * numRooms;
   const tax = Math.round(subtotal * 0.075);
   
   const addonsTotal = useMemo(() => {
@@ -360,7 +372,7 @@ function BookingPage() {
 
       <section className="py-16 px-6">
         <div className="max-w-7xl mx-auto grid lg:grid-cols-3 gap-10">
-          <div className="lg:col-span-2 space-y-8">
+          <div ref={stepRef} className="lg:col-span-2 space-y-8 scroll-mt-28">
             {step === 1 && (
               <Card title="1. Dates & Guests">
                 <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -399,6 +411,42 @@ function BookingPage() {
                   Maximum occupancy per room: 2 Adults + 1 Extra Bed + 1 Child.
                 </p>
 
+                <h3 className="font-serif text-2xl mt-8 mb-4">Booking for</h3>
+                <div className="grid sm:grid-cols-3 gap-3">
+                  {([
+                    { id: "self", label: "Booking for myself", icon: User },
+                    { id: "family", label: "Family & friends", icon: Users },
+                    { id: "corporate", label: "Corporate team", icon: Briefcase },
+                  ] as const).map(({ id, label, icon: Icon }) => (
+                    <button
+                      key={id}
+                      type="button"
+                      onClick={() => setBookingType(id)}
+                      className={`flex flex-col items-center gap-2 p-4 border transition-colors text-sm ${
+                        bookingType === id ? "border-gold bg-onyx text-gold" : "border-border hover:border-gold/40"
+                      }`}
+                    >
+                      <Icon size={22} />
+                      {label}
+                    </button>
+                  ))}
+                </div>
+
+                <div className="mt-6 flex flex-col gap-1.5 max-w-xs">
+                  <label className="text-xs uppercase tracking-widest text-gold">Number of rooms</label>
+                  <select
+                    value={numRooms}
+                    onChange={(e) => setNumRooms(Number(e.target.value))}
+                    className="bg-onyx border border-border px-3 py-3 text-foreground focus:border-gold focus:outline-none"
+                  >
+                    {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((n) => (
+                      <option key={n} value={n} className="bg-charcoal">
+                        {n} {n === 1 ? "Room" : "Rooms"}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
                 <h3 className="font-serif text-2xl mt-8 mb-4">Select a room</h3>
                 <div className="space-y-3">
                   {rooms.map((r) => (
@@ -426,14 +474,11 @@ function BookingPage() {
 
                 <div className="flex justify-end mt-8">
                   <button
-  onClick={() => {
-    setStep(2);
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-  }}
-  className="px-8 py-3 bg-gold text-primary-foreground font-semibold uppercase tracking-widest text-sm hover:bg-gold-soft"
->
-  Continue
-</button>
+                    onClick={() => { setStep(2); scrollToStep(); }}
+                    className="px-8 py-3 bg-gold text-primary-foreground font-semibold uppercase tracking-widest text-sm hover:bg-gold-soft"
+                  >
+                    Continue
+                  </button>
                 </div>
               </Card>
             )}
@@ -507,7 +552,7 @@ function BookingPage() {
                     Back
                   </button>
                   <button
-                    onClick={() => guest.name && guest.email && guest.phone && setStep(3)}
+                    onClick={() => { if (guest.name && guest.email && guest.phone) { setStep(3); scrollToStep(); } }}
                     disabled={!guest.name || !guest.email || !guest.phone}
                     className="px-8 py-3 bg-gold text-primary-foreground font-semibold uppercase tracking-widest text-sm hover:bg-gold-soft disabled:opacity-40 disabled:cursor-not-allowed"
                   >
@@ -583,7 +628,7 @@ function BookingPage() {
             )}
           </div>
 
-          <aside>
+          <aside ref={summaryRef} className="scroll-mt-28">
             <div className="bg-charcoal border border-gold/30 p-6 lg:sticky lg:top-28">
               <p className="text-gold text-xs uppercase tracking-[0.4em] mb-4">Reservation Summary</p>
               <img src={room.image} alt={room.name} className="w-full aspect-video object-cover mb-4" />
@@ -592,10 +637,12 @@ function BookingPage() {
                 <Row label="Check-in" value={new Date(checkIn).toLocaleDateString()} />
                 <Row label="Check-out" value={new Date(checkOut).toLocaleDateString()} />
                 <Row label="Nights" value={String(nights)} />
+                <Row label="Rooms" value={String(numRooms)} />
                 <Row label="Guests" value={`${guests} ${guests === 1 ? "Guest" : "Guests"}`} />
+                <Row label="Booking type" value={bookingType === "self" ? "Myself" : bookingType === "family" ? "Family & friends" : "Corporate team"} />
               </div>
               <div className="border-t border-border mt-4 pt-4 space-y-2 text-sm">
-                <Row label={`${formatNaira(room.price)} × ${nights} nights`} value={formatNaira(subtotal)} />
+                <Row label={`${formatNaira(room.price)} × ${nights} nights × ${numRooms} ${numRooms === 1 ? "room" : "rooms"}`} value={formatNaira(subtotal)} />
                 <Row label="Taxes & fees (7.5%)" value={formatNaira(tax)} />
                 {addonsTotal > 0 && (
                   <Row label="Add-ons" value={formatNaira(addonsTotal)} />
@@ -622,7 +669,7 @@ function BookingPage() {
             <div className="lg:hidden mt-6">
               {step === 1 && (
                 <button
-                  onClick={() => { setStep(2); window.scrollTo({ top: 0, behavior: 'smooth' }); }}
+                  onClick={() => { setStep(2); scrollToStep(); }}
                   className="w-full py-4 bg-gold text-primary-foreground font-semibold uppercase tracking-widest text-sm hover:bg-gold-soft"
                 >
                   Continue
@@ -630,7 +677,7 @@ function BookingPage() {
               )}
               {step === 2 && (
                 <button
-                  onClick={() => guest.name && guest.email && guest.phone && (setStep(3), window.scrollTo({ top: 0, behavior: 'smooth' }))}
+                  onClick={() => { if (guest.name && guest.email && guest.phone) { setStep(3); scrollToStep(); } }}
                   disabled={!guest.name || !guest.email || !guest.phone}
                   className="w-full py-4 bg-gold text-primary-foreground font-semibold uppercase tracking-widest text-sm hover:bg-gold-soft disabled:opacity-40 disabled:cursor-not-allowed"
                 >
