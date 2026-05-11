@@ -54,40 +54,45 @@ const testimonials = [
 ];
 
 function Index() {
+  const { t } = useTranslation();
   return (
     <div className="min-h-screen bg-background">
       <SiteHeader />
 
       {/* Hero */}
       <section className="relative min-h-[100vh] flex items-center overflow-hidden">
-        <img
-          src={heroImage}
-          alt="Re Meritona Hotel exterior in Abakaliki"
+        <video
+          autoPlay
+          muted
+          loop
+          playsInline
+          poster={heroImage}
+          preload="auto"
           className="absolute inset-0 w-full h-full object-cover"
-          width={1920}
-          height={1080}
-        />
+        >
+          <source src="/videos/hero.mp4" type="video/mp4" />
+        </video>
         <div className="absolute inset-0 bg-black/60" />
 
         <div className="relative z-10 max-w-5xl mx-auto px-6 pt-32 pb-20 w-full text-center">
           <h1 className="font-serif text-4xl md:text-6xl lg:text-7xl font-black text-foreground leading-[1.1] mb-6">
-            Where Elegance Meets Comfort<br />in the Heart of Abakaliki
+            {t("hero.title")}<br />{t("hero.subtitle")}
           </h1>
           <p className="text-gold italic font-serif text-2xl md:text-3xl mb-10">
-            ...love and refreshment
+            {t("hero.tagline")}
           </p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
             <Link
               to="/booking"
               className="px-8 py-4 bg-gold text-primary-foreground font-semibold uppercase tracking-widest text-sm hover:bg-gold-soft hover-glow transition-all"
             >
-              Reserve Your Suite
+              {t("hero.reserve")}
             </Link>
             <Link
               to="/rooms"
               className="px-8 py-4 border-2 border-gold text-gold font-semibold uppercase tracking-widest text-sm hover:bg-gold hover:text-primary-foreground transition-all"
             >
-              Explore Rooms
+              {t("hero.explore")}
             </Link>
           </div>
         </div>
