@@ -556,7 +556,7 @@ function BookingPage() {
                     Back
                   </button>
                   <button
-                    onClick={() => guest.name && guest.email && guest.phone && setStep(3)}
+                    onClick={() => { if (guest.name && guest.email && guest.phone) { setStep(3); scrollToStep(); } }}
                     disabled={!guest.name || !guest.email || !guest.phone}
                     className="px-8 py-3 bg-gold text-primary-foreground font-semibold uppercase tracking-widest text-sm hover:bg-gold-soft disabled:opacity-40 disabled:cursor-not-allowed"
                   >
