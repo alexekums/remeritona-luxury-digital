@@ -415,6 +415,42 @@ function BookingPage() {
                   Maximum occupancy per room: 2 Adults + 1 Extra Bed + 1 Child.
                 </p>
 
+                <h3 className="font-serif text-2xl mt-8 mb-4">Booking for</h3>
+                <div className="grid sm:grid-cols-3 gap-3">
+                  {([
+                    { id: "self", label: "Booking for myself", icon: User },
+                    { id: "family", label: "Family & friends", icon: Users },
+                    { id: "corporate", label: "Corporate team", icon: Briefcase },
+                  ] as const).map(({ id, label, icon: Icon }) => (
+                    <button
+                      key={id}
+                      type="button"
+                      onClick={() => setBookingType(id)}
+                      className={`flex flex-col items-center gap-2 p-4 border transition-colors text-sm ${
+                        bookingType === id ? "border-gold bg-onyx text-gold" : "border-border hover:border-gold/40"
+                      }`}
+                    >
+                      <Icon size={22} />
+                      {label}
+                    </button>
+                  ))}
+                </div>
+
+                <div className="mt-6 flex flex-col gap-1.5 max-w-xs">
+                  <label className="text-xs uppercase tracking-widest text-gold">Number of rooms</label>
+                  <select
+                    value={numRooms}
+                    onChange={(e) => setNumRooms(Number(e.target.value))}
+                    className="bg-onyx border border-border px-3 py-3 text-foreground focus:border-gold focus:outline-none"
+                  >
+                    {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((n) => (
+                      <option key={n} value={n} className="bg-charcoal">
+                        {n} {n === 1 ? "Room" : "Rooms"}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
                 <h3 className="font-serif text-2xl mt-8 mb-4">Select a room</h3>
                 <div className="space-y-3">
                   {rooms.map((r) => (
