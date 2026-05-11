@@ -90,7 +90,7 @@ function BookingPage() {
       stepRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
     }, 50);
   };
-  void summaryRef;
+  
 
   // Load Flutterwave script
   useEffect(() => {
