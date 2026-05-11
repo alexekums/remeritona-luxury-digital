@@ -63,12 +63,14 @@ function BookingPage() {
   const [checkIn, setCheckIn] = useState(sp.checkIn ?? today);
   const [checkOut, setCheckOut] = useState(sp.checkOut ?? tomorrow);
   const [adults, setAdults] = useState<number>(
-    typeof sp.adults === "number" && Number.isFinite(sp.adults) ? Math.min(2, Math.max(1, sp.adults)) : 2
+    typeof sp.adults === "number" && Number.isFinite(sp.adults) ? Math.min(2, Math.max(1, sp.adults)) : 1
   );
   const [children, setChildren] = useState<number>(
     typeof sp.children === "number" && Number.isFinite(sp.children) ? Math.min(1, Math.max(0, sp.children)) : 0
   );
   const guests = adults + children;
+  const [bookingType, setBookingType] = useState<"self" | "family" | "corporate">("self");
+  const [numRooms, setNumRooms] = useState<number>(1);
   const [selectedSlug, setSelectedSlug] = useState(sp.room ?? rooms[0].slug);
   const [step, setStep] = useState<1 | 2 | 3>(1);
   const [guest, setGuest] = useState({ name: "", email: "", phone: "", notes: "" });
@@ -79,6 +81,20 @@ function BookingPage() {
   const [paymentError, setPaymentError] = useState<string | null>(null);
   const [processing, setProcessing] = useState(false);
   const [paystackReady, setPaystackReady] = useState(false);
+
+  const stepRef = useRef<HTMLDivElement>(null);
+  const summaryRef = useRef<HTMLElement>(null);
+
+  const scrollToStep = () => {
+    setTimeout(() => {
+      stepRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }, 50);
+  };
+  const scrollToSummary = () => {
+    setTimeout(() => {
+      summaryRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }, 50);
+  };
 
   // Load Flutterwave script
   useEffect(() => {
