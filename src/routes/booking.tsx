@@ -395,6 +395,8 @@ function BookingPage() {
                   setSelectedAddons([]);
                   setGuest({ name: "", email: "", phone: "", notes: "" });
                   setPaymentError(null);
+                  setCouponCode("");
+                  setCouponResult(null);
                   window.scrollTo({ top: 0, behavior: "smooth" });
                 }}
                 className="px-8 py-3 bg-gold text-primary-foreground font-semibold uppercase tracking-widest text-sm hover:bg-gold-soft"
