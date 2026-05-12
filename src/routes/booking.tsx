@@ -155,8 +155,11 @@ function BookingPage() {
 
   const room = getRoom(selectedSlug)!;
   const subtotal = room.price * nights * numRooms;
-  const tax = Math.round(subtotal * 0.075);
-  
+
+  const discount = couponResult && couponResult.valid ? couponResult.discount : 0;
+  const taxableBase = Math.max(0, subtotal - discount);
+  const tax = Math.round(taxableBase * 0.075);
+
   const addonsTotal = useMemo(() => {
     return selectedAddons.reduce((sum, id) => {
       const addon = ADD_ONS.find(a => a.id === id);
@@ -164,7 +167,26 @@ function BookingPage() {
     }, 0);
   }, [selectedAddons]);
 
-  const total = subtotal + tax + addonsTotal;
+  const total = taxableBase + tax + addonsTotal;
+
+  // Re-validate coupon when stay dates / subtotal change.
+  useEffect(() => {
+    if (!couponResult || !couponResult.valid) return;
+    const re = applyCoupon(couponCode, { checkIn, checkOut, subtotal, nights });
+    setCouponResult(re);
+  }, [checkIn, checkOut, subtotal, nights]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const handleApplyCoupon = () => {
+    if (!couponCode.trim()) return;
+    const result = applyCoupon(couponCode, { checkIn, checkOut, subtotal, nights });
+    setCouponResult(result);
+  };
+
+  const removeCoupon = () => {
+    setCouponCode("");
+    setCouponResult(null);
+  };
+
 
   const toggleAddon = (id: string) => {
     setSelectedAddons(prev =>
