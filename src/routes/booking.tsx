@@ -426,41 +426,10 @@ function BookingPage() {
           <div ref={stepRef} className="lg:col-span-2 space-y-8 scroll-mt-28">
             {step === 1 && (
               <Card title="1. Dates & Guests">
-                <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                <div className="grid sm:grid-cols-2 gap-4">
                   <Input label="Check In" type="date" value={checkIn} min={today} onChange={(v) => setCheckIn(v)} />
                   <Input label="Check Out" type="date" value={checkOut} min={checkIn} onChange={(v) => setCheckOut(v)} />
-                  <div className="flex flex-col gap-1.5">
-                    <label className="text-xs uppercase tracking-widest text-gold">Adults</label>
-                    <select
-                      value={adults}
-                      onChange={(e) => setAdults(Number(e.target.value))}
-                      className="bg-onyx border border-border px-3 py-3 text-foreground focus:border-gold focus:outline-none"
-                    >
-                      {[1, 2].map((n) => (
-                        <option key={n} value={n} className="bg-charcoal">
-                          {n} {n === 1 ? "Adult" : "Adults"}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                  <div className="flex flex-col gap-1.5">
-                    <label className="text-xs uppercase tracking-widest text-gold">Children</label>
-                    <select
-                      value={children}
-                      onChange={(e) => setChildren(Number(e.target.value))}
-                      className="bg-onyx border border-border px-3 py-3 text-foreground focus:border-gold focus:outline-none"
-                    >
-                      {[0, 1].map((n) => (
-                        <option key={n} value={n} className="bg-charcoal">
-                          {n} {n === 1 ? "Child" : "Children"}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
                 </div>
-                <p className="text-xs text-muted-foreground mt-3">
-                  Maximum occupancy per room: 2 Adults + 1 Extra Bed + 1 Child.
-                </p>
 
                 <h3 className="font-serif text-2xl mt-8 mb-4">Booking for</h3>
                 <div className="grid sm:grid-cols-3 gap-3">
@@ -497,6 +466,45 @@ function BookingPage() {
                     ))}
                   </select>
                 </div>
+
+                {bookingType !== "self" && (
+                  <div className="mt-6">
+                    <h3 className="font-serif text-2xl mb-4">Guests</h3>
+                    <div className="grid sm:grid-cols-2 gap-4">
+                      <div className="flex flex-col gap-1.5">
+                        <label className="text-xs uppercase tracking-widest text-gold">Adults</label>
+                        <select
+                          value={Math.min(adults, maxAdults)}
+                          onChange={(e) => setAdults(Number(e.target.value))}
+                          className="bg-onyx border border-border px-3 py-3 text-foreground focus:border-gold focus:outline-none"
+                        >
+                          {Array.from({ length: maxAdults }, (_, i) => i + 1).map((n) => (
+                            <option key={n} value={n} className="bg-charcoal">
+                              {n} {n === 1 ? "Adult" : "Adults"}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                      <div className="flex flex-col gap-1.5">
+                        <label className="text-xs uppercase tracking-widest text-gold">Children</label>
+                        <select
+                          value={Math.min(children, maxChildren)}
+                          onChange={(e) => setChildren(Number(e.target.value))}
+                          className="bg-onyx border border-border px-3 py-3 text-foreground focus:border-gold focus:outline-none"
+                        >
+                          {Array.from({ length: maxChildren + 1 }, (_, i) => i).map((n) => (
+                            <option key={n} value={n} className="bg-charcoal">
+                              {n} {n === 1 ? "Child" : "Children"}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    </div>
+                    <p className="text-xs text-muted-foreground mt-3">
+                      Maximum: {maxAdults} Adults + {maxChildren} {maxChildren === 1 ? "Child" : "Children"} ({numRooms} {numRooms === 1 ? "room" : "rooms"}).
+                    </p>
+                  </div>
+                )}
 
                 <h3 className="font-serif text-2xl mt-8 mb-4">Select a room</h3>
                 <div className="space-y-3">
