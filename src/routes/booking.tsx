@@ -3,7 +3,8 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { SiteHeader } from "@/components/SiteHeader";
 import { SiteFooter } from "@/components/SiteFooter";
 import { rooms, formatNaira, getRoom } from "@/data/rooms";
-import { Check, CreditCard, Lock, Plus, Users, Briefcase, User } from "lucide-react";
+import { applyCoupon, type CouponResult } from "@/data/coupons";
+import { Check, CreditCard, Lock, Plus, Users, Briefcase, User, Tag, X } from "lucide-react";
 import { z } from "zod";
 import { Resend } from 'resend';
 import BookingEmail from "@/components/BookingEmail";
@@ -62,15 +63,29 @@ function BookingPage() {
 
   const [checkIn, setCheckIn] = useState(sp.checkIn ?? today);
   const [checkOut, setCheckOut] = useState(sp.checkOut ?? tomorrow);
-  const [adults, setAdults] = useState<number>(
-    typeof sp.adults === "number" && Number.isFinite(sp.adults) ? Math.min(2, Math.max(1, sp.adults)) : 1
-  );
-  const [children, setChildren] = useState<number>(
-    typeof sp.children === "number" && Number.isFinite(sp.children) ? Math.min(1, Math.max(0, sp.children)) : 0
-  );
-  const guests = adults + children;
   const [bookingType, setBookingType] = useState<"self" | "family" | "corporate">("self");
   const [numRooms, setNumRooms] = useState<number>(1);
+
+  const maxAdults = 2 * numRooms;
+  const maxChildren = 1 * numRooms;
+
+  const [adults, setAdults] = useState<number>(
+    typeof sp.adults === "number" && Number.isFinite(sp.adults) ? Math.max(1, sp.adults) : 1
+  );
+  const [children, setChildren] = useState<number>(
+    typeof sp.children === "number" && Number.isFinite(sp.children) ? Math.max(0, sp.children) : 0
+  );
+
+  // For "self" bookings, force 1 adult / 0 children. Otherwise clamp to current max.
+  const effAdults = bookingType === "self" ? 1 : Math.min(adults, maxAdults);
+  const effChildren = bookingType === "self" ? 0 : Math.min(children, maxChildren);
+  const guests = effAdults + effChildren;
+
+  useEffect(() => {
+    if (adults > maxAdults) setAdults(maxAdults);
+    if (children > maxChildren) setChildren(maxChildren);
+  }, [maxAdults, maxChildren, adults, children]);
+
   const [selectedSlug, setSelectedSlug] = useState(sp.room ?? rooms[0].slug);
   const [step, setStep] = useState<1 | 2 | 3>(1);
   const [guest, setGuest] = useState({ name: "", email: "", phone: "", notes: "" });
@@ -82,15 +97,23 @@ function BookingPage() {
   const [processing, setProcessing] = useState(false);
   const [paystackReady, setPaystackReady] = useState(false);
 
+  // Coupon state
+  const [couponCode, setCouponCode] = useState("");
+  const [couponResult, setCouponResult] = useState<CouponResult | null>(null);
+
   const stepRef = useRef<HTMLDivElement>(null);
   const summaryRef = useRef<HTMLElement>(null);
 
+  // On mobile after step 1, scroll to summary (where the second Continue lives).
+  // On desktop or later steps, scroll to the next form section.
   const scrollToStep = () => {
     setTimeout(() => {
-      stepRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
-    }, 50);
+      const isMobile = typeof window !== "undefined" && window.innerWidth < 1024;
+      const target = isMobile ? summaryRef.current : stepRef.current;
+      target?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }, 60);
   };
-  
+
 
   // Load Flutterwave script
   useEffect(() => {
@@ -126,8 +149,11 @@ function BookingPage() {
 
   const room = getRoom(selectedSlug)!;
   const subtotal = room.price * nights * numRooms;
-  const tax = Math.round(subtotal * 0.075);
-  
+
+  const discount = couponResult && couponResult.valid ? couponResult.discount : 0;
+  const taxableBase = Math.max(0, subtotal - discount);
+  const tax = Math.round(taxableBase * 0.075);
+
   const addonsTotal = useMemo(() => {
     return selectedAddons.reduce((sum, id) => {
       const addon = ADD_ONS.find(a => a.id === id);
@@ -135,7 +161,26 @@ function BookingPage() {
     }, 0);
   }, [selectedAddons]);
 
-  const total = subtotal + tax + addonsTotal;
+  const total = taxableBase + tax + addonsTotal;
+
+  // Re-validate coupon when stay dates / subtotal change.
+  useEffect(() => {
+    if (!couponResult || !couponResult.valid) return;
+    const re = applyCoupon(couponCode, { checkIn, checkOut, subtotal, nights });
+    setCouponResult(re);
+  }, [checkIn, checkOut, subtotal, nights]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const handleApplyCoupon = () => {
+    if (!couponCode.trim()) return;
+    const result = applyCoupon(couponCode, { checkIn, checkOut, subtotal, nights });
+    setCouponResult(result);
+  };
+
+  const removeCoupon = () => {
+    setCouponCode("");
+    setCouponResult(null);
+  };
+
 
   const toggleAddon = (id: string) => {
     setSelectedAddons(prev =>
@@ -344,6 +389,8 @@ function BookingPage() {
                   setSelectedAddons([]);
                   setGuest({ name: "", email: "", phone: "", notes: "" });
                   setPaymentError(null);
+                  setCouponCode("");
+                  setCouponResult(null);
                   window.scrollTo({ top: 0, behavior: "smooth" });
                 }}
                 className="px-8 py-3 bg-gold text-primary-foreground font-semibold uppercase tracking-widest text-sm hover:bg-gold-soft"
@@ -375,41 +422,10 @@ function BookingPage() {
           <div ref={stepRef} className="lg:col-span-2 space-y-8 scroll-mt-28">
             {step === 1 && (
               <Card title="1. Dates & Guests">
-                <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                <div className="grid sm:grid-cols-2 gap-4">
                   <Input label="Check In" type="date" value={checkIn} min={today} onChange={(v) => setCheckIn(v)} />
                   <Input label="Check Out" type="date" value={checkOut} min={checkIn} onChange={(v) => setCheckOut(v)} />
-                  <div className="flex flex-col gap-1.5">
-                    <label className="text-xs uppercase tracking-widest text-gold">Adults</label>
-                    <select
-                      value={adults}
-                      onChange={(e) => setAdults(Number(e.target.value))}
-                      className="bg-onyx border border-border px-3 py-3 text-foreground focus:border-gold focus:outline-none"
-                    >
-                      {[1, 2].map((n) => (
-                        <option key={n} value={n} className="bg-charcoal">
-                          {n} {n === 1 ? "Adult" : "Adults"}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                  <div className="flex flex-col gap-1.5">
-                    <label className="text-xs uppercase tracking-widest text-gold">Children</label>
-                    <select
-                      value={children}
-                      onChange={(e) => setChildren(Number(e.target.value))}
-                      className="bg-onyx border border-border px-3 py-3 text-foreground focus:border-gold focus:outline-none"
-                    >
-                      {[0, 1].map((n) => (
-                        <option key={n} value={n} className="bg-charcoal">
-                          {n} {n === 1 ? "Child" : "Children"}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
                 </div>
-                <p className="text-xs text-muted-foreground mt-3">
-                  Maximum occupancy per room: 2 Adults + 1 Extra Bed + 1 Child.
-                </p>
 
                 <h3 className="font-serif text-2xl mt-8 mb-4">Booking for</h3>
                 <div className="grid sm:grid-cols-3 gap-3">
@@ -446,6 +462,45 @@ function BookingPage() {
                     ))}
                   </select>
                 </div>
+
+                {bookingType !== "self" && (
+                  <div className="mt-6">
+                    <h3 className="font-serif text-2xl mb-4">Guests</h3>
+                    <div className="grid sm:grid-cols-2 gap-4">
+                      <div className="flex flex-col gap-1.5">
+                        <label className="text-xs uppercase tracking-widest text-gold">Adults</label>
+                        <select
+                          value={Math.min(adults, maxAdults)}
+                          onChange={(e) => setAdults(Number(e.target.value))}
+                          className="bg-onyx border border-border px-3 py-3 text-foreground focus:border-gold focus:outline-none"
+                        >
+                          {Array.from({ length: maxAdults }, (_, i) => i + 1).map((n) => (
+                            <option key={n} value={n} className="bg-charcoal">
+                              {n} {n === 1 ? "Adult" : "Adults"}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                      <div className="flex flex-col gap-1.5">
+                        <label className="text-xs uppercase tracking-widest text-gold">Children</label>
+                        <select
+                          value={Math.min(children, maxChildren)}
+                          onChange={(e) => setChildren(Number(e.target.value))}
+                          className="bg-onyx border border-border px-3 py-3 text-foreground focus:border-gold focus:outline-none"
+                        >
+                          {Array.from({ length: maxChildren + 1 }, (_, i) => i).map((n) => (
+                            <option key={n} value={n} className="bg-charcoal">
+                              {n} {n === 1 ? "Child" : "Children"}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    </div>
+                    <p className="text-xs text-muted-foreground mt-3">
+                      Maximum: {maxAdults} Adults + {maxChildren} {maxChildren === 1 ? "Child" : "Children"} ({numRooms} {numRooms === 1 ? "room" : "rooms"}).
+                    </p>
+                  </div>
+                )}
 
                 <h3 className="font-serif text-2xl mt-8 mb-4">Select a room</h3>
                 <div className="space-y-3">
@@ -643,11 +698,51 @@ function BookingPage() {
               </div>
               <div className="border-t border-border mt-4 pt-4 space-y-2 text-sm">
                 <Row label={`${formatNaira(room.price)} × ${nights} nights × ${numRooms} ${numRooms === 1 ? "room" : "rooms"}`} value={formatNaira(subtotal)} />
+                {discount > 0 && couponResult && couponResult.valid && (
+                  <Row label={couponResult.label} value={`− ${formatNaira(discount)}`} />
+                )}
                 <Row label="Taxes & fees (7.5%)" value={formatNaira(tax)} />
                 {addonsTotal > 0 && (
                   <Row label="Add-ons" value={formatNaira(addonsTotal)} />
                 )}
               </div>
+
+              {/* Coupon */}
+              <div className="border-t border-border mt-4 pt-4">
+                <label className="text-[10px] uppercase tracking-[0.3em] text-gold flex items-center gap-1.5 mb-2">
+                  <Tag size={12} /> Promo / Coupon code
+                </label>
+                {couponResult && couponResult.valid ? (
+                  <div className="flex items-center justify-between gap-2 bg-onyx border border-gold/40 px-3 py-2 text-sm">
+                    <span className="text-gold truncate">{couponResult.message}</span>
+                    <button onClick={removeCoupon} className="text-muted-foreground hover:text-gold" aria-label="Remove coupon">
+                      <X size={14} />
+                    </button>
+                  </div>
+                ) : (
+                  <>
+                    <div className="flex gap-2">
+                      <input
+                        value={couponCode}
+                        onChange={(e) => setCouponCode(e.target.value)}
+                        placeholder="e.g. FON-WEEKEND"
+                        className="flex-1 bg-onyx border border-border px-3 py-2 text-sm text-foreground focus:border-gold focus:outline-none uppercase tracking-wider"
+                      />
+                      <button
+                        onClick={handleApplyCoupon}
+                        type="button"
+                        className="px-4 py-2 bg-gold text-primary-foreground text-xs uppercase tracking-widest font-semibold hover:bg-gold-soft"
+                      >
+                        Apply
+                      </button>
+                    </div>
+                    {couponResult && !couponResult.valid && (
+                      <p className="text-xs text-gold/80 mt-2">{couponResult.reason}</p>
+                    )}
+                  </>
+                )}
+              </div>
+
               <div className="border-t border-gold/30 mt-4 pt-4">
                 <Row label="Total" value={formatNaira(total)} highlight />
               </div>
