@@ -702,11 +702,51 @@ function BookingPage() {
               </div>
               <div className="border-t border-border mt-4 pt-4 space-y-2 text-sm">
                 <Row label={`${formatNaira(room.price)} × ${nights} nights × ${numRooms} ${numRooms === 1 ? "room" : "rooms"}`} value={formatNaira(subtotal)} />
+                {discount > 0 && couponResult && couponResult.valid && (
+                  <Row label={couponResult.label} value={`− ${formatNaira(discount)}`} />
+                )}
                 <Row label="Taxes & fees (7.5%)" value={formatNaira(tax)} />
                 {addonsTotal > 0 && (
                   <Row label="Add-ons" value={formatNaira(addonsTotal)} />
                 )}
               </div>
+
+              {/* Coupon */}
+              <div className="border-t border-border mt-4 pt-4">
+                <label className="text-[10px] uppercase tracking-[0.3em] text-gold flex items-center gap-1.5 mb-2">
+                  <Tag size={12} /> Promo / Coupon code
+                </label>
+                {couponResult && couponResult.valid ? (
+                  <div className="flex items-center justify-between gap-2 bg-onyx border border-gold/40 px-3 py-2 text-sm">
+                    <span className="text-gold truncate">{couponResult.message}</span>
+                    <button onClick={removeCoupon} className="text-muted-foreground hover:text-gold" aria-label="Remove coupon">
+                      <X size={14} />
+                    </button>
+                  </div>
+                ) : (
+                  <>
+                    <div className="flex gap-2">
+                      <input
+                        value={couponCode}
+                        onChange={(e) => setCouponCode(e.target.value)}
+                        placeholder="e.g. FON-WEEKEND"
+                        className="flex-1 bg-onyx border border-border px-3 py-2 text-sm text-foreground focus:border-gold focus:outline-none uppercase tracking-wider"
+                      />
+                      <button
+                        onClick={handleApplyCoupon}
+                        type="button"
+                        className="px-4 py-2 bg-gold text-primary-foreground text-xs uppercase tracking-widest font-semibold hover:bg-gold-soft"
+                      >
+                        Apply
+                      </button>
+                    </div>
+                    {couponResult && !couponResult.valid && (
+                      <p className="text-xs text-gold/80 mt-2">{couponResult.reason}</p>
+                    )}
+                  </>
+                )}
+              </div>
+
               <div className="border-t border-gold/30 mt-4 pt-4">
                 <Row label="Total" value={formatNaira(total)} highlight />
               </div>
