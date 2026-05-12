@@ -63,15 +63,29 @@ function BookingPage() {
 
   const [checkIn, setCheckIn] = useState(sp.checkIn ?? today);
   const [checkOut, setCheckOut] = useState(sp.checkOut ?? tomorrow);
-  const [adults, setAdults] = useState<number>(
-    typeof sp.adults === "number" && Number.isFinite(sp.adults) ? Math.min(2, Math.max(1, sp.adults)) : 1
-  );
-  const [children, setChildren] = useState<number>(
-    typeof sp.children === "number" && Number.isFinite(sp.children) ? Math.min(1, Math.max(0, sp.children)) : 0
-  );
-  const guests = adults + children;
   const [bookingType, setBookingType] = useState<"self" | "family" | "corporate">("self");
   const [numRooms, setNumRooms] = useState<number>(1);
+
+  const maxAdults = 2 * numRooms;
+  const maxChildren = 1 * numRooms;
+
+  const [adults, setAdults] = useState<number>(
+    typeof sp.adults === "number" && Number.isFinite(sp.adults) ? Math.max(1, sp.adults) : 1
+  );
+  const [children, setChildren] = useState<number>(
+    typeof sp.children === "number" && Number.isFinite(sp.children) ? Math.max(0, sp.children) : 0
+  );
+
+  // For "self" bookings, force 1 adult / 0 children. Otherwise clamp to current max.
+  const effAdults = bookingType === "self" ? 1 : Math.min(adults, maxAdults);
+  const effChildren = bookingType === "self" ? 0 : Math.min(children, maxChildren);
+  const guests = effAdults + effChildren;
+
+  useEffect(() => {
+    if (adults > maxAdults) setAdults(maxAdults);
+    if (children > maxChildren) setChildren(maxChildren);
+  }, [maxAdults, maxChildren, adults, children]);
+
   const [selectedSlug, setSelectedSlug] = useState(sp.room ?? rooms[0].slug);
   const [step, setStep] = useState<1 | 2 | 3>(1);
   const [guest, setGuest] = useState({ name: "", email: "", phone: "", notes: "" });
@@ -83,15 +97,29 @@ function BookingPage() {
   const [processing, setProcessing] = useState(false);
   const [paystackReady, setPaystackReady] = useState(false);
 
+  // Coupon state
+  const [couponCode, setCouponCode] = useState("");
+  const [couponResult, setCouponResult] = useState<CouponResult | null>(null);
+
   const stepRef = useRef<HTMLDivElement>(null);
   const summaryRef = useRef<HTMLElement>(null);
 
+  // On mobile after step 1, scroll to summary (where the second Continue lives).
+  // On desktop or later steps, scroll to the next form section.
   const scrollToStep = () => {
     setTimeout(() => {
-      stepRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
-    }, 50);
+      const isMobile = typeof window !== "undefined" && window.innerWidth < 1024;
+      const target = isMobile ? summaryRef.current : stepRef.current;
+      target?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }, 60);
   };
-  
+
+  const scrollToNextSection = () => {
+    setTimeout(() => {
+      stepRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }, 60);
+  };
+
 
   // Load Flutterwave script
   useEffect(() => {
