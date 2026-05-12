@@ -53,14 +53,38 @@ export const Route = createRootRoute({
   notFoundComponent: NotFoundComponent,
 });
 
+const GTRANSLATE_INIT = `
+  function googleTranslateElementInit() {
+    new google.translate.TranslateElement({
+      pageLanguage: 'en',
+      includedLanguages: 'en,ig,yo,ha,fr,es,it',
+      autoDisplay: false,
+      layout: google.translate.TranslateElement.InlineLayout.SIMPLE
+    }, 'google_translate_element');
+  }
+`;
+
+const GTRANSLATE_CSS = `
+  .goog-te-banner-frame, .skiptranslate { display: none !important; }
+  body { top: 0 !important; }
+  #google_translate_element { display: none !important; }
+  .goog-tooltip, .goog-tooltip:hover { display: none !important; }
+  .goog-text-highlight { background: transparent !important; box-shadow: none !important; }
+  font[style*="background-color"] { background: transparent !important; }
+`;
+
 function RootShell({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en">
       <head>
         <HeadContent />
+        <style dangerouslySetInnerHTML={{ __html: GTRANSLATE_CSS }} />
       </head>
       <body>
         {children}
+        <div id="google_translate_element" />
+        <script dangerouslySetInnerHTML={{ __html: GTRANSLATE_INIT }} />
+        <script src="//translate.google.com/translate_a/element.js?cb=googleTranslateElementInit" async />
         <Scripts />
       </body>
     </html>
