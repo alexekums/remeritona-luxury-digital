@@ -114,12 +114,6 @@ function BookingPage() {
     }, 60);
   };
 
-  const scrollToNextSection = () => {
-    setTimeout(() => {
-      stepRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
-    }, 60);
-  };
-
 
   // Load Flutterwave script
   useEffect(() => {
