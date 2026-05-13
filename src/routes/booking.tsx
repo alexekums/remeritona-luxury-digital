@@ -105,6 +105,8 @@ function BookingPage() {
   const [paymentError, setPaymentError] = useState<string | null>(null);
   const [processing, setProcessing] = useState(false);
   const [paystackReady, setPaystackReady] = useState(false);
+  const [showPaymentChoice, setShowPaymentChoice] = useState(false);
+  const [savedReceipt, setSavedReceipt] = useState<StoredBooking | null>(null);
 
   // Coupon state
   const [couponCode, setCouponCode] = useState("");
