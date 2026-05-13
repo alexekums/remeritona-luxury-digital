@@ -503,6 +503,7 @@ function BookingPage() {
               A confirmation email is on its way to <span className="text-foreground">{guest.email}</span>. We look forward to hosting you on {new Date(checkIn).toLocaleDateString("en-NG", { dateStyle: "long" })}.
             </p>
             <div className="text-left border-t border-border pt-6 space-y-2 text-sm">
+              <Row label="Reference" value={savedReceipt?.reference ?? ""} />
               <Row label="Room" value={room.name} />
               <Row label="Check-in" value={new Date(checkIn).toLocaleDateString()} />
               <Row label="Check-out" value={new Date(checkOut).toLocaleDateString()} />
@@ -511,7 +512,21 @@ function BookingPage() {
               {selectedAddons.length > 0 && (
                 <Row label="Add-ons" value={selectedAddons.map(id => ADD_ONS.find(a => a.id === id)?.label).join(", ")} />
               )}
-              <Row label="Total Paid" value={formatNaira(total)} highlight />
+              {savedReceipt?.paymentMode === "save_card" ? (
+                <>
+                  <Row label="Tokenization Fee Paid" value={formatNaira(TOKENIZATION_FEE)} highlight />
+                  <Row label="Pending Balance" value={formatNaira(savedReceipt.pendingBalance ?? total)} />
+                  <p className="text-xs text-muted-foreground pt-2">
+                    Your saved card will be automatically charged the pending balance at{" "}
+                    {savedReceipt.scheduledChargeAt
+                      ? new Date(savedReceipt.scheduledChargeAt).toLocaleString()
+                      : "24h before check-in"}
+                    .
+                  </p>
+                </>
+              ) : (
+                <Row label="Total Paid" value={formatNaira(total)} highlight />
+              )}
             </div>
             <div className="mt-8 flex flex-col sm:flex-row gap-3 justify-center">
               <button
