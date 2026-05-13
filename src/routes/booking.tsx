@@ -4,10 +4,14 @@ import { SiteHeader } from "@/components/SiteHeader";
 import { SiteFooter } from "@/components/SiteFooter";
 import { rooms, formatNaira, getRoom } from "@/data/rooms";
 import { applyCoupon, type CouponResult } from "@/data/coupons";
-import { Check, CreditCard, Lock, Plus, Users, Briefcase, User, Tag, X } from "lucide-react";
+import { Check, CreditCard, Lock, Plus, Users, Briefcase, User, Tag, X, Clock, Wallet } from "lucide-react";
 import { z } from "zod";
 import { Resend } from 'resend';
 import BookingEmail from "@/components/BookingEmail";
+import { saveBooking, type StoredBooking } from "@/data/bookings-store";
+
+const TOKENIZATION_FEE = 100; // NGN — small Save-card-now charge to capture authorization
+const SAVE_CARD_MIN_HOURS = 72;
 
 // Initialize Resend
 const resend = new Resend("re_H329kVbZ_6HHvRmnyuFcW3nM4MQT9w1mF");
