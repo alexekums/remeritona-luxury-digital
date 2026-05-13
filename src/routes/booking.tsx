@@ -109,8 +109,8 @@ function BookingPage() {
   const stepRef = useRef<HTMLDivElement>(null);
   const summaryRef = useRef<HTMLElement>(null);
 
-  // On mobile after step 1, scroll to summary (where the second Continue lives).
-  // On desktop or later steps, scroll to the next form section.
+  // On mobile, scroll to the summary panel (where the second Continue lives).
+  // On desktop, scroll to the next form section.
   const scrollToStep = () => {
     setTimeout(() => {
       const isMobile = typeof window !== "undefined" && window.innerWidth < 1024;
@@ -119,6 +119,12 @@ function BookingPage() {
     }, 60);
   };
 
+  // For the second (mobile) Continue under the summary — always scroll to the form.
+  const scrollToForm = () => {
+    setTimeout(() => {
+      stepRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }, 60);
+  };
 
   // Load Flutterwave script
   useEffect(() => {
