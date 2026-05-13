@@ -66,6 +66,11 @@ function BookingPage() {
   const [bookingType, setBookingType] = useState<"self" | "family" | "corporate">("self");
   const [numRooms, setNumRooms] = useState<number>(1);
 
+  // "Book for myself" always uses 1 room.
+  useEffect(() => {
+    if (bookingType === "self" && numRooms !== 1) setNumRooms(1);
+  }, [bookingType, numRooms]);
+
   const maxAdults = 2 * numRooms;
   const maxChildren = 1 * numRooms;
 
