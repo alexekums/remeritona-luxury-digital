@@ -943,6 +943,56 @@ function BookingPage() {
         </div>
       </section>
 
+      {showPaymentChoice && (
+        <div className="fixed inset-0 bg-onyx/80 backdrop-blur-sm z-[60] grid place-items-center px-4">
+          <div className="bg-charcoal border border-gold/40 max-w-md w-full p-6">
+            <p className="text-gold text-xs uppercase tracking-[0.4em] mb-2">Choose how to pay</p>
+            <h3 className="font-serif text-2xl mb-3">Payment options</h3>
+            <p className="text-sm text-muted-foreground mb-5">
+              Pay the full amount now, or save your card with a small ₦{TOKENIZATION_FEE} authorization fee
+              and we'll automatically charge the balance 24 hours before check-in.
+            </p>
+            <div className="space-y-3">
+              <button
+                onClick={handlePayNow}
+                className="w-full p-4 border border-gold bg-onyx text-left hover:bg-onyx/70 transition-colors flex items-start gap-3"
+              >
+                <CreditCard size={20} className="text-gold mt-1 shrink-0" />
+                <div>
+                  <p className="font-semibold uppercase tracking-widest text-sm text-gold">Pay now</p>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Charge {formatNaira(total)} to your card via {paymentMethod === "paystack" ? "Paystack" : "Flutterwave"}.
+                  </p>
+                </div>
+              </button>
+              <button
+                onClick={handleSaveCard}
+                disabled={!canSaveCard}
+                className="w-full p-4 border border-border text-left hover:border-gold/60 transition-colors flex items-start gap-3 disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                <Wallet size={20} className="text-gold mt-1 shrink-0" />
+                <div>
+                  <p className="font-semibold uppercase tracking-widest text-sm">Save card &amp; pay later</p>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    {canSaveCard
+                      ? `₦${TOKENIZATION_FEE} authorization now. Balance ${formatNaira(total)} charged automatically 24h before check-in.`
+                      : `Available only when check-in is at least ${SAVE_CARD_MIN_HOURS} hours away.`}
+                  </p>
+                </div>
+              </button>
+            </div>
+            <div className="flex justify-end mt-5">
+              <button
+                onClick={() => setShowPaymentChoice(false)}
+                className="text-xs uppercase tracking-widest text-muted-foreground hover:text-gold inline-flex items-center gap-1.5"
+              >
+                <Clock size={12} /> Decide later
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <SiteFooter />
     </div>
   );
