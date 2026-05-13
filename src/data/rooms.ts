@@ -1,6 +1,8 @@
 import standardImg from "@/assets/room-deluxe.jpg";
 import deluxeImg from "@/assets/room-executive.jpg";
 import executiveImg from "@/assets/room-presidential.jpg";
+import presidentialDeluxeImg from "@/assets/room-presidential-deluxe.jpg";
+import presidentialExecutiveImg from "@/assets/room-presidential-executive.jpg";
 import extra1 from "@/assets/room-extra-1.jpg";
 import extra2 from "@/assets/room-extra-2.jpg";
 import extra3 from "@/assets/room-extra-3.jpg";
@@ -69,6 +71,36 @@ export const rooms: Room[] = [
     image: executiveImg,
     gallery: [executiveImg, extra3, extra5, extra2, extra1, extra4],
     amenities: ["Free Wi-Fi", "Air Conditioning", "Separate Living Area", "Premium Mini Bar", "Spa Bath", "Concierge Service"],
+  },
+  {
+    slug: "presidential-deluxe",
+    name: "Presidential Deluxe Suite",
+    tagline: "Statesman comfort with bespoke detailing",
+    description:
+      "An elevated presidential experience featuring a grand king bed, marble bathroom, and warm gold-toned interiors — designed for VIPs seeking comfort and discretion.",
+    price: 150000,
+    size: "75 m²",
+    beds: "1 King Bed",
+    capacity: 3,
+    occupancy: "Max 2 Adults + 1 Extra Bed + 1 Child",
+    image: presidentialDeluxeImg,
+    gallery: [presidentialDeluxeImg, extra1, extra2, extra4, extra3, extra5],
+    amenities: ["Free Wi-Fi", "Air Conditioning", "Marble Bathroom", "Premium Mini Bar", "Lounge Seating", "Concierge Service"],
+  },
+  {
+    slug: "presidential-executive",
+    name: "Presidential Executive Suite",
+    tagline: "The summit of Remeritona luxury",
+    description:
+      "Our flagship presidential executive suite features a chandelier-lit lounge, panoramic views, and dedicated concierge service — the definitive choice for heads of state and discerning travellers.",
+    price: 170000,
+    size: "95 m²",
+    beds: "1 King Bed + Grand Lounge",
+    capacity: 3,
+    occupancy: "Max 2 Adults + 1 Extra Bed + 1 Child",
+    image: presidentialExecutiveImg,
+    gallery: [presidentialExecutiveImg, extra2, extra3, extra1, extra5, extra4],
+    amenities: ["Free Wi-Fi", "Air Conditioning", "Grand Lounge", "Premium Mini Bar", "Spa Bath", "24/7 Concierge", "Panoramic View"],
   },
 ];
 
