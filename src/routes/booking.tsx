@@ -459,20 +459,22 @@ function BookingPage() {
                   ))}
                 </div>
 
-                <div className="mt-6 flex flex-col gap-1.5 max-w-xs">
-                  <label className="text-xs uppercase tracking-widest text-gold">Number of rooms</label>
-                  <select
-                    value={numRooms}
-                    onChange={(e) => setNumRooms(Number(e.target.value))}
-                    className="bg-onyx border border-border px-3 py-3 text-foreground focus:border-gold focus:outline-none"
-                  >
-                    {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((n) => (
-                      <option key={n} value={n} className="bg-charcoal">
-                        {n} {n === 1 ? "Room" : "Rooms"}
-                      </option>
-                    ))}
-                  </select>
-                </div>
+                {bookingType !== "self" && (
+                  <div className="mt-6 flex flex-col gap-1.5 max-w-xs">
+                    <label className="text-xs uppercase tracking-widest text-gold">Number of rooms</label>
+                    <select
+                      value={numRooms}
+                      onChange={(e) => setNumRooms(Number(e.target.value))}
+                      className="bg-onyx border border-border px-3 py-3 text-foreground focus:border-gold focus:outline-none"
+                    >
+                      {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((n) => (
+                        <option key={n} value={n} className="bg-charcoal">
+                          {n} {n === 1 ? "Room" : "Rooms"}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
 
                 {bookingType !== "self" && (
                   <div className="mt-6">
