@@ -258,21 +258,58 @@ function BookingPage() {
   };
   // ============================================================
 
-    const handlePaystack = () => {
-    setPaymentError(null);
+  const buildBookingRecord = (
+    reference: string,
+    mode: "pay_now" | "save_card",
+    extras?: { authorizationCode?: string | null }
+  ): StoredBooking => {
+    const checkInDate = new Date(checkIn);
+    const scheduledChargeAt = new Date(checkInDate.getTime() - 24 * 3600 * 1000).toISOString();
+    return {
+      reference,
+      createdAt: new Date().toISOString(),
+      guest: { ...guest },
+      roomSlug: room.slug,
+      roomName: room.name,
+      roomPrice: room.price,
+      checkIn,
+      checkOut,
+      nights,
+      numRooms,
+      guests,
+      addons: selectedAddons.map((id) => {
+        const a = ADD_ONS.find((x) => x.id === id)!;
+        return { id: a.id, label: a.label, price: a.price };
+      }),
+      subtotal,
+      discount,
+      tax,
+      total,
+      gateway: paymentMethod,
+      paymentMode: mode,
+      tokenizationFee: mode === "save_card" ? TOKENIZATION_FEE : undefined,
+      authorizationCode: mode === "save_card" ? extras?.authorizationCode ?? null : undefined,
+      pendingBalance: mode === "save_card" ? total : 0,
+      scheduledChargeAt: mode === "save_card" ? scheduledChargeAt : undefined,
+      amountCharged: mode === "save_card" ? TOKENIZATION_FEE : total,
+      status: mode === "save_card" ? "scheduled" : "confirmed",
+    };
+  };
 
+  // ---------- PAY NOW (full amount) ----------
+  const handlePaystackPayNow = () => {
+    setPaymentError(null);
     if (!paystackReady || !window.PaystackPop) {
       setPaymentError("Paystack is still loading. Please wait a moment and try again.");
       return;
     }
-
     if (!guest.email) {
       setPaymentError("Please go back and enter your email address.");
       return;
     }
-
     try {
       const [firstName, ...rest] = guest.name.trim().split(" ");
+      const reference = `REMERITONA-${Date.now()}`;
       const handler = window.PaystackPop.setup({
         key: PAYSTACK_PUBLIC_KEY,
         email: guest.email,
@@ -281,24 +318,16 @@ function BookingPage() {
         firstname: firstName || guest.name,
         lastname: rest.join(" ") || "",
         phone: guest.phone,
-        ref: `remeritona-${Date.now()}`,
-        metadata: {
-          custom_fields: [
-            { display_name: "Room", variable_name: "room", value: room.name },
-            { display_name: "Check-in", variable_name: "checkin", value: checkIn },
-            { display_name: "Check-out", variable_name: "checkout", value: checkOut },
-            { display_name: "Nights", variable_name: "nights", value: String(nights) },
-          ],
-        },
-        callback: function(response: { reference: string }) {
+        ref: reference,
+        callback: function (response: { reference: string }) {
           if (response.reference) {
-            sendBookingEmails(response.reference);   // Removed 'await' here
+            const record = buildBookingRecord(response.reference, "pay_now");
+            saveBooking(record);
+            sendBookingEmails(response.reference);
             setConfirmed(true);
           }
         },
-        onClose: () => {
-          setPaymentError("Payment was cancelled. Please try again.");
-        },
+        onClose: () => setPaymentError("Payment was cancelled. Please try again."),
       });
       handler.openIframe();
     } catch (e) {
@@ -307,40 +336,33 @@ function BookingPage() {
     }
   };
 
-  const handleFlutterwave = () => {
+  const handleFlutterwavePayNow = () => {
     setPaymentError(null);
-
     if (!window.FlutterwaveCheckout) {
-  setPaymentError("Loading payment... please wait.");
-  setTimeout(() => {
-    if (window.FlutterwaveCheckout) {
-      setPaymentError(null);
-      handleFlutterwave();
-    } else {
-      setPaymentError("Payment could not load. Please refresh the page and try again.");
+      setPaymentError("Loading payment... please wait.");
+      setTimeout(() => {
+        if (window.FlutterwaveCheckout) {
+          setPaymentError(null);
+          handleFlutterwavePayNow();
+        } else {
+          setPaymentError("Payment could not load. Please refresh the page and try again.");
+        }
+      }, 2000);
+      return;
     }
-  }, 2000);
-  return;
-}
-
     if (!guest.email) {
       setPaymentError("Please go back and enter your email address.");
       return;
     }
-
     setProcessing(true);
-
+    const reference = `REMERITONA-${Date.now()}`;
     const modal = window.FlutterwaveCheckout({
       public_key: FLUTTERWAVE_PUBLIC_KEY,
-      tx_ref: `remeritona-${Date.now()}`,
+      tx_ref: reference,
       amount: total,
       currency: "NGN",
       payment_options: "card,banktransfer,ussd",
-      customer: {
-        email: guest.email,
-        phone_number: guest.phone,
-        name: guest.name,
-      },
+      customer: { email: guest.email, phone_number: guest.phone, name: guest.name },
       customizations: {
         title: "Re Meritona Hotel & Suites",
         description: `${room.name} · ${nights} night${nights > 1 ? "s" : ""}`,
@@ -349,29 +371,122 @@ function BookingPage() {
       callback: async (response: { status: string }) => {
         setProcessing(false);
         if (response.status === "successful" || response.status === "completed") {
-          const reference = `remeritona-${Date.now()}`;
+          const record = buildBookingRecord(reference, "pay_now");
+          saveBooking(record);
           await sendBookingEmails(reference);
-          
           setTimeout(() => {
-            if (modal && typeof modal.close === "function") {
-              modal.close();
-            }
+            if (modal && typeof modal.close === "function") modal.close();
             setConfirmed(true);
-          }, 3000);
+          }, 1500);
         } else {
           setPaymentError("Payment was not successful. Please try again.");
         }
       },
-      onclose: () => {
-        setProcessing(false);
-      },
+      onclose: () => setProcessing(false),
     });
   };
 
-  const handleConfirm = () => {
-    if (paymentMethod === "paystack") handlePaystack();
-    else handleFlutterwave();
+  // ---------- SAVE CARD & PAY LATER (₦100 tokenization) ----------
+  // Charges a small tokenization fee through the chosen gateway. The returned
+  // reference / authorization is stored so the full amount can be charged
+  // automatically 24h before check-in.
+  const handlePaystackSaveCard = () => {
+    setPaymentError(null);
+    if (!paystackReady || !window.PaystackPop) {
+      setPaymentError("Paystack is still loading. Please wait and try again.");
+      return;
+    }
+    try {
+      const reference = `REMERITONA-TKN-${Date.now()}`;
+      const handler = window.PaystackPop.setup({
+        key: PAYSTACK_PUBLIC_KEY,
+        email: guest.email,
+        amount: TOKENIZATION_FEE * 100,
+        currency: "NGN",
+        ref: reference,
+        callback: (response: { reference: string }) => {
+          if (response.reference) {
+            // Demo: real auth_code comes from server-side verify.
+            const authCode = `AUTH_${response.reference.slice(-8)}`;
+            const record = buildBookingRecord(response.reference, "save_card", {
+              authorizationCode: authCode,
+            });
+            saveBooking(record);
+            sendBookingEmails(response.reference);
+            setSavedReceipt(record);
+            setConfirmed(true);
+          }
+        },
+        onClose: () =>
+          setPaymentError("Reservation Failed: tokenization was cancelled. Please try again."),
+      });
+      handler.openIframe();
+    } catch (e) {
+      console.error("Paystack tokenization error:", e);
+      setPaymentError("Reservation Failed: could not open Paystack.");
+    }
   };
+
+  const handleFlutterwaveSaveCard = () => {
+    setPaymentError(null);
+    if (!window.FlutterwaveCheckout) {
+      setPaymentError("Loading payment... please wait.");
+      return;
+    }
+    setProcessing(true);
+    const reference = `REMERITONA-TKN-${Date.now()}`;
+    const modal = window.FlutterwaveCheckout({
+      public_key: FLUTTERWAVE_PUBLIC_KEY,
+      tx_ref: reference,
+      amount: TOKENIZATION_FEE,
+      currency: "NGN",
+      payment_options: "card",
+      customer: { email: guest.email, phone_number: guest.phone, name: guest.name },
+      customizations: {
+        title: "Save Card — Remeritona",
+        description: `Tokenization for ${room.name}`,
+        logo: "/src/assets/logo.png",
+      },
+      callback: async (response: { status: string; transaction_id?: string | number }) => {
+        setProcessing(false);
+        if (response.status === "successful" || response.status === "completed") {
+          const authCode = `AUTH_${response.transaction_id ?? Date.now()}`;
+          const record = buildBookingRecord(reference, "save_card", { authorizationCode: authCode });
+          saveBooking(record);
+          await sendBookingEmails(reference);
+          setSavedReceipt(record);
+          setTimeout(() => {
+            if (modal && typeof modal.close === "function") modal.close();
+            setConfirmed(true);
+          }, 1500);
+        } else {
+          setPaymentError("Reservation Failed: card could not be saved. Please try again.");
+        }
+      },
+      onclose: () => setProcessing(false),
+    });
+  };
+
+  // Eligibility: check-in must be at least 72h after now
+  const hoursToCheckIn = (new Date(checkIn).getTime() - Date.now()) / 3_600_000;
+  const canSaveCard = hoursToCheckIn >= SAVE_CARD_MIN_HOURS;
+
+  const handleConfirm = () => {
+    setShowPaymentChoice(true);
+  };
+
+  const handlePayNow = () => {
+    setShowPaymentChoice(false);
+    if (paymentMethod === "paystack") handlePaystackPayNow();
+    else handleFlutterwavePayNow();
+  };
+
+  const handleSaveCard = () => {
+    setShowPaymentChoice(false);
+    if (paymentMethod === "paystack") handlePaystackSaveCard();
+    else handleFlutterwaveSaveCard();
+  };
+
 
   if (confirmed) {
     return (
