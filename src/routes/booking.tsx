@@ -4,10 +4,14 @@ import { SiteHeader } from "@/components/SiteHeader";
 import { SiteFooter } from "@/components/SiteFooter";
 import { rooms, formatNaira, getRoom } from "@/data/rooms";
 import { applyCoupon, type CouponResult } from "@/data/coupons";
-import { Check, CreditCard, Lock, Plus, Users, Briefcase, User, Tag, X } from "lucide-react";
+import { Check, CreditCard, Lock, Plus, Users, Briefcase, User, Tag, X, Clock, Wallet } from "lucide-react";
 import { z } from "zod";
 import { Resend } from 'resend';
 import BookingEmail from "@/components/BookingEmail";
+import { saveBooking, type StoredBooking } from "@/data/bookings-store";
+
+const TOKENIZATION_FEE = 100; // NGN — small Save-card-now charge to capture authorization
+const SAVE_CARD_MIN_HOURS = 72;
 
 // Initialize Resend
 const resend = new Resend("re_H329kVbZ_6HHvRmnyuFcW3nM4MQT9w1mF");
@@ -66,6 +70,11 @@ function BookingPage() {
   const [bookingType, setBookingType] = useState<"self" | "family" | "corporate">("self");
   const [numRooms, setNumRooms] = useState<number>(1);
 
+  // "Book for myself" always uses 1 room.
+  useEffect(() => {
+    if (bookingType === "self" && numRooms !== 1) setNumRooms(1);
+  }, [bookingType, numRooms]);
+
   const maxAdults = 2 * numRooms;
   const maxChildren = 1 * numRooms;
 
@@ -96,6 +105,8 @@ function BookingPage() {
   const [paymentError, setPaymentError] = useState<string | null>(null);
   const [processing, setProcessing] = useState(false);
   const [paystackReady, setPaystackReady] = useState(false);
+  const [showPaymentChoice, setShowPaymentChoice] = useState(false);
+  const [savedReceipt, setSavedReceipt] = useState<StoredBooking | null>(null);
 
   // Coupon state
   const [couponCode, setCouponCode] = useState("");
@@ -104,8 +115,8 @@ function BookingPage() {
   const stepRef = useRef<HTMLDivElement>(null);
   const summaryRef = useRef<HTMLElement>(null);
 
-  // On mobile after step 1, scroll to summary (where the second Continue lives).
-  // On desktop or later steps, scroll to the next form section.
+  // On mobile, scroll to the summary panel (where the second Continue lives).
+  // On desktop, scroll to the next form section.
   const scrollToStep = () => {
     setTimeout(() => {
       const isMobile = typeof window !== "undefined" && window.innerWidth < 1024;
@@ -114,6 +125,12 @@ function BookingPage() {
     }, 60);
   };
 
+  // For the second (mobile) Continue under the summary — always scroll to the form.
+  const scrollToForm = () => {
+    setTimeout(() => {
+      stepRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }, 60);
+  };
 
   // Load Flutterwave script
   useEffect(() => {
@@ -241,21 +258,58 @@ function BookingPage() {
   };
   // ============================================================
 
-    const handlePaystack = () => {
-    setPaymentError(null);
+  const buildBookingRecord = (
+    reference: string,
+    mode: "pay_now" | "save_card",
+    extras?: { authorizationCode?: string | null }
+  ): StoredBooking => {
+    const checkInDate = new Date(checkIn);
+    const scheduledChargeAt = new Date(checkInDate.getTime() - 24 * 3600 * 1000).toISOString();
+    return {
+      reference,
+      createdAt: new Date().toISOString(),
+      guest: { ...guest },
+      roomSlug: room.slug,
+      roomName: room.name,
+      roomPrice: room.price,
+      checkIn,
+      checkOut,
+      nights,
+      numRooms,
+      guests,
+      addons: selectedAddons.map((id) => {
+        const a = ADD_ONS.find((x) => x.id === id)!;
+        return { id: a.id, label: a.label, price: a.price };
+      }),
+      subtotal,
+      discount,
+      tax,
+      total,
+      gateway: paymentMethod,
+      paymentMode: mode,
+      tokenizationFee: mode === "save_card" ? TOKENIZATION_FEE : undefined,
+      authorizationCode: mode === "save_card" ? extras?.authorizationCode ?? null : undefined,
+      pendingBalance: mode === "save_card" ? total : 0,
+      scheduledChargeAt: mode === "save_card" ? scheduledChargeAt : undefined,
+      amountCharged: mode === "save_card" ? TOKENIZATION_FEE : total,
+      status: mode === "save_card" ? "scheduled" : "confirmed",
+    };
+  };
 
+  // ---------- PAY NOW (full amount) ----------
+  const handlePaystackPayNow = () => {
+    setPaymentError(null);
     if (!paystackReady || !window.PaystackPop) {
       setPaymentError("Paystack is still loading. Please wait a moment and try again.");
       return;
     }
-
     if (!guest.email) {
       setPaymentError("Please go back and enter your email address.");
       return;
     }
-
     try {
       const [firstName, ...rest] = guest.name.trim().split(" ");
+      const reference = `REMERITONA-${Date.now()}`;
       const handler = window.PaystackPop.setup({
         key: PAYSTACK_PUBLIC_KEY,
         email: guest.email,
@@ -264,24 +318,16 @@ function BookingPage() {
         firstname: firstName || guest.name,
         lastname: rest.join(" ") || "",
         phone: guest.phone,
-        ref: `remeritona-${Date.now()}`,
-        metadata: {
-          custom_fields: [
-            { display_name: "Room", variable_name: "room", value: room.name },
-            { display_name: "Check-in", variable_name: "checkin", value: checkIn },
-            { display_name: "Check-out", variable_name: "checkout", value: checkOut },
-            { display_name: "Nights", variable_name: "nights", value: String(nights) },
-          ],
-        },
-        callback: function(response: { reference: string }) {
+        ref: reference,
+        callback: function (response: { reference: string }) {
           if (response.reference) {
-            sendBookingEmails(response.reference);   // Removed 'await' here
+            const record = buildBookingRecord(response.reference, "pay_now");
+            saveBooking(record);
+            sendBookingEmails(response.reference);
             setConfirmed(true);
           }
         },
-        onClose: () => {
-          setPaymentError("Payment was cancelled. Please try again.");
-        },
+        onClose: () => setPaymentError("Payment was cancelled. Please try again."),
       });
       handler.openIframe();
     } catch (e) {
@@ -290,40 +336,33 @@ function BookingPage() {
     }
   };
 
-  const handleFlutterwave = () => {
+  const handleFlutterwavePayNow = () => {
     setPaymentError(null);
-
     if (!window.FlutterwaveCheckout) {
-  setPaymentError("Loading payment... please wait.");
-  setTimeout(() => {
-    if (window.FlutterwaveCheckout) {
-      setPaymentError(null);
-      handleFlutterwave();
-    } else {
-      setPaymentError("Payment could not load. Please refresh the page and try again.");
+      setPaymentError("Loading payment... please wait.");
+      setTimeout(() => {
+        if (window.FlutterwaveCheckout) {
+          setPaymentError(null);
+          handleFlutterwavePayNow();
+        } else {
+          setPaymentError("Payment could not load. Please refresh the page and try again.");
+        }
+      }, 2000);
+      return;
     }
-  }, 2000);
-  return;
-}
-
     if (!guest.email) {
       setPaymentError("Please go back and enter your email address.");
       return;
     }
-
     setProcessing(true);
-
+    const reference = `REMERITONA-${Date.now()}`;
     const modal = window.FlutterwaveCheckout({
       public_key: FLUTTERWAVE_PUBLIC_KEY,
-      tx_ref: `remeritona-${Date.now()}`,
+      tx_ref: reference,
       amount: total,
       currency: "NGN",
       payment_options: "card,banktransfer,ussd",
-      customer: {
-        email: guest.email,
-        phone_number: guest.phone,
-        name: guest.name,
-      },
+      customer: { email: guest.email, phone_number: guest.phone, name: guest.name },
       customizations: {
         title: "Re Meritona Hotel & Suites",
         description: `${room.name} · ${nights} night${nights > 1 ? "s" : ""}`,
@@ -332,29 +371,122 @@ function BookingPage() {
       callback: async (response: { status: string }) => {
         setProcessing(false);
         if (response.status === "successful" || response.status === "completed") {
-          const reference = `remeritona-${Date.now()}`;
+          const record = buildBookingRecord(reference, "pay_now");
+          saveBooking(record);
           await sendBookingEmails(reference);
-          
           setTimeout(() => {
-            if (modal && typeof modal.close === "function") {
-              modal.close();
-            }
+            if (modal && typeof modal.close === "function") modal.close();
             setConfirmed(true);
-          }, 3000);
+          }, 1500);
         } else {
           setPaymentError("Payment was not successful. Please try again.");
         }
       },
-      onclose: () => {
-        setProcessing(false);
-      },
+      onclose: () => setProcessing(false),
     });
   };
 
-  const handleConfirm = () => {
-    if (paymentMethod === "paystack") handlePaystack();
-    else handleFlutterwave();
+  // ---------- SAVE CARD & PAY LATER (₦100 tokenization) ----------
+  // Charges a small tokenization fee through the chosen gateway. The returned
+  // reference / authorization is stored so the full amount can be charged
+  // automatically 24h before check-in.
+  const handlePaystackSaveCard = () => {
+    setPaymentError(null);
+    if (!paystackReady || !window.PaystackPop) {
+      setPaymentError("Paystack is still loading. Please wait and try again.");
+      return;
+    }
+    try {
+      const reference = `REMERITONA-TKN-${Date.now()}`;
+      const handler = window.PaystackPop.setup({
+        key: PAYSTACK_PUBLIC_KEY,
+        email: guest.email,
+        amount: TOKENIZATION_FEE * 100,
+        currency: "NGN",
+        ref: reference,
+        callback: (response: { reference: string }) => {
+          if (response.reference) {
+            // Demo: real auth_code comes from server-side verify.
+            const authCode = `AUTH_${response.reference.slice(-8)}`;
+            const record = buildBookingRecord(response.reference, "save_card", {
+              authorizationCode: authCode,
+            });
+            saveBooking(record);
+            sendBookingEmails(response.reference);
+            setSavedReceipt(record);
+            setConfirmed(true);
+          }
+        },
+        onClose: () =>
+          setPaymentError("Reservation Failed: tokenization was cancelled. Please try again."),
+      });
+      handler.openIframe();
+    } catch (e) {
+      console.error("Paystack tokenization error:", e);
+      setPaymentError("Reservation Failed: could not open Paystack.");
+    }
   };
+
+  const handleFlutterwaveSaveCard = () => {
+    setPaymentError(null);
+    if (!window.FlutterwaveCheckout) {
+      setPaymentError("Loading payment... please wait.");
+      return;
+    }
+    setProcessing(true);
+    const reference = `REMERITONA-TKN-${Date.now()}`;
+    const modal = window.FlutterwaveCheckout({
+      public_key: FLUTTERWAVE_PUBLIC_KEY,
+      tx_ref: reference,
+      amount: TOKENIZATION_FEE,
+      currency: "NGN",
+      payment_options: "card",
+      customer: { email: guest.email, phone_number: guest.phone, name: guest.name },
+      customizations: {
+        title: "Save Card — Remeritona",
+        description: `Tokenization for ${room.name}`,
+        logo: "/src/assets/logo.png",
+      },
+      callback: async (response: { status: string; transaction_id?: string | number }) => {
+        setProcessing(false);
+        if (response.status === "successful" || response.status === "completed") {
+          const authCode = `AUTH_${response.transaction_id ?? Date.now()}`;
+          const record = buildBookingRecord(reference, "save_card", { authorizationCode: authCode });
+          saveBooking(record);
+          await sendBookingEmails(reference);
+          setSavedReceipt(record);
+          setTimeout(() => {
+            if (modal && typeof modal.close === "function") modal.close();
+            setConfirmed(true);
+          }, 1500);
+        } else {
+          setPaymentError("Reservation Failed: card could not be saved. Please try again.");
+        }
+      },
+      onclose: () => setProcessing(false),
+    });
+  };
+
+  // Eligibility: check-in must be at least 72h after now
+  const hoursToCheckIn = (new Date(checkIn).getTime() - Date.now()) / 3_600_000;
+  const canSaveCard = hoursToCheckIn >= SAVE_CARD_MIN_HOURS;
+
+  const handleConfirm = () => {
+    setShowPaymentChoice(true);
+  };
+
+  const handlePayNow = () => {
+    setShowPaymentChoice(false);
+    if (paymentMethod === "paystack") handlePaystackPayNow();
+    else handleFlutterwavePayNow();
+  };
+
+  const handleSaveCard = () => {
+    setShowPaymentChoice(false);
+    if (paymentMethod === "paystack") handlePaystackSaveCard();
+    else handleFlutterwaveSaveCard();
+  };
+
 
   if (confirmed) {
     return (
@@ -371,6 +503,7 @@ function BookingPage() {
               A confirmation email is on its way to <span className="text-foreground">{guest.email}</span>. We look forward to hosting you on {new Date(checkIn).toLocaleDateString("en-NG", { dateStyle: "long" })}.
             </p>
             <div className="text-left border-t border-border pt-6 space-y-2 text-sm">
+              <Row label="Reference" value={savedReceipt?.reference ?? ""} />
               <Row label="Room" value={room.name} />
               <Row label="Check-in" value={new Date(checkIn).toLocaleDateString()} />
               <Row label="Check-out" value={new Date(checkOut).toLocaleDateString()} />
@@ -379,7 +512,21 @@ function BookingPage() {
               {selectedAddons.length > 0 && (
                 <Row label="Add-ons" value={selectedAddons.map(id => ADD_ONS.find(a => a.id === id)?.label).join(", ")} />
               )}
-              <Row label="Total Paid" value={formatNaira(total)} highlight />
+              {savedReceipt?.paymentMode === "save_card" ? (
+                <>
+                  <Row label="Tokenization Fee Paid" value={formatNaira(TOKENIZATION_FEE)} highlight />
+                  <Row label="Pending Balance" value={formatNaira(savedReceipt.pendingBalance ?? total)} />
+                  <p className="text-xs text-muted-foreground pt-2">
+                    Your saved card will be automatically charged the pending balance at{" "}
+                    {savedReceipt.scheduledChargeAt
+                      ? new Date(savedReceipt.scheduledChargeAt).toLocaleString()
+                      : "24h before check-in"}
+                    .
+                  </p>
+                </>
+              ) : (
+                <Row label="Total Paid" value={formatNaira(total)} highlight />
+              )}
             </div>
             <div className="mt-8 flex flex-col sm:flex-row gap-3 justify-center">
               <button
@@ -391,6 +538,7 @@ function BookingPage() {
                   setPaymentError(null);
                   setCouponCode("");
                   setCouponResult(null);
+                  setSavedReceipt(null);
                   window.scrollTo({ top: 0, behavior: "smooth" });
                 }}
                 className="px-8 py-3 bg-gold text-primary-foreground font-semibold uppercase tracking-widest text-sm hover:bg-gold-soft"
@@ -448,20 +596,22 @@ function BookingPage() {
                   ))}
                 </div>
 
-                <div className="mt-6 flex flex-col gap-1.5 max-w-xs">
-                  <label className="text-xs uppercase tracking-widest text-gold">Number of rooms</label>
-                  <select
-                    value={numRooms}
-                    onChange={(e) => setNumRooms(Number(e.target.value))}
-                    className="bg-onyx border border-border px-3 py-3 text-foreground focus:border-gold focus:outline-none"
-                  >
-                    {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((n) => (
-                      <option key={n} value={n} className="bg-charcoal">
-                        {n} {n === 1 ? "Room" : "Rooms"}
-                      </option>
-                    ))}
-                  </select>
-                </div>
+                {bookingType !== "self" && (
+                  <div className="mt-6 flex flex-col gap-1.5 max-w-xs">
+                    <label className="text-xs uppercase tracking-widest text-gold">Number of rooms</label>
+                    <select
+                      value={numRooms}
+                      onChange={(e) => setNumRooms(Number(e.target.value))}
+                      className="bg-onyx border border-border px-3 py-3 text-foreground focus:border-gold focus:outline-none"
+                    >
+                      {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((n) => (
+                        <option key={n} value={n} className="bg-charcoal">
+                          {n} {n === 1 ? "Room" : "Rooms"}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
 
                 {bookingType !== "self" && (
                   <div className="mt-6">
@@ -764,7 +914,7 @@ function BookingPage() {
             <div className="lg:hidden mt-6">
               {step === 1 && (
                 <button
-                  onClick={() => { setStep(2); scrollToStep(); }}
+                  onClick={() => { setStep(2); scrollToForm(); }}
                   className="w-full py-4 bg-gold text-primary-foreground font-semibold uppercase tracking-widest text-sm hover:bg-gold-soft"
                 >
                   Continue
@@ -772,7 +922,7 @@ function BookingPage() {
               )}
               {step === 2 && (
                 <button
-                  onClick={() => { if (guest.name && guest.email && guest.phone) { setStep(3); scrollToStep(); } }}
+                  onClick={() => { if (guest.name && guest.email && guest.phone) { setStep(3); scrollToForm(); } }}
                   disabled={!guest.name || !guest.email || !guest.phone}
                   className="w-full py-4 bg-gold text-primary-foreground font-semibold uppercase tracking-widest text-sm hover:bg-gold-soft disabled:opacity-40 disabled:cursor-not-allowed"
                 >
@@ -792,6 +942,56 @@ function BookingPage() {
           </aside>
         </div>
       </section>
+
+      {showPaymentChoice && (
+        <div className="fixed inset-0 bg-onyx/80 backdrop-blur-sm z-[60] grid place-items-center px-4">
+          <div className="bg-charcoal border border-gold/40 max-w-md w-full p-6">
+            <p className="text-gold text-xs uppercase tracking-[0.4em] mb-2">Choose how to pay</p>
+            <h3 className="font-serif text-2xl mb-3">Payment options</h3>
+            <p className="text-sm text-muted-foreground mb-5">
+              Pay the full amount now, or save your card with a small ₦{TOKENIZATION_FEE} authorization fee
+              and we'll automatically charge the balance 24 hours before check-in.
+            </p>
+            <div className="space-y-3">
+              <button
+                onClick={handlePayNow}
+                className="w-full p-4 border border-gold bg-onyx text-left hover:bg-onyx/70 transition-colors flex items-start gap-3"
+              >
+                <CreditCard size={20} className="text-gold mt-1 shrink-0" />
+                <div>
+                  <p className="font-semibold uppercase tracking-widest text-sm text-gold">Pay now</p>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Charge {formatNaira(total)} to your card via {paymentMethod === "paystack" ? "Paystack" : "Flutterwave"}.
+                  </p>
+                </div>
+              </button>
+              <button
+                onClick={handleSaveCard}
+                disabled={!canSaveCard}
+                className="w-full p-4 border border-border text-left hover:border-gold/60 transition-colors flex items-start gap-3 disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                <Wallet size={20} className="text-gold mt-1 shrink-0" />
+                <div>
+                  <p className="font-semibold uppercase tracking-widest text-sm">Save card &amp; pay later</p>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    {canSaveCard
+                      ? `₦${TOKENIZATION_FEE} authorization now. Balance ${formatNaira(total)} charged automatically 24h before check-in.`
+                      : `Available only when check-in is at least ${SAVE_CARD_MIN_HOURS} hours away.`}
+                  </p>
+                </div>
+              </button>
+            </div>
+            <div className="flex justify-end mt-5">
+              <button
+                onClick={() => setShowPaymentChoice(false)}
+                className="text-xs uppercase tracking-widest text-muted-foreground hover:text-gold inline-flex items-center gap-1.5"
+              >
+                <Clock size={12} /> Decide later
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <SiteFooter />
     </div>

@@ -12,6 +12,7 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as RoomsRouteImport } from './routes/rooms'
 import { Route as PoliciesRouteImport } from './routes/policies'
 import { Route as OffersRouteImport } from './routes/offers'
+import { Route as MyBookingsRouteImport } from './routes/my-bookings'
 import { Route as GalleryRouteImport } from './routes/gallery'
 import { Route as DiningRouteImport } from './routes/dining'
 import { Route as ContactRouteImport } from './routes/contact'
@@ -33,6 +34,11 @@ const PoliciesRoute = PoliciesRouteImport.update({
 const OffersRoute = OffersRouteImport.update({
   id: '/offers',
   path: '/offers',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const MyBookingsRoute = MyBookingsRouteImport.update({
+  id: '/my-bookings',
+  path: '/my-bookings',
   getParentRoute: () => rootRouteImport,
 } as any)
 const GalleryRoute = GalleryRouteImport.update({
@@ -78,6 +84,7 @@ export interface FileRoutesByFullPath {
   '/contact': typeof ContactRoute
   '/dining': typeof DiningRoute
   '/gallery': typeof GalleryRoute
+  '/my-bookings': typeof MyBookingsRoute
   '/offers': typeof OffersRoute
   '/policies': typeof PoliciesRoute
   '/rooms': typeof RoomsRouteWithChildren
@@ -90,6 +97,7 @@ export interface FileRoutesByTo {
   '/contact': typeof ContactRoute
   '/dining': typeof DiningRoute
   '/gallery': typeof GalleryRoute
+  '/my-bookings': typeof MyBookingsRoute
   '/offers': typeof OffersRoute
   '/policies': typeof PoliciesRoute
   '/rooms': typeof RoomsRouteWithChildren
@@ -103,6 +111,7 @@ export interface FileRoutesById {
   '/contact': typeof ContactRoute
   '/dining': typeof DiningRoute
   '/gallery': typeof GalleryRoute
+  '/my-bookings': typeof MyBookingsRoute
   '/offers': typeof OffersRoute
   '/policies': typeof PoliciesRoute
   '/rooms': typeof RoomsRouteWithChildren
@@ -117,6 +126,7 @@ export interface FileRouteTypes {
     | '/contact'
     | '/dining'
     | '/gallery'
+    | '/my-bookings'
     | '/offers'
     | '/policies'
     | '/rooms'
@@ -129,6 +139,7 @@ export interface FileRouteTypes {
     | '/contact'
     | '/dining'
     | '/gallery'
+    | '/my-bookings'
     | '/offers'
     | '/policies'
     | '/rooms'
@@ -141,6 +152,7 @@ export interface FileRouteTypes {
     | '/contact'
     | '/dining'
     | '/gallery'
+    | '/my-bookings'
     | '/offers'
     | '/policies'
     | '/rooms'
@@ -154,6 +166,7 @@ export interface RootRouteChildren {
   ContactRoute: typeof ContactRoute
   DiningRoute: typeof DiningRoute
   GalleryRoute: typeof GalleryRoute
+  MyBookingsRoute: typeof MyBookingsRoute
   OffersRoute: typeof OffersRoute
   PoliciesRoute: typeof PoliciesRoute
   RoomsRoute: typeof RoomsRouteWithChildren
@@ -180,6 +193,13 @@ declare module '@tanstack/react-router' {
       path: '/offers'
       fullPath: '/offers'
       preLoaderRoute: typeof OffersRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/my-bookings': {
+      id: '/my-bookings'
+      path: '/my-bookings'
+      fullPath: '/my-bookings'
+      preLoaderRoute: typeof MyBookingsRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/gallery': {
@@ -251,6 +271,7 @@ const rootRouteChildren: RootRouteChildren = {
   ContactRoute: ContactRoute,
   DiningRoute: DiningRoute,
   GalleryRoute: GalleryRoute,
+  MyBookingsRoute: MyBookingsRoute,
   OffersRoute: OffersRoute,
   PoliciesRoute: PoliciesRoute,
   RoomsRoute: RoomsRouteWithChildren,
@@ -258,12 +279,3 @@ const rootRouteChildren: RootRouteChildren = {
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
-
-import type { getRouter } from './router.tsx'
-import type { createStart } from '@tanstack/react-start'
-declare module '@tanstack/react-start' {
-  interface Register {
-    ssr: true
-    router: Awaited<ReturnType<typeof getRouter>>
-  }
-}
