@@ -95,7 +95,23 @@ function BookingPage() {
     if (children > maxChildren) setChildren(maxChildren);
   }, [maxAdults, maxChildren, adults, children]);
 
-  const [selectedSlug, setSelectedSlug] = useState(sp.room ?? rooms[0].slug);
+  // Maps legacy search param slugs safely to your new room categories
+  const initialSlug = useMemo(() => {
+    if (!sp.room) return rooms[0].slug;
+    if (sp.room === "standard") return "classic";
+    if (sp.room === "deluxe") return "superior";
+    if (sp.room === "executive-suite") return "executive";
+    if (sp.room === "presidential-deluxe") return "business-suites";
+    if (sp.room === "presidential-executive") return "executive-suites";
+    return sp.room;
+  }, [sp.room]);
+
+  const [selectedSlug, setSelectedSlug] = useState(initialSlug);
+
+  // Keep state sync if search query updates dynamically
+  useEffect(() => {
+    setSelectedSlug(initialSlug);
+  }, [initialSlug]);
   const [step, setStep] = useState<1 | 2 | 3>(1);
   const [guest, setGuest] = useState({ name: "", email: "", phone: "", notes: "" });
   const [selectedAddons, setSelectedAddons] = useState<string[]>([]);
