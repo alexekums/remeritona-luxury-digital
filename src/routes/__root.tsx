@@ -2,6 +2,7 @@ import { Outlet, Link, createRootRoute, HeadContent, Scripts } from "@tanstack/r
 
 import appCss from "../styles.css?url";
 import { WhatsAppButton } from "@/components/WhatsAppButton";
+import { IntroAnimation } from "@/components/IntroAnimation";
 import "@/i18n";
 
 function NotFoundComponent() {
