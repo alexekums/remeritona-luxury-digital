@@ -1,7 +1,7 @@
 {
   "name": "tanstack_start_ts",
   "private": true,
-  "sideEffects": false,
+  "sideEffects": true,
   "type": "module",
   "scripts": {
     "dev": "vite dev",
@@ -12,7 +12,6 @@
     "format": "prettier --write ."
   },
   "dependencies": {
-    "@cloudflare/vite-plugin": "^1.36.3",
     "@hookform/resolvers": "^5.2.2",
     "@lovable.dev/vite-tanstack-config": "^1.5.1",
     "@radix-ui/react-accordion": "^1.2.12",

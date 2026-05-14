@@ -6,15 +6,13 @@ import { rooms, formatNaira, getRoom } from "@/data/rooms";
 import { applyCoupon, type CouponResult } from "@/data/coupons";
 import { Check, CreditCard, Lock, Plus, Users, Briefcase, User, Tag, X, Clock, Wallet } from "lucide-react";
 import { z } from "zod";
-import { Resend } from 'resend';
-import BookingEmail from "@/components/BookingEmail";
 import { saveBooking, type StoredBooking } from "@/data/bookings-store";
+import { sendBookingEmail } from "@/functions/sendBookingEmail";
 
 const TOKENIZATION_FEE = 100; // NGN — small Save-card-now charge to capture authorization
 const SAVE_CARD_MIN_HOURS = 72;
 
-// Initialize Resend
-const resend = new Resend("re_H329kVbZ_6HHvRmnyuFcW3nM4MQT9w1mF");
+
 
 const PAYSTACK_PUBLIC_KEY = "pk_test_a0160de54fc2cf9d624ee9b9451dbe1c8c96f52b";
 const FLUTTERWAVE_PUBLIC_KEY = "FLWPUBK_TEST-c7659059ed4e5f5f6aa1fbb96055e919-X";
@@ -214,80 +212,42 @@ function BookingPage() {
     setCouponResult(null);
   };
 
+
   const toggleAddon = (id: string) => {
     setSelectedAddons(prev =>
       prev.includes(id) ? prev.filter(a => a !== id) : [...prev, id]
     );
   };
 
-  // ==================== REARRANGED: GENERATE RECEIPT FIRST, THEN SEND EMAIL ====================
+  // ==================== NEW: SEND BOOKING EMAILS ====================
   const sendBookingEmails = async (reference: string) => {
     const selectedAddonDetails = selectedAddons.map(id => {
       const addon = ADD_ONS.find(a => a.id === id);
       return { label: addon?.label || "", price: addon?.price || 0 };
     });
 
-    // 1. First, hold and build the receipt image payload securely
-    let receiptUrl = "";
     try {
-      // Accessing your data generator pipeline context (mimicking the ssg payload context)
-      const receiptFilename = `receipt-${reference}.png`;
-      
-      // Attempting receipt generation hook context lookup
-      // Note: If your framework context expects ssg orchestration elsewhere, 
-      // we maintain a baseline URL fallback string pointing to runtime storage assets.
-      receiptUrl = `https://remeritona-luxury.workers.dev/assets/receipts/${receiptFilename}`;
-    } catch (receiptError) {
-      console.error("Failed to compile layout receipt pointer context:", receiptError);
-    }
-
-    const emailData = {
-      guestName: guest.name,
-      roomName: room.name,
-      checkIn: new Date(checkIn).toLocaleDateString("en-NG", { dateStyle: "long" }),
-      checkOut: new Date(checkOut).toLocaleDateString("en-NG", { dateStyle: "long" }),
-      nights,
-      guests,
-      total,
-      addons: selectedAddonDetails,
-      notes: guest.notes,
-      reference,
-      receiptUrl: receiptUrl, // Properly injected into the template layout variables
-    };
-
-    try {
-      // 2. Now send the confirmation layout safely to the Guest
-      await resend.emails.send({
-        from: "Remeritona Hotel <bookings@remeritona-luxury.workers.dev>",
-        to: guest.email,
-        subject: `Booking Confirmed - ${reference}`,
-        react: BookingEmail(emailData),
-      });
-
-      // 3. Send structured dashboard backup logs to Hotel manager
-      await resend.emails.send({
-        from: "Remeritona Hotel <bookings@remeritona-luxury.workers.dev>",
-        to: "alexekums@gmail.com",
-        subject: `New Booking Alert - ${guest.name}`,
-        html: `
-          <h2>New Booking Received</h2>
-          <p><strong>Guest:</strong> ${guest.name}</p>
-          <p><strong>Email:</strong> ${guest.email}</p>
-          <p><strong>Phone:</strong> ${guest.phone}</p>
-          <p><strong>Room:</strong> ${room.name}</p>
-          <p><strong>Dates:</strong> ${emailData.checkIn} - ${emailData.checkOut} (${nights} nights)</p>
-          <p><strong>Total Paid:</strong> ${formatNaira(total)}</p>
-          <p><strong>Add-ons:</strong> ${selectedAddonDetails.map(a => a.label).join(", ") || "None"}</p>
-          <p><strong>Special Requests:</strong> ${guest.notes || "None"}</p>
-          <p><strong>Reference:</strong> ${reference}</p>
-          <p><strong>Receipt Link:</strong> <a href="${receiptUrl}">${receiptUrl}</a></p>
-        `,
+      // @ts-ignore
+        // @ts-ignore
+        await sendBookingEmail({ data: {
+          guestName: guest.name,
+          guestEmail: guest.email,
+          roomName: room.name,
+          checkIn: new Date(checkIn).toLocaleDateString("en-NG", { dateStyle: "long" }),
+          checkOut: new Date(checkOut).toLocaleDateString("en-NG", { dateStyle: "long" }),
+          nights,
+          guests,
+          total,
+          addons: selectedAddonDetails,
+          notes: guest.notes,
+          reference,
+        }
       });
     } catch (error) {
-      console.error("Failed to send Resend emails:", error);
+      console.error("Failed to send emails:", error);
     }
   };
-  // =============================================================================================
+  // ============================================================
 
   const buildBookingRecord = (
     reference: string,
@@ -418,6 +378,9 @@ function BookingPage() {
   };
 
   // ---------- SAVE CARD & PAY LATER (₦100 tokenization) ----------
+  // Charges a small tokenization fee through the chosen gateway. The returned
+  // reference / authorization is stored so the full amount can be charged
+  // automatically 24h before check-in.
   const handlePaystackSaveCard = () => {
     setPaymentError(null);
     if (!paystackReady || !window.PaystackPop) {
@@ -434,6 +397,7 @@ function BookingPage() {
         ref: reference,
         callback: (response: { reference: string }) => {
           if (response.reference) {
+            // Demo: real auth_code comes from server-side verify.
             const authCode = `AUTH_${response.reference.slice(-8)}`;
             const record = buildBookingRecord(response.reference, "save_card", {
               authorizationCode: authCode,
@@ -494,6 +458,7 @@ function BookingPage() {
     });
   };
 
+  // Eligibility: check-in must be at least 72h after now
   const hoursToCheckIn = (new Date(checkIn).getTime() - Date.now()) / 3_600_000;
   const canSaveCard = hoursToCheckIn >= SAVE_CARD_MIN_HOURS;
 
@@ -512,6 +477,7 @@ function BookingPage() {
     if (paymentMethod === "paystack") handlePaystackSaveCard();
     else handleFlutterwaveSaveCard();
   };
+
 
   if (confirmed) {
     return (
@@ -731,6 +697,7 @@ function BookingPage() {
                   />
                 </div>
 
+                {/* ==================== ADD-ONS SECTION ==================== */}
                 <div
                   className="mt-10 group"
                   onMouseEnter={() => setShowAllAddons(true)}
@@ -760,19 +727,30 @@ function BookingPage() {
                       </label>
                     ))}
                   </div>
+
+                  {ADD_ONS.length > 3 && (
+                    <button
+                      type="button"
+                      onClick={() => setShowAllAddons((v) => !v)}
+                      className="mt-3 w-full py-3 border border-gold/40 text-gold uppercase tracking-widest text-xs hover:bg-gold/10 transition-colors"
+                    >
+                      {showAllAddons ? "Show less" : `Show ${ADD_ONS.length - 3} more add-ons`}
+                    </button>
+                  )}
                 </div>
+                {/* ==================================================== */}
 
                 <div className="flex justify-between mt-8">
                   <button
-                    onClick={() => { setStep(1); scrollToStep(); }}
-                    className="px-6 py-3 border border-border text-foreground font-semibold uppercase tracking-widest text-sm hover:bg-onyx"
+                    onClick={() => setStep(1)}
+                    className="px-6 py-3 border border-border uppercase tracking-widest text-sm hover:border-gold"
                   >
                     Back
                   </button>
                   <button
-                    onClick={() => { setStep(3); scrollToStep(); }}
+                    onClick={() => { if (guest.name && guest.email && guest.phone) { setStep(3); scrollToStep(); } }}
                     disabled={!guest.name || !guest.email || !guest.phone}
-                    className="px-8 py-3 bg-gold text-primary-foreground font-semibold uppercase tracking-widest text-sm hover:bg-gold-soft disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="px-8 py-3 bg-gold text-primary-foreground font-semibold uppercase tracking-widest text-sm hover:bg-gold-soft disabled:opacity-40 disabled:cursor-not-allowed"
                   >
                     Continue to Payment
                   </button>
@@ -781,224 +759,225 @@ function BookingPage() {
             )}
 
             {step === 3 && (
-              <Card title="3. Payment Method">
-                <p className="text-sm text-muted-foreground mb-6">
-                  Choose your preferred secure payment gateway below to finalize your booking reservation.
+              <Card title="3. Payment">
+                <p className="text-muted-foreground mb-6">
+                  Choose your preferred secure payment method below. You'll complete payment in a popup window.
                 </p>
-                
-                <div className="grid sm:grid-cols-2 gap-4 mb-8">
+                <div className="grid sm:grid-cols-2 gap-3 mb-6">
                   <button
                     type="button"
                     onClick={() => setPaymentMethod("paystack")}
-                    className={`p-4 border text-left flex flex-col justify-between h-24 transition-all ${paymentMethod === "paystack" ? "border-gold bg-onyx" : "border-border hover:border-gold/30"}`}
+                    className={`p-4 border text-left transition-colors ${
+                      paymentMethod === "paystack" ? "border-gold bg-onyx" : "border-border hover:border-gold/40"
+                    }`}
                   >
-                    <div className="flex justify-between items-center w-full">
-                      <span className="font-serif text-lg">Paystack</span>
-                      <div className={`w-4 h-4 rounded-full border grid place-items-center ${paymentMethod === "paystack" ? "border-gold" : "border-border"}`}>
-                        {paymentMethod === "paystack" && <div className="w-2 h-2 rounded-full bg-gold" />}
-                      </div>
-                    </div>
-                    <span className="text-xs text-muted-foreground">Cards, Bank Transfer, USSD, Apple Pay</span>
+                    <p className={`text-xs uppercase tracking-widest ${paymentMethod === "paystack" ? "text-gold" : ""}`}>
+                      Paystack
+                    </p>
+                    <p className="text-sm text-muted-foreground mt-1">Pay with Card, Bank Transfer or USSD</p>
                   </button>
-
                   <button
                     type="button"
                     onClick={() => setPaymentMethod("flutterwave")}
-                    className={`p-4 border text-left flex flex-col justify-between h-24 transition-all ${paymentMethod === "flutterwave" ? "border-gold bg-onyx" : "border-border hover:border-gold/30"}`}
+                    className={`p-4 border text-left transition-colors ${
+                      paymentMethod === "flutterwave" ? "border-gold bg-onyx" : "border-border hover:border-gold/40"
+                    }`}
                   >
-                    <div className="flex justify-between items-center w-full">
-                      <span className="font-serif text-lg">Flutterwave</span>
-                      <div className={`w-4 h-4 rounded-full border grid place-items-center ${paymentMethod === "flutterwave" ? "border-gold" : "border-border"}`}>
-                        {paymentMethod === "flutterwave" && <div className="w-2 h-2 rounded-full bg-gold" />}
-                      </div>
-                    </div>
-                    <span className="text-xs text-muted-foreground">Cards, Bank Transfer, Mobile Money, USSD</span>
+                    <p className={`text-xs uppercase tracking-widest ${paymentMethod === "flutterwave" ? "text-gold" : ""}`}>
+                      Flutterwave
+                    </p>
+                    <p className="text-sm text-muted-foreground mt-1">Pay with Card or Bank Transfer</p>
                   </button>
                 </div>
 
                 {paymentError && (
-                  <div className="p-4 bg-red-900/20 border border-red-500/30 text-red-200 text-sm mb-6 flex items-start gap-3">
-                    <X className="shrink-0 mt-0.5 text-red-400" size={16} />
-                    <p>{paymentError}</p>
-                  </div>
+                  <p className="text-gold border border-gold/40 bg-onyx px-4 py-3 text-sm mb-4">
+                    {paymentError}
+                  </p>
                 )}
 
-                <div className="border-t border-border pt-6 space-y-4">
-                  <div className="flex flex-col sm:flex-row gap-4">
-                    <button
-                      onClick={handleConfirm}
-                      disabled={processing}
-                      className="flex-1 py-4 bg-gold text-primary-foreground font-semibold uppercase tracking-widest text-sm hover:bg-gold-soft flex items-center justify-center gap-2 disabled:opacity-50"
-                    >
-                      <CreditCard size={18} />
-                      {processing ? "Processing..." : `Pay Now (${formatNaira(total)})`}
-                    </button>
-                  </div>
+                {processing && (
+                  <p className="text-muted-foreground text-sm mb-4 text-center animate-pulse">
+                    Processing your payment...
+                  </p>
+                )}
 
-                  {canSaveCard ? (
-                    <div className="bg-onyx border border-border p-4 rounded-lg flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-                      <div className="space-y-1">
-                        <div className="flex items-center gap-2 text-sm font-medium text-foreground">
-                          <Lock size={16} className="text-gold" />
-                          <span>Save Card & Pay Later</span>
-                        </div>
-                        <p className="text-xs text-muted-foreground max-w-md">
-                          Authorize your reservation now with just ₦100. The full room rate balance ({formatNaira(total)}) will be automatically billed to your card 24 hours prior to check-in.
-                        </p>
-                      </div>
-                      <button
-                        onClick={handleSaveCard}
-                        disabled={processing}
-                        className="w-full sm:w-auto px-4 py-2.5 border border-gold text-gold font-semibold uppercase tracking-widest text-xs hover:bg-gold hover:text-primary-foreground transition-all shrink-0"
-                      >
-                        Secure Booking
-                      </button>
-                    </div>
-                  ) : (
-                    <div className="bg-onyx/40 border border-border/60 p-4 rounded-lg flex items-start gap-3 text-muted-foreground">
-                      <Clock size={16} className="shrink-0 mt-0.5" />
-                      <p className="text-xs">
-                        "Save Card & Pay Later" requires reservations to be placed at least {SAVE_CARD_MIN_HOURS} hours before check-in. This option is unavailable for your selected dates.
-                      </p>
-                    </div>
-                  )}
-                </div>
-
-                <div className="flex justify-start mt-8">
+                <div className="flex justify-between items-center">
                   <button
-                    onClick={() => { setStep(2); scrollToStep(); }}
-                    className="px-6 py-3 border border-border text-foreground font-semibold uppercase tracking-widest text-sm hover:bg-onyx"
+                    onClick={() => setStep(2)}
+                    className="px-6 py-3 border border-border uppercase tracking-widest text-sm hover:border-gold"
                   >
                     Back
                   </button>
+                  <button
+                    onClick={handleConfirm}
+                    disabled={processing}
+                    className="px-8 py-3 bg-gold text-primary-foreground font-semibold uppercase tracking-widest text-sm hover:bg-gold-soft inline-flex items-center gap-2 disabled:opacity-50"
+                  >
+                    <CreditCard size={16} /> {processing ? "Processing..." : "Confirm Booking"}
+                  </button>
                 </div>
+                <p className="flex items-center justify-center gap-2 text-xs text-muted-foreground mt-4">
+                  <Lock size={12} className="text-gold" /> Secured & Encrypted Payment
+                </p>
               </Card>
             )}
           </div>
 
-          {/* ==================== SIDEBAR SUMMARY PANEL ==================== */}
-          <aside ref={summaryRef} className="space-y-6 lg:sticky lg:top-28 h-fit">
-            <div className="bg-charcoal border border-border p-6 space-y-6">
-              <h3 className="font-serif text-2xl border-b border-border pb-4">Your Stay</h3>
-              
-              <div className="space-y-4 text-sm">
-                <div className="flex justify-between items-start gap-4">
-                  <div>
-                    <p className="font-medium text-foreground">{room.name}</p>
-                    <p className="text-xs text-muted-foreground">{numRooms} {numRooms === 1 ? "room" : "rooms"} · {nights} {nights === 1 ? "night" : "nights"}</p>
-                  </div>
-                  <span className="font-serif text-base text-gold">{formatNaira(room.price)}</span>
-                </div>
-
-                <div className="grid grid-cols-2 gap-4 bg-onyx p-3 border border-border text-xs">
-                  <div>
-                    <span className="text-muted-foreground block uppercase tracking-wider mb-0.5">Check In</span>
-                    <span className="font-medium text-foreground">{new Date(checkIn).toLocaleDateString("en-NG", { month: "short", day: "numeric", year: "numeric" })}</span>
-                  </div>
-                  <div>
-                    <span className="text-muted-foreground block uppercase tracking-wider mb-0.5">Check Out</span>
-                    <span className="font-medium text-foreground">{new Date(checkOut).toLocaleDateString("en-NG", { month: "short", day: "numeric", year: "numeric" })}</span>
-                  </div>
-                </div>
-
-                <div className="flex justify-between text-muted-foreground pt-2">
-                  <span>Room Subtotal</span>
-                  <span>{formatNaira(subtotal)}</span>
-                </div>
-
-                {selectedAddons.length > 0 && (
-                  <div className="space-y-1.5 border-t border-border/40 pt-3">
-                    <span className="text-xs uppercase tracking-wider text-gold block mb-1">Selected Add-ons</span>
-                    {selectedAddons.map(id => {
-                      const addon = ADD_ONS.find(a => a.id === id);
-                      return (
-                        <div key={id} className="flex justify-between text-xs text-muted-foreground">
-                          <span>{addon?.label}</span>
-                          <span>{formatNaira(addon?.price || 0)}</span>
-                        </div>
-                      );
-                    })}
-                  </div>
+          <aside ref={summaryRef} className="scroll-mt-28">
+            <div className="bg-charcoal border border-gold/30 p-6 lg:sticky lg:top-28">
+              <p className="text-gold text-xs uppercase tracking-[0.4em] mb-4">Reservation Summary</p>
+              <img src={room.image} alt={room.name} className="w-full aspect-video object-cover mb-4" />
+              <h3 className="font-serif text-xl mb-4">{room.name}</h3>
+              <div className="space-y-2 text-sm border-t border-border pt-4">
+                <Row label="Check-in" value={new Date(checkIn).toLocaleDateString()} />
+                <Row label="Check-out" value={new Date(checkOut).toLocaleDateString()} />
+                <Row label="Nights" value={String(nights)} />
+                <Row label="Rooms" value={String(numRooms)} />
+                <Row label="Guests" value={`${guests} ${guests === 1 ? "Guest" : "Guests"}`} />
+                <Row label="Booking type" value={bookingType === "self" ? "Myself" : bookingType === "family" ? "Family & friends" : "Corporate team"} />
+              </div>
+              <div className="border-t border-border mt-4 pt-4 space-y-2 text-sm">
+                <Row label={`${formatNaira(room.price)} × ${nights} nights × ${numRooms} ${numRooms === 1 ? "room" : "rooms"}`} value={formatNaira(subtotal)} />
+                {discount > 0 && couponResult && couponResult.valid && (
+                  <Row label={couponResult.label} value={`− ${formatNaira(discount)}`} />
                 )}
+                <Row label="Taxes & fees (7.5%)" value={formatNaira(tax)} />
+                {addonsTotal > 0 && (
+                  <Row label="Add-ons" value={formatNaira(addonsTotal)} />
+                )}
+              </div>
 
-                {/* Coupon Input Area */}
-                <div className="border-t border-border/40 pt-4">
-                  {couponResult?.valid ? (
-                    <div className="bg-green-950/20 border border-green-500/30 p-2.5 flex items-center justify-between text-xs text-green-300">
-                      <div className="flex items-center gap-2">
-                        <Tag size={14} />
-                        <span>Code <strong>{couponCode.toUpperCase()}</strong> applied (-{formatNaira(couponResult.discount)})</span>
-                      </div>
-                      <button onClick={removeCoupon} className="text-green-400 hover:text-green-200">
-                        <X size={14} />
-                      </button>
-                    </div>
-                  ) : (
+              {/* Coupon */}
+              <div className="border-t border-border mt-4 pt-4">
+                <label className="text-[10px] uppercase tracking-[0.3em] text-gold flex items-center gap-1.5 mb-2">
+                  <Tag size={12} /> Promo / Coupon code
+                </label>
+                {couponResult && couponResult.valid ? (
+                  <div className="flex items-center justify-between gap-2 bg-onyx border border-gold/40 px-3 py-2 text-sm">
+                    <span className="text-gold truncate">{couponResult.message}</span>
+                    <button onClick={removeCoupon} className="text-muted-foreground hover:text-gold" aria-label="Remove coupon">
+                      <X size={14} />
+                    </button>
+                  </div>
+                ) : (
+                  <>
                     <div className="flex gap-2">
                       <input
-                        type="text"
-                        placeholder="Promo Code"
                         value={couponCode}
                         onChange={(e) => setCouponCode(e.target.value)}
-                        className="bg-onyx border border-border px-3 py-2 text-xs text-foreground focus:border-gold focus:outline-none flex-1 uppercase"
+                        placeholder="e.g. FON-WEEKEND"
+                        className="flex-1 bg-onyx border border-border px-3 py-2 text-sm text-foreground focus:border-gold focus:outline-none uppercase tracking-wider"
                       />
                       <button
                         onClick={handleApplyCoupon}
-                        className="bg-border hover:bg-gold hover:text-primary-foreground px-3 text-xs uppercase tracking-wider font-semibold transition-colors"
+                        type="button"
+                        className="px-4 py-2 bg-gold text-primary-foreground text-xs uppercase tracking-widest font-semibold hover:bg-gold-soft"
                       >
                         Apply
                       </button>
                     </div>
-                  )}
-                  {couponResult && !couponResult.valid && (
-                    <p className="text-xs text-red-400 mt-1.5">{couponResult.reason}</p>
-                  )}
-                </div>
-
-                <div className="border-t border-border pt-4 space-y-2">
-                  <div className="flex justify-between text-muted-foreground text-xs">
-                    <span>VAT (7.5%)</span>
-                    <span>{formatNaira(tax)}</span>
-                  </div>
-                  <div className="flex justify-between items-baseline pt-2">
-                    <span className="font-serif text-lg">Total Cost</span>
-                    <span className="font-serif text-2xl text-gold">{formatNaira(total)}</span>
-                  </div>
-                </div>
+                    {couponResult && !couponResult.valid && (
+                      <p className="text-xs text-gold/80 mt-2">{couponResult.reason}</p>
+                    )}
+                  </>
+                )}
               </div>
+
+              <div className="border-t border-gold/30 mt-4 pt-4">
+                <Row label="Total" value={formatNaira(total)} highlight />
+              </div>
+
+              {selectedAddons.length > 0 && (
+                <div className="mt-4 pt-4 border-t border-border text-xs">
+                  <p className="text-gold mb-1">Selected Add-ons:</p>
+                  <ul className="space-y-1 text-muted-foreground">
+                    {selectedAddons.map(id => {
+                      const addon = ADD_ONS.find(a => a.id === id);
+                      return <li key={id}>• {addon?.label}</li>;
+                    })}
+                  </ul>
+                </div>
+              )}
             </div>
 
-            {/* Mobile Helper Floating Trigger Layout */}
-            {step < 3 && (
-              <button
-                onClick={step === 1 ? () => { setStep(2); scrollToForm(); } : () => { setStep(3); scrollToForm(); }}
-                disabled={step === 2 && (!guest.name || !guest.email || !guest.phone)}
-                className="w-full lg:hidden py-4 bg-gold text-primary-foreground font-semibold uppercase tracking-widest text-sm hover:bg-gold-soft disabled:opacity-50"
-              >
-                Continue Booking
-              </button>
-            )}
+            {/* Mobile-only continue button below summary */}
+            <div className="lg:hidden mt-6">
+              {step === 1 && (
+                <button
+                  onClick={() => { setStep(2); scrollToForm(); }}
+                  className="w-full py-4 bg-gold text-primary-foreground font-semibold uppercase tracking-widest text-sm hover:bg-gold-soft"
+                >
+                  Continue
+                </button>
+              )}
+              {step === 2 && (
+                <button
+                  onClick={() => { if (guest.name && guest.email && guest.phone) { setStep(3); scrollToForm(); } }}
+                  disabled={!guest.name || !guest.email || !guest.phone}
+                  className="w-full py-4 bg-gold text-primary-foreground font-semibold uppercase tracking-widest text-sm hover:bg-gold-soft disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  Continue to Payment
+                </button>
+              )}
+              {step === 3 && (
+                <button
+                  onClick={handleConfirm}
+                  disabled={processing}
+                  className="w-full py-4 bg-gold text-primary-foreground font-semibold uppercase tracking-widest text-sm hover:bg-gold-soft inline-flex items-center justify-center gap-2 disabled:opacity-50"
+                >
+                  <CreditCard size={16} /> {processing ? "Processing..." : "Confirm Booking"}
+                </button>
+              )}
+            </div>
           </aside>
         </div>
       </section>
 
-      {/* Confirmation Selector Modal Prompt Overlay */}
       {showPaymentChoice && (
-        <div className="fixed inset-0 bg-background/80 backdrop-blur-sm z-50 grid place-items-center p-6">
-          <div className="bg-charcoal border border-gold/30 p-8 max-w-md w-full relative space-y-6 text-center">
-            <button onClick={() => setShowPaymentChoice(false)} className="absolute top-4 right-4 text-muted-foreground hover:text-foreground">
-              <X size={18} />
-            </button>
-            <h3 className="font-serif text-2xl">Confirm Booking Rate</h3>
-            <p className="text-sm text-muted-foreground">
-              You are about to process a transaction value of <strong>{formatNaira(total)}</strong> via {paymentMethod === "paystack" ? "Paystack Secure" : "Flutterwave Gateway"}.
+        <div className="fixed inset-0 bg-onyx/80 backdrop-blur-sm z-[60] grid place-items-center px-4">
+          <div className="bg-charcoal border border-gold/40 max-w-md w-full p-6">
+            <p className="text-gold text-xs uppercase tracking-[0.4em] mb-2">Choose how to pay</p>
+            <h3 className="font-serif text-2xl mb-3">Payment options</h3>
+            <p className="text-sm text-muted-foreground mb-5">
+              Pay the full amount now, or save your card with a small ₦{TOKENIZATION_FEE} authorization fee
+              and we'll automatically charge the balance 24 hours before check-in.
             </p>
-            <div className="flex flex-col gap-2 pt-2">
-              <button onClick={handlePayNow} className="py-3 bg-gold text-primary-foreground font-semibold uppercase tracking-widest text-xs hover:bg-gold-soft">
-                Authorize Transaction
+            <div className="space-y-3">
+              <button
+                onClick={handlePayNow}
+                className="w-full p-4 border border-gold bg-onyx text-left hover:bg-onyx/70 transition-colors flex items-start gap-3"
+              >
+                <CreditCard size={20} className="text-gold mt-1 shrink-0" />
+                <div>
+                  <p className="font-semibold uppercase tracking-widest text-sm text-gold">Pay now</p>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Charge {formatNaira(total)} to your card via {paymentMethod === "paystack" ? "Paystack" : "Flutterwave"}.
+                  </p>
+                </div>
               </button>
-              <button onClick={() => setShowPaymentChoice(false)} className="py-3 border border-border text-foreground text-xs font-semibold uppercase tracking-widest hover:bg-onyx">
-                Cancel
+              <button
+                onClick={handleSaveCard}
+                disabled={!canSaveCard}
+                className="w-full p-4 border border-border text-left hover:border-gold/60 transition-colors flex items-start gap-3 disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                <Wallet size={20} className="text-gold mt-1 shrink-0" />
+                <div>
+                  <p className="font-semibold uppercase tracking-widest text-sm">Save card &amp; pay later</p>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    {canSaveCard
+                      ? `₦${TOKENIZATION_FEE} authorization now. Balance ${formatNaira(total)} charged automatically 24h before check-in.`
+                      : `Available only when check-in is at least ${SAVE_CARD_MIN_HOURS} hours away.`}
+                  </p>
+                </div>
+              </button>
+            </div>
+            <div className="flex justify-end mt-5">
+              <button
+                onClick={() => setShowPaymentChoice(false)}
+                className="text-xs uppercase tracking-widest text-muted-foreground hover:text-gold inline-flex items-center gap-1.5"
+              >
+                <Clock size={12} /> Decide later
               </button>
             </div>
           </div>
@@ -1010,29 +989,49 @@ function BookingPage() {
   );
 }
 
-// Minimalist Subcomponents definitions
+function Stepper({ step }: { step: 1 | 2 | 3 }) {
+  const steps = ["Dates & Room", "Guest Details", "Payment"];
+  return (
+    <ol className="flex flex-wrap gap-4">
+      {steps.map((s, i) => {
+        const n = (i + 1) as 1 | 2 | 3;
+        const active = n === step;
+        const done = n < step;
+        return (
+          <li key={s} className="flex items-center gap-3">
+            <span className={`w-8 h-8 grid place-items-center text-sm border ${
+              active ? "bg-gold text-primary-foreground border-gold" : done ? "bg-onyx border-gold text-gold" : "border-border text-muted-foreground"
+            }`}>{n}</span>
+            <span className={`text-xs uppercase tracking-widest ${active || done ? "text-foreground" : "text-muted-foreground"}`}>{s}</span>
+          </li>
+        );
+      })}
+    </ol>
+  );
+}
+
 function Card({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <div className="bg-charcoal border border-border p-6 md:p-8 space-y-6">
-      <h2 className="font-serif text-2xl md:text-3xl border-b border-border pb-4">{title}</h2>
+    <div className="bg-charcoal border border-border p-6 md:p-8">
+      <h2 className="font-serif text-2xl mb-6">{title}</h2>
       {children}
     </div>
   );
 }
 
-function Input({ label, type = "text", value, min, onChange, required }: { label: string; type?: string; value: string; min?: string; onChange: (v: string) => void; required?: boolean }) {
+function Input({ label, type = "text", value, onChange, min, required }: {
+  label: string; type?: string; value: string; onChange: (v: string) => void; min?: string; required?: boolean;
+}) {
   return (
-    <div className="flex flex-col gap-1.5 w-full">
-      <label className="text-xs uppercase tracking-widest text-gold">
-        {label} {required && <span className="text-red-400">*</span>}
-      </label>
+    <div className="flex flex-col gap-1.5">
+      <label className="text-xs uppercase tracking-widest text-gold">{label}{required && " *"}</label>
       <input
         type={type}
         value={value}
         min={min}
         required={required}
         onChange={(e) => onChange(e.target.value)}
-        className="bg-onyx border border-border px-4 py-3 text-foreground focus:border-gold focus:outline-none w-full"
+        className="bg-onyx border border-border px-3 py-3 text-foreground focus:border-gold focus:outline-none"
       />
     </div>
   );
@@ -1040,21 +1039,9 @@ function Input({ label, type = "text", value, min, onChange, required }: { label
 
 function Row({ label, value, highlight }: { label: string; value: string; highlight?: boolean }) {
   return (
-    <div className={`flex justify-between py-1 border-b border-border/20 text-sm ${highlight ? "text-gold font-medium" : "text-muted-foreground"}`}>
-      <span>{label}</span>
-      <span className="text-foreground font-mono">{value}</span>
-    </div>
-  );
-}
-
-function Stepper({ step }: { step: number }) {
-  return (
-    <div className="flex items-center gap-4 text-xs uppercase tracking-widest max-w-md">
-      <span className={step === 1 ? "text-gold font-bold" : "text-muted-foreground"}>01. Selection</span>
-      <span className="h-px bg-border flex-1" />
-      <span className={step === 2 ? "text-gold font-bold" : "text-muted-foreground"}>02. Details</span>
-      <span className="h-px bg-border flex-1" />
-      <span className={step === 3 ? "text-gold font-bold" : "text-muted-foreground"}>03. Payment</span>
+    <div className="flex justify-between items-baseline gap-2">
+      <span className={highlight ? "font-serif text-base" : "text-muted-foreground"}>{label}</span>
+      <span className={highlight ? "font-serif text-2xl text-gold" : "text-foreground"}>{value}</span>
     </div>
   );
 }
