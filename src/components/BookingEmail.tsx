@@ -1,5 +1,5 @@
 import * as React from 'react';
-import { Html, Head, Body, Container, Text, Section, Hr, Row, Column } from '@react-email/components';
+import { Html, Head, Body, Container, Text, Section, Hr, Row, Column, Img } from '@react-email/components';
 
 interface BookingEmailProps {
   guestName: string;
@@ -12,6 +12,7 @@ interface BookingEmailProps {
   addons: Array<{ label: string; price: number }>;
   notes: string;
   reference: string;
+  receiptUrl?: string; // Safely accepts the image URL
 }
 
 export default function BookingEmail({
@@ -25,6 +26,7 @@ export default function BookingEmail({
   addons,
   notes,
   reference,
+  receiptUrl, // Safely maps the image URL
 }: BookingEmailProps) {
   return (
     <Html>
@@ -70,6 +72,18 @@ export default function BookingEmail({
             <Text style={{ fontSize: '20px', color: '#f1c40f', marginTop: '20px' }}>
               Total Paid: ₦{total.toLocaleString()}
             </Text>
+
+            {/* Embeds your receipt image visually inside the email template layout */}
+            {receiptUrl && (
+              <Section style={{ marginTop: '25px', textAlign: 'center' }}>
+                <Text style={{ textAlign: 'left' }}><strong>Your Payment Receipt:</strong></Text>
+                <Img 
+                  src={receiptUrl} 
+                  alt="Transaction Receipt" 
+                  style={{ width: '100%', maxWidth: '400px', borderRadius: '6px', marginTop: '10px', display: 'block', margin: '0 auto' }} 
+                />
+              </Section>
+            )}
 
             <Hr style={{ borderColor: '#333', margin: '25px 0' }} />
 
