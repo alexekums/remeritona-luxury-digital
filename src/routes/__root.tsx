@@ -95,6 +95,7 @@ function RootShell({ children }: { children: React.ReactNode }) {
 function RootComponent() {
   return (
     <>
+      <IntroAnimation />
       <Outlet />
       <WhatsAppButton />
     </>
