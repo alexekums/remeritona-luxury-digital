@@ -8,6 +8,7 @@ import { Check, CreditCard, Lock, Plus, Users, Briefcase, User, Tag, X, Clock, W
 import { z } from "zod";
 import { saveBooking, type StoredBooking } from "@/data/bookings-store";
 import { sendBookingEmail } from "@/functions/sendBookingEmail";
+import { saveBookingToDb } from "@/functions/saveBookingToDb";
 
 const TOKENIZATION_FEE = 100; // NGN — small Save-card-now charge to capture authorization
 const SAVE_CARD_MIN_HOURS = 72;
@@ -315,6 +316,8 @@ function BookingPage() {
             const record = buildBookingRecord(response.reference, "pay_now");
             saveBooking(record);
             sendBookingEmails(response.reference);
+            // @ts-ignore
+            saveBookingToDb({ data: record });
             setConfirmed(true);
           }
         },
@@ -365,6 +368,8 @@ function BookingPage() {
           const record = buildBookingRecord(reference, "pay_now");
           saveBooking(record);
           await sendBookingEmails(reference);
+          // @ts-ignore
+          saveBookingToDb({ data: record });
           setTimeout(() => {
             if (modal && typeof modal.close === "function") modal.close();
             setConfirmed(true);

@@ -1,7 +1,16 @@
 {
-  "$schema": "node_modules/wrangler/config-schema.json",
-  "name": "lexgold",
-  "compatibility_date": "2025-09-24",
-  "compatibility_flags": ["nodejs_compat"],
-  "main": "@tanstack/react-start/server-entry"
+	"$schema": "node_modules/wrangler/config-schema.json",
+	"name": "lexgold",
+	"compatibility_date": "2025-09-24",
+	"compatibility_flags": [
+		"nodejs_compat"
+	],
+	"main": "@tanstack/react-start/server-entry",
+	"d1_databases": [
+		{
+			"binding": "remeritona_bookings",
+			"database_name": "remeritona-bookings",
+			"database_id": "500a5ed1-b048-424c-a8d6-610f364b1cf9"
+		}
+	]
 }

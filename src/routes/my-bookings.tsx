@@ -5,6 +5,7 @@ import { SiteFooter } from "@/components/SiteFooter";
 import { findBooking, refundPolicy, saveBooking, type StoredBooking } from "@/data/bookings-store";
 import { formatNaira } from "@/data/rooms";
 import { Search, ShieldCheck, AlertTriangle, Check } from "lucide-react";
+import { cancelBooking } from "@/functions/cancelBooking";
 
 export const Route = createFileRoute("/my-bookings")({
   head: () => ({
@@ -40,42 +41,51 @@ function MyBookingsPage() {
 
   const policy = booking ? refundPolicy(booking.checkIn) : null;
 
-  // Mock refund call — in production this would hit Paystack or Flutterwave refund API.
-  const callRefundApi = async (b: StoredBooking, amount: number): Promise<{ ok: boolean; reason?: string }> => {
-    await new Promise((r) => setTimeout(r, 1200));
-    if (amount === 0) return { ok: true };
-    // Simulate success; both Paystack and Flutterwave expose POST /refund endpoints
-    // that take the original transaction reference + amount.
-    return { ok: true };
-  };
-
   const handleCancel = async () => {
     if (!booking || !policy) return;
     setProcessing(true);
     const refundAmount = Math.round((booking.amountCharged * policy.percent) / 100);
-    const result = await callRefundApi(booking, refundAmount);
-    setProcessing(false);
-    if (!result.ok) {
-      setError(`Refund failed: ${result.reason ?? "unknown error"}`);
-      return;
+    try {
+      // @ts-ignore
+      const result = await cancelBooking({
+        // @ts-ignore
+        data: {
+          reference: booking.reference,
+          gateway: booking.gateway,
+          refundAmount,
+          guestEmail: booking.guest.email,
+          guestName: booking.guest.name,
+          roomName: booking.roomName,
+          checkIn: new Date(booking.checkIn).toLocaleDateString("en-NG", { dateStyle: "long" }),
+          total: booking.total,
+        }
+      });
+      setProcessing(false);
+      if (!result.success) {
+        setError(`Refund failed: ${result.error ?? "unknown error"}`);
+        return;
+      }
+      const updated: StoredBooking = {
+        ...booking,
+        status: "cancelled",
+        cancellation: {
+          cancelledAt: new Date().toISOString(),
+          refundPercent: policy.percent,
+          refundAmount,
+        },
+      };
+      saveBooking(updated);
+      setBooking(updated);
+      setShowConfirm(false);
+      setCancelMessage(
+        refundAmount > 0
+          ? `Booking cancelled. A refund of ${formatNaira(refundAmount)} (${policy.percent}%) has been initiated via ${booking.gateway === "paystack" ? "Paystack" : "Flutterwave"}.`
+          : "Booking cancelled. Per policy, no refund is due.",
+      );
+    } catch (err) {
+      setProcessing(false);
+      setError("Cancellation failed. Please try again.");
     }
-    const updated: StoredBooking = {
-      ...booking,
-      status: "cancelled",
-      cancellation: {
-        cancelledAt: new Date().toISOString(),
-        refundPercent: policy.percent,
-        refundAmount,
-      },
-    };
-    saveBooking(updated);
-    setBooking(updated);
-    setShowConfirm(false);
-    setCancelMessage(
-      refundAmount > 0
-        ? `Booking cancelled. A refund of ${formatNaira(refundAmount)} (${policy.percent}%) has been initiated via ${booking.gateway === "paystack" ? "Paystack" : "Flutterwave"}.`
-        : "Booking cancelled. Per policy, no refund is due.",
-    );
   };
 
   return (
