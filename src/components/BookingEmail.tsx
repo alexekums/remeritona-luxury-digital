@@ -7,6 +7,7 @@ interface BookingEmailProps {
   checkIn: string;
   checkOut: string;
   nights: number;
+  numRooms: number;
   guests: number;
   total: number;
   addons: Array<{ label: string; price: number }>;
@@ -14,10 +15,11 @@ interface BookingEmailProps {
   reference: string;
 }
 
-export default function BookingEmail({ guestName, roomName, checkIn, checkOut, nights, guests, total, addons, notes, reference }: BookingEmailProps) {
+export default function BookingEmail({ guestName, roomName, checkIn, checkOut, nights, numRooms, guests, total, addons, notes, reference }: BookingEmailProps) {
   const addonsTotal = addons.reduce((s, a) => s + a.price, 0);
   const base = Math.round((total - addonsTotal) / 1.075);
   const tax = Math.round(base * 0.075);
+  const naira = "&#8358;";
 
   return (
     <Html>
@@ -35,6 +37,7 @@ export default function BookingEmail({ guestName, roomName, checkIn, checkOut, n
               <Text style={{ fontSize: "10px", letterSpacing: "0.35em", color: "#c9a84c", textTransform: "uppercase", margin: "0 0 12px" }}>Booking Details</Text>
               <Text style={{ fontSize: "13px", color: "#888", margin: "4px 0" }}>Reference: <span style={{ color: "#c9a84c", fontFamily: "monospace" }}>{reference}</span></Text>
               <Text style={{ fontSize: "13px", color: "#888", margin: "4px 0" }}>Room: <span style={{ color: "#f0f0f0" }}>{roomName}</span></Text>
+              <Text style={{ fontSize: "13px", color: "#888", margin: "4px 0" }}>Rooms: <span style={{ color: "#f0f0f0" }}>{numRooms}</span></Text>
               <Text style={{ fontSize: "13px", color: "#888", margin: "4px 0" }}>Check-in: <span style={{ color: "#f0f0f0" }}>{checkIn}</span></Text>
               <Text style={{ fontSize: "13px", color: "#888", margin: "4px 0" }}>Check-out: <span style={{ color: "#f0f0f0" }}>{checkOut}</span></Text>
               <Text style={{ fontSize: "13px", color: "#888", margin: "4px 0" }}>Nights: <span style={{ color: "#f0f0f0" }}>{nights}</span></Text>
@@ -42,13 +45,13 @@ export default function BookingEmail({ guestName, roomName, checkIn, checkOut, n
             </Section>
             <Section style={{ backgroundColor: "#1a1a1a", border: "1px solid #333", borderRadius: "6px", padding: "20px 24px", marginBottom: "20px" }}>
               <Text style={{ fontSize: "10px", letterSpacing: "0.35em", color: "#c9a84c", textTransform: "uppercase", margin: "0 0 12px" }}>Payment Summary</Text>
-              <Text style={{ fontSize: "13px", color: "#888", margin: "4px 0" }}>Room ({nights} {nights === 1 ? "night" : "nights"}): <span style={{ color: "#ccc" }}>?{base.toLocaleString()}</span></Text>
-              <Text style={{ fontSize: "13px", color: "#888", margin: "4px 0" }}>Taxes & fees (7.5%): <span style={{ color: "#ccc" }}>?{tax.toLocaleString()}</span></Text>
+              <Text style={{ fontSize: "13px", color: "#888", margin: "4px 0" }}>{numRooms} {numRooms === 1 ? "Room" : "Rooms"} x {nights} {nights === 1 ? "night" : "nights"}: <span style={{ color: "#ccc" }} dangerouslySetInnerHTML={{ __html: `${naira}${base.toLocaleString()}` }} /></Text>
+              <Text style={{ fontSize: "13px", color: "#888", margin: "4px 0" }}>Taxes & fees (7.5%): <span style={{ color: "#ccc" }} dangerouslySetInnerHTML={{ __html: `${naira}${tax.toLocaleString()}` }} /></Text>
               {addons.map((addon, i) => (
-                <Text key={i} style={{ fontSize: "13px", color: "#888", margin: "4px 0" }}>{addon.label}: <span style={{ color: "#ccc" }}>?{addon.price.toLocaleString()}</span></Text>
+                <Text key={i} style={{ fontSize: "13px", color: "#888", margin: "4px 0" }}>{addon.label}: <span style={{ color: "#ccc" }} dangerouslySetInnerHTML={{ __html: `${naira}${addon.price.toLocaleString()}` }} /></Text>
               ))}
               <Hr style={{ borderColor: "#333", margin: "12px 0 8px" }} />
-              <Text style={{ fontSize: "18px", color: "#c9a84c", margin: "0" }}>Total Paid: ?{total.toLocaleString()}</Text>
+              <Text style={{ fontSize: "18px", color: "#c9a84c", margin: "0" }} dangerouslySetInnerHTML={{ __html: `Total Paid: ${naira}${total.toLocaleString()}` }} />
             </Section>
             {notes ? (
               <Section style={{ backgroundColor: "#161616", borderLeft: "3px solid #c9a84c", padding: "14px 18px", marginBottom: "28px" }}>
@@ -58,7 +61,7 @@ export default function BookingEmail({ guestName, roomName, checkIn, checkOut, n
             ) : null}
             <Hr style={{ borderColor: "#222", margin: "20px 0" }} />
             <Text style={{ textAlign: "center", fontSize: "12px", color: "#555", margin: "0", lineHeight: "1.8" }}>
-              Remeritona Hotel & Suites · Abakaliki, Ebonyi State{"\n"}This is an automated confirmation. Please do not reply.
+              Remeritona Hotel & Suites · Abakaliki, Ebonyi State
             </Text>
           </Section>
         </Container>

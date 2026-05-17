@@ -237,6 +237,7 @@ function BookingPage() {
           checkIn: new Date(checkIn).toLocaleDateString("en-NG", { dateStyle: "long" }),
           checkOut: new Date(checkOut).toLocaleDateString("en-NG", { dateStyle: "long" }),
           nights,
+          numRooms,
           guests,
           total,
           addons: selectedAddonDetails,
@@ -316,8 +317,7 @@ function BookingPage() {
             const record = buildBookingRecord(response.reference, "pay_now");
             saveBooking(record);
             sendBookingEmails(response.reference);
-            // @ts-ignore
-            saveBookingToDb({ data: record });
+            fetch("/api/save-booking", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(record) });
             setConfirmed(true);
           }
         },
