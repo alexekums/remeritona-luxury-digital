@@ -2,11 +2,13 @@ import { createServerFn } from "@tanstack/react-start";
 import { env } from "cloudflare:workers";
 
 const db = () => (env as any).remeritona_bookings as D1Database;
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type AnyPromise = Promise<any>;
 
 // ===== AUTH =====
 export const guestLogin = createServerFn({ method: "POST" })
   .inputValidator((d: { roomNumber: string; bookingRef: string }) => d)
-  .handler(async ({ data }) => {
+  .handler(async ({ data }): AnyPromise => {
     const guest = await db().prepare(
       `SELECT * FROM guests WHERE room_number = ? AND booking_ref = ? AND hotel_id = 'remeritona' LIMIT 1`
     ).bind(data.roomNumber, data.bookingRef.toUpperCase()).first() as any;
@@ -16,7 +18,7 @@ export const guestLogin = createServerFn({ method: "POST" })
 
 export const getGuest = createServerFn({ method: "POST" })
   .inputValidator((d: { guestId: string }) => d)
-  .handler(async ({ data }) => {
+    .handler(async ({ data }): AnyPromise => {
     const guest = await db().prepare(
       `SELECT * FROM guests WHERE id = ? LIMIT 1`
     ).bind(data.guestId).first() as any;
@@ -27,7 +29,7 @@ export const getGuest = createServerFn({ method: "POST" })
 // ===== SERVICE REQUESTS =====
 export const createServiceRequest = createServerFn({ method: "POST" })
   .inputValidator((d: { guestId: string; roomNumber: string; requestType: string; notes?: string; category?: string }) => d)
-  .handler(async ({ data }) => {
+    .handler(async ({ data }): AnyPromise => {
     await db().prepare(
       `INSERT INTO service_requests (guest_id, room_number, request_type, notes, category, hotel_id) VALUES (?, ?, ?, ?, ?, 'remeritona')`
     ).bind(data.guestId, data.roomNumber, data.requestType, data.notes ?? null, data.category ?? null).run();
@@ -36,7 +38,7 @@ export const createServiceRequest = createServerFn({ method: "POST" })
 
 export const listMyRequests = createServerFn({ method: "POST" })
   .inputValidator((d: { guestId: string }) => d)
-  .handler(async ({ data }) => {
+    .handler(async ({ data }): AnyPromise => {
     const result = await db().prepare(
       `SELECT * FROM service_requests WHERE guest_id = ? ORDER BY created_at DESC`
     ).bind(data.guestId).all();
@@ -45,7 +47,7 @@ export const listMyRequests = createServerFn({ method: "POST" })
 
 export const updateServiceRequest = createServerFn({ method: "POST" })
   .inputValidator((d: { id: string; status: string }) => d)
-  .handler(async ({ data }) => {
+    .handler(async ({ data }): AnyPromise => {
     await db().prepare(
       `UPDATE service_requests SET status = ?, updated_at = datetime('now') WHERE id = ?`
     ).bind(data.status, data.id).run();
@@ -55,7 +57,7 @@ export const updateServiceRequest = createServerFn({ method: "POST" })
 // ===== FOOD ORDERS =====
 export const placeFoodOrder = createServerFn({ method: "POST" })
   .inputValidator((d: { guestId: string; roomNumber: string; items: Array<{ name: string; price: number; quantity: number }>; totalAmount: number; specialInstructions?: string }) => d)
-  .handler(async ({ data }) => {
+    .handler(async ({ data }): AnyPromise => {
     await db().prepare(
       `INSERT INTO food_orders (guest_id, room_number, items, total_amount, special_instructions, hotel_id) VALUES (?, ?, ?, ?, ?, 'remeritona')`
     ).bind(data.guestId, data.roomNumber, JSON.stringify(data.items), data.totalAmount, data.specialInstructions ?? null).run();
@@ -65,7 +67,7 @@ export const placeFoodOrder = createServerFn({ method: "POST" })
 
 export const listFoodOrders = createServerFn({ method: "POST" })
   .inputValidator((d: { guestId: string }) => d)
-  .handler(async ({ data }) => {
+    .handler(async ({ data }): AnyPromise => {
     const result = await db().prepare(
       `SELECT * FROM food_orders WHERE guest_id = ? ORDER BY created_at DESC`
     ).bind(data.guestId).all();
@@ -74,7 +76,7 @@ export const listFoodOrders = createServerFn({ method: "POST" })
 
 export const updateFoodOrder = createServerFn({ method: "POST" })
   .inputValidator((d: { id: string; status: string }) => d)
-  .handler(async ({ data }) => {
+    .handler(async ({ data }): AnyPromise => {
     await db().prepare(
       `UPDATE food_orders SET status = ? WHERE id = ?`
     ).bind(data.status, data.id).run();
@@ -84,7 +86,7 @@ export const updateFoodOrder = createServerFn({ method: "POST" })
 // ===== MENU =====
 export const getMenu = createServerFn({ method: "POST" })
   .inputValidator((d: { category?: string }) => d)
-  .handler(async ({ data }) => {
+    .handler(async ({ data }): AnyPromise => {
     const query = data.category
       ? `SELECT * FROM menu_items WHERE available = 1 AND category = ? AND hotel_id = 'remeritona' ORDER BY name`
       : `SELECT * FROM menu_items WHERE available = 1 AND hotel_id = 'remeritona' ORDER BY category, name`;
@@ -97,7 +99,7 @@ export const getMenu = createServerFn({ method: "POST" })
 // ===== SPA =====
 export const createSpaBooking = createServerFn({ method: "POST" })
   .inputValidator((d: { guestId: string; roomNumber: string; serviceName: string; preferredDate: string; preferredTime: string; notes?: string; price?: number }) => d)
-  .handler(async ({ data }) => {
+    .handler(async ({ data }): AnyPromise => {
     await db().prepare(
       `INSERT INTO spa_bookings (guest_id, room_number, service_name, preferred_date, preferred_time, notes, hotel_id) VALUES (?, ?, ?, ?, ?, ?, 'remeritona')`
     ).bind(data.guestId, data.roomNumber, data.serviceName, data.preferredDate, data.preferredTime, data.notes ?? null).run();
@@ -107,7 +109,7 @@ export const createSpaBooking = createServerFn({ method: "POST" })
 
 export const listSpaBookings = createServerFn({ method: "POST" })
   .inputValidator((d: { guestId: string }) => d)
-  .handler(async ({ data }) => {
+    .handler(async ({ data }): AnyPromise => {
     const result = await db().prepare(
       `SELECT * FROM spa_bookings WHERE guest_id = ? ORDER BY created_at DESC`
     ).bind(data.guestId).all();
@@ -117,7 +119,7 @@ export const listSpaBookings = createServerFn({ method: "POST" })
 // ===== DND =====
 export const setDnd = createServerFn({ method: "POST" })
   .inputValidator((d: { guestId: string; roomNumber: string; active: boolean }) => d)
-  .handler(async ({ data }) => {
+    .handler(async ({ data }): AnyPromise => {
     const existing = await db().prepare(
       `SELECT id FROM dnd_requests WHERE guest_id = ? LIMIT 1`
     ).bind(data.guestId).first() as any;
@@ -135,7 +137,7 @@ export const setDnd = createServerFn({ method: "POST" })
 
 export const getDnd = createServerFn({ method: "POST" })
   .inputValidator((d: { guestId: string }) => d)
-  .handler(async ({ data }) => {
+    .handler(async ({ data }): AnyPromise => {
     const row = await db().prepare(
       `SELECT active FROM dnd_requests WHERE guest_id = ? LIMIT 1`
     ).bind(data.guestId).first() as any;
@@ -145,7 +147,7 @@ export const getDnd = createServerFn({ method: "POST" })
 // ===== MESSAGES =====
 export const sendMessage = createServerFn({ method: "POST" })
   .inputValidator((d: { guestId: string; roomNumber: string; sender: "guest" | "staff"; message: string }) => d)
-  .handler(async ({ data }) => {
+    .handler(async ({ data }): AnyPromise => {
     await db().prepare(
       `INSERT INTO messages (guest_id, room_number, sender, message, hotel_id) VALUES (?, ?, ?, ?, 'remeritona')`
     ).bind(data.guestId, data.roomNumber, data.sender, data.message).run();
@@ -154,7 +156,7 @@ export const sendMessage = createServerFn({ method: "POST" })
 
 export const listMessages = createServerFn({ method: "POST" })
   .inputValidator((d: { guestId: string }) => d)
-  .handler(async ({ data }) => {
+    .handler(async ({ data }): AnyPromise => {
     const result = await db().prepare(
       `SELECT * FROM messages WHERE guest_id = ? ORDER BY created_at ASC`
     ).bind(data.guestId).all();
@@ -164,7 +166,7 @@ export const listMessages = createServerFn({ method: "POST" })
 // ===== INVOICES =====
 export const getInvoices = createServerFn({ method: "POST" })
   .inputValidator((d: { roomNumber: string }) => d)
-  .handler(async ({ data }) => {
+    .handler(async ({ data }): AnyPromise => {
     const result = await db().prepare(
       `SELECT * FROM invoices WHERE room_number = ? AND hotel_id = 'remeritona' ORDER BY created_at DESC`
     ).bind(data.roomNumber).all();
@@ -173,7 +175,7 @@ export const getInvoices = createServerFn({ method: "POST" })
 
 export const createInvoice = createServerFn({ method: "POST" })
   .inputValidator((d: { guestId?: string; roomNumber: string; description: string; subtotal: number; tax?: number; total: number }) => d)
-  .handler(async ({ data }) => {
+    .handler(async ({ data }): AnyPromise => {
     await db().prepare(
       `INSERT INTO invoices (guest_id, room_number, description, subtotal, tax, total, hotel_id) VALUES (?, ?, ?, ?, ?, ?, 'remeritona')`
     ).bind(data.guestId ?? null, data.roomNumber, data.description, data.subtotal, data.tax ?? 0, data.total).run();
@@ -183,7 +185,7 @@ export const createInvoice = createServerFn({ method: "POST" })
 // ===== LOYALTY =====
 export const getLoyalty = createServerFn({ method: "POST" })
   .inputValidator((d: { guestId: string }) => d)
-  .handler(async ({ data }) => {
+    .handler(async ({ data }): AnyPromise => {
     const g = await db().prepare(
       `SELECT loyalty_points, tier FROM guests WHERE id = ? LIMIT 1`
     ).bind(data.guestId).first() as any;
@@ -192,7 +194,7 @@ export const getLoyalty = createServerFn({ method: "POST" })
 
 export const redeemReward = createServerFn({ method: "POST" })
   .inputValidator((d: { guestId: string; roomNumber: string; rewardId: string; rewardName: string; pointsCost: number }) => d)
-  .handler(async ({ data }) => {
+    .handler(async ({ data }): AnyPromise => {
     const g = await db().prepare(
       `SELECT loyalty_points FROM guests WHERE id = ? LIMIT 1`
     ).bind(data.guestId).first() as any;
@@ -210,7 +212,7 @@ export const redeemReward = createServerFn({ method: "POST" })
 // ===== ADMIN: Get all requests =====
 export const adminGetServiceRequests = createServerFn({ method: "POST" })
   .inputValidator((d: { token: string; status?: string }) => d)
-  .handler(async ({ data }) => {
+    .handler(async ({ data }): AnyPromise => {
     const session = await db().prepare(
       `SELECT * FROM admin_sessions WHERE token = ? AND expires_at > datetime('now') LIMIT 1`
     ).bind(data.token).first() as any;
@@ -226,7 +228,7 @@ export const adminGetServiceRequests = createServerFn({ method: "POST" })
 
 export const adminGetFoodOrders = createServerFn({ method: "POST" })
   .inputValidator((d: { token: string; status?: string }) => d)
-  .handler(async ({ data }) => {
+    .handler(async ({ data }): AnyPromise => {
     const session = await db().prepare(
       `SELECT * FROM admin_sessions WHERE token = ? AND expires_at > datetime('now') LIMIT 1`
     ).bind(data.token).first() as any;
@@ -239,7 +241,7 @@ export const adminGetFoodOrders = createServerFn({ method: "POST" })
 
 export const adminGetDndRooms = createServerFn({ method: "POST" })
   .inputValidator((d: { token: string }) => d)
-  .handler(async ({ data }) => {
+    .handler(async ({ data }): AnyPromise => {
     const session = await db().prepare(
       `SELECT * FROM admin_sessions WHERE token = ? AND expires_at > datetime('now') LIMIT 1`
     ).bind(data.token).first() as any;
@@ -253,7 +255,7 @@ export const adminGetDndRooms = createServerFn({ method: "POST" })
 // ===== ADMIN: Create guest portal access =====
 export const adminCreateGuest = createServerFn({ method: "POST" })
   .inputValidator((d: { token: string; bookingRef: string; roomNumber: string; roomType: string; fullName: string; guestEmail: string; checkIn: string; checkOut: string }) => d)
-  .handler(async ({ data }) => {
+    .handler(async ({ data }): AnyPromise => {
     const session = await db().prepare(
       `SELECT * FROM admin_sessions WHERE token = ? AND expires_at > datetime('now') LIMIT 1`
     ).bind(data.token).first() as any;
