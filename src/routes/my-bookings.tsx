@@ -46,9 +46,7 @@ function MyBookingsPage() {
     setProcessing(true);
     const refundAmount = Math.round((booking.amountCharged * policy.percent) / 100);
     try {
-      // @ts-ignore
       const result = await cancelBooking({
-        // @ts-ignore
         data: {
           reference: booking.reference,
           gateway: booking.gateway,

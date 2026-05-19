@@ -1,10 +1,11 @@
 import { createServerFn } from "@tanstack/react-start";
+import { env } from "cloudflare:workers";
 import { MailerSend, EmailParams, Sender, Recipient } from "mailersend";
 import { render } from "@react-email/components";
 import BookingEmail from "@/components/BookingEmail";
 import * as React from "react";
 
-interface EmailData {
+export interface EmailData {
   guestName: string;
   guestEmail: string;
   roomName: string;
@@ -20,11 +21,12 @@ interface EmailData {
 }
 
 export const sendBookingEmail = createServerFn({ method: "POST" })
-  .handler(async (ctx) => {
-    const data = ctx.data as unknown as EmailData;
-    const mailerSend = new MailerSend({ apiKey: process.env.MAILERSEND_API_KEY || "" });
+  .inputValidator((data: EmailData) => data)
+  .handler(async ({ data }) => {
+    const cfEnv = env as unknown as { MAILERSEND_API_KEY: string };
+    const mailerSend = new MailerSend({ apiKey: cfEnv.MAILERSEND_API_KEY || "" });
 
-    const sentFrom = new Sender("booking@trial-3z0vklo1k204dpyo.mlsender.net", "Remeritona Hotel");
+    const sentFrom = new Sender("booking@test-zxk54v85kdxljy6v.mlsender.net", "Remeritona Hotel");
 
     const htmlContent = await render(
       React.createElement(BookingEmail, data)

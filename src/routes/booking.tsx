@@ -129,19 +129,32 @@ function BookingPage() {
 
   const stepRef = useRef<HTMLDivElement>(null);
   const summaryRef = useRef<HTMLElement>(null);
+  const summaryTopRef = useRef<HTMLDivElement>(null);
+  const summaryBottomRef = useRef<HTMLDivElement>(null);
 
-  // On mobile, scroll to the summary panel (where the second Continue lives).
-  // On desktop, scroll to the next form section.
-  const scrollToStep = () => {
+  // Step 1 & 2 first Continue → scroll to summary top (room image)
+  const scrollToSummary = () => {
     setTimeout(() => {
-      const isMobile = typeof window !== "undefined" && window.innerWidth < 1024;
-      const target = isMobile ? summaryRef.current : stepRef.current;
-      target?.scrollIntoView({ behavior: "smooth", block: "start" });
+      summaryTopRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
     }, 60);
   };
 
-  // For the second (mobile) Continue under the summary — always scroll to the form.
+  // Down arrow inside summary → scroll to bottom (promo + total + continue)
+  const scrollToSummaryBottom = () => {
+    setTimeout(() => {
+      summaryBottomRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }, 60);
+  };
+
+  // Second Continue (below summary) → scroll to next step form
   const scrollToForm = () => {
+    setTimeout(() => {
+      stepRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }, 60);
+  };
+
+  // Desktop Continue → scroll to next step form directly
+  const scrollToStep = () => {
     setTimeout(() => {
       stepRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
     }, 60);
@@ -221,16 +234,15 @@ function BookingPage() {
   };
 
   // ==================== NEW: SEND BOOKING EMAILS ====================
-  const sendBookingEmails = async (reference: string) => {
+const sendBookingEmails = async (reference: string) => {
     const selectedAddonDetails = selectedAddons.map(id => {
       const addon = ADD_ONS.find(a => a.id === id);
       return { label: addon?.label || "", price: addon?.price || 0 };
     });
 
     try {
-      // @ts-ignore
-        // @ts-ignore
-        await sendBookingEmail({ data: {
+      await sendBookingEmail({
+        data: {
           guestName: guest.name,
           guestEmail: guest.email,
           roomName: room.name,
@@ -243,7 +255,7 @@ function BookingPage() {
           addons: selectedAddonDetails,
           notes: guest.notes,
           reference,
-        }
+        },
       });
     } catch (error) {
       console.error("Failed to send emails:", error);
@@ -317,7 +329,7 @@ function BookingPage() {
             const record = buildBookingRecord(response.reference, "pay_now");
             saveBooking(record);
             sendBookingEmails(response.reference);
-            fetch("/api/save-booking", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(record) });
+            saveBookingToDb({ data: record });
             setConfirmed(true);
           }
         },
@@ -675,7 +687,7 @@ function BookingPage() {
 
                 <div className="flex justify-end mt-8">
                   <button
-                    onClick={() => { setStep(2); scrollToStep(); }}
+                    onClick={() => { setStep(2); scrollToSummary(); }}
                     className="px-8 py-3 bg-gold text-primary-foreground font-semibold uppercase tracking-widest text-sm hover:bg-gold-soft"
                   >
                     Continue
@@ -753,7 +765,7 @@ function BookingPage() {
                     Back
                   </button>
                   <button
-                    onClick={() => { if (guest.name && guest.email && guest.phone) { setStep(3); scrollToStep(); } }}
+                    onClick={() => { if (guest.name && guest.email && guest.phone) { setStep(3); scrollToSummary(); } }}
                     disabled={!guest.name || !guest.email || !guest.phone}
                     className="px-8 py-3 bg-gold text-primary-foreground font-semibold uppercase tracking-widest text-sm hover:bg-gold-soft disabled:opacity-40 disabled:cursor-not-allowed"
                   >
@@ -830,6 +842,7 @@ function BookingPage() {
           </div>
 
           <aside ref={summaryRef} className="scroll-mt-28">
+            <div ref={summaryTopRef} className="scroll-mt-4" />
             <div className="bg-charcoal border border-gold/30 p-6 lg:sticky lg:top-28">
               <p className="text-gold text-xs uppercase tracking-[0.4em] mb-4">Reservation Summary</p>
               <img src={room.image} alt={room.name} className="w-full aspect-video object-cover mb-4" />
@@ -904,26 +917,59 @@ function BookingPage() {
                   </ul>
                 </div>
               )}
+
+              {/* Down arrow — only shown on steps 1 & 2, scrolls to promo + total */}
+              {step !== 3 && (
+                <div className="mt-6 flex justify-center">
+                  <button
+                    onClick={scrollToSummaryBottom}
+                    className="flex flex-col items-center gap-1 text-gold/60 hover:text-gold transition-colors group"
+                    aria-label="See pricing details"
+                  >
+                    <span className="text-xs uppercase tracking-widest">See total</span>
+                    <svg
+                      className="w-5 h-5 animate-bounce"
+                      fill="none" stroke="currentColor" viewBox="0 0 24 24"
+                    >
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                    </svg>
+                  </button>
+                </div>
+              )}
             </div>
 
-            {/* Mobile-only continue button below summary */}
-            <div className="lg:hidden mt-6">
+            {/* Summary bottom anchor + second continue button */}
+            <div ref={summaryBottomRef} className="scroll-mt-4 mt-6">
               {step === 1 && (
-                <button
-                  onClick={() => { setStep(2); scrollToForm(); }}
-                  className="w-full py-4 bg-gold text-primary-foreground font-semibold uppercase tracking-widest text-sm hover:bg-gold-soft"
-                >
-                  Continue
-                </button>
+                <>
+                  <div className="bg-charcoal border border-gold/30 px-6 py-4">
+                    <div className="border-t border-gold/30 pt-4">
+                      <Row label="Total" value={formatNaira(total)} highlight />
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => { setStep(2); scrollToForm(); }}
+                    className="w-full py-4 bg-gold text-primary-foreground font-semibold uppercase tracking-widest text-sm hover:bg-gold-soft mt-3"
+                  >
+                    Continue to Guest Details
+                  </button>
+                </>
               )}
               {step === 2 && (
-                <button
-                  onClick={() => { if (guest.name && guest.email && guest.phone) { setStep(3); scrollToForm(); } }}
-                  disabled={!guest.name || !guest.email || !guest.phone}
-                  className="w-full py-4 bg-gold text-primary-foreground font-semibold uppercase tracking-widest text-sm hover:bg-gold-soft disabled:opacity-40 disabled:cursor-not-allowed"
-                >
-                  Continue to Payment
-                </button>
+                <>
+                  <div className="bg-charcoal border border-gold/30 px-6 py-4">
+                    <div className="border-t border-gold/30 pt-4">
+                      <Row label="Total" value={formatNaira(total)} highlight />
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => { if (guest.name && guest.email && guest.phone) { setStep(3); scrollToForm(); } }}
+                    disabled={!guest.name || !guest.email || !guest.phone}
+                    className="w-full py-4 bg-gold text-primary-foreground font-semibold uppercase tracking-widest text-sm hover:bg-gold-soft disabled:opacity-40 disabled:cursor-not-allowed mt-3"
+                  >
+                    Continue to Payment
+                  </button>
+                </>
               )}
               {step === 3 && (
                 <button

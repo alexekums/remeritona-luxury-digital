@@ -23,13 +23,12 @@ interface BookingData {
 }
 
 export const saveBookingToDb = createServerFn({ method: "POST" })
-  .handler(async (ctx) => {
-    const data = ctx.data as unknown as BookingData;
+  .inputValidator((data: BookingData) => data)
+  .handler(async ({ data }) => {
     try {
-      const db = (globalThis as any).remeritona_bookings
-        ?? (globalThis as any).__env__?.remeritona_bookings
-        ?? (globalThis as any)[Symbol.for("cloudflare:env")]?.remeritona_bookings
-        ?? (ctx as any).context?.cloudflare?.env?.remeritona_bookings;
+      const { env } = await import("cloudflare:workers");
+      const cfEnv = env as unknown as { remeritona_bookings: D1Database };
+      const db = cfEnv.remeritona_bookings;
 
       if (!db) {
         console.error("D1 binding not found");
