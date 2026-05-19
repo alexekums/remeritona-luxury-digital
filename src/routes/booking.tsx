@@ -112,6 +112,7 @@ function BookingPage() {
     setSelectedSlug(initialSlug);
   }, [initialSlug]);
   const [step, setStep] = useState<1 | 2 | 3>(1);
+  useEffect(() => { setSummaryRevealed(false); }, [step]);
   const [guest, setGuest] = useState({ name: "", email: "", phone: "", notes: "" });
   const [selectedAddons, setSelectedAddons] = useState<string[]>([]);
   const [showAllAddons, setShowAllAddons] = useState(false);
@@ -131,33 +132,76 @@ function BookingPage() {
   const summaryRef = useRef<HTMLElement>(null);
   const summaryTopRef = useRef<HTMLDivElement>(null);
   const summaryBottomRef = useRef<HTMLDivElement>(null);
+  const nameRef = useRef<HTMLInputElement>(null);
+  const emailRef = useRef<HTMLInputElement>(null);
+  const phoneRef = useRef<HTMLInputElement>(null);
+  const [fieldErrors, setFieldErrors] = useState<{ name?: string; email?: string; phone?: string }>({});
+  const [summaryRevealed, setSummaryRevealed] = useState(false);
+  const totalRef = useRef<HTMLDivElement>(null);
 
-  // Step 1 & 2 first Continue → scroll to summary top (room image)
+  // First Continue → scroll to summary top, stay on current step
   const scrollToSummary = () => {
+    setSummaryRevealed(false);
     setTimeout(() => {
       summaryTopRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
     }, 60);
   };
 
-  // Down arrow inside summary → scroll to bottom (promo + total + continue)
+  // "See Total" clicked → scroll to summary bottom, hide the button
   const scrollToSummaryBottom = () => {
+    setSummaryRevealed(true);
     setTimeout(() => {
-      summaryBottomRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+      summaryBottomRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
     }, 60);
   };
 
-  // Second Continue (below summary) → scroll to next step form
+  // Second Continue (below summary) → advance step and scroll to form
   const scrollToForm = () => {
     setTimeout(() => {
       stepRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
     }, 60);
   };
 
-  // Desktop Continue → scroll to next step form directly
+  // Desktop Continue → scroll to next step form directly  
   const scrollToStep = () => {
     setTimeout(() => {
       stepRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
     }, 60);
+  };
+
+  // Watch total visibility — show "See Total" button when total is off screen
+  useEffect(() => {
+    if (!totalRef.current) return;
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (!entry.isIntersecting) setSummaryRevealed(false);
+      },
+      { threshold: 0.1 }
+    );
+    observer.observe(totalRef.current);
+    return () => observer.disconnect();
+  }, [step]);
+
+  // Step 2 validation
+  const validateAndContinue = () => {
+    const errors: { name?: string; email?: string; phone?: string } = {};
+    if (!guest.name.trim()) errors.name = "Please enter your full name";
+    if (!guest.email.trim()) errors.email = "Please enter your email address";
+    else if (!/\S+@\S+\.\S+/.test(guest.email)) errors.email = "Please enter a valid email address";
+    if (!guest.phone.trim()) errors.phone = "Please enter your phone number";
+
+    setFieldErrors(errors);
+
+    if (Object.keys(errors).length > 0) {
+      // Scroll to first empty field
+      setTimeout(() => {
+        if (errors.name) nameRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+        else if (errors.email) emailRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+        else if (errors.phone) phoneRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+      }, 60);
+      return false;
+    }
+    return true;
   };
 
   // Load Flutterwave script
@@ -687,7 +731,7 @@ const sendBookingEmails = async (reference: string) => {
 
                 <div className="flex justify-end mt-8">
                   <button
-                    onClick={() => { setStep(2); scrollToSummary(); }}
+                    onClick={() => scrollToSummary()}
                     className="px-8 py-3 bg-gold text-primary-foreground font-semibold uppercase tracking-widest text-sm hover:bg-gold-soft"
                   >
                     Continue
@@ -699,9 +743,39 @@ const sendBookingEmails = async (reference: string) => {
             {step === 2 && (
               <Card title="2. Guest details">
                 <div className="grid sm:grid-cols-2 gap-4">
-                  <Input label="Full Name" value={guest.name} onChange={(v) => setGuest({ ...guest, name: v })} required />
-                  <Input label="Email" type="email" value={guest.email} onChange={(v) => setGuest({ ...guest, email: v })} required />
-                  <Input label="Phone" value={guest.phone} onChange={(v) => setGuest({ ...guest, phone: v })} required />
+                  <div className="flex flex-col gap-1.5">
+                    <label className="text-xs uppercase tracking-widest text-gold">Full Name *</label>
+                    <input
+                      ref={nameRef}
+                      type="text"
+                      value={guest.name}
+                      onChange={(v) => { setGuest({ ...guest, name: v.target.value }); setFieldErrors(e => ({ ...e, name: undefined })); }}
+                      className={`bg-onyx border px-3 py-3 text-foreground focus:outline-none ${fieldErrors.name ? "border-red-500 focus:border-red-500" : "border-border focus:border-gold"}`}
+                    />
+                    {fieldErrors.name && <p className="text-red-400 text-xs mt-1">{fieldErrors.name}</p>}
+                  </div>
+                  <div className="flex flex-col gap-1.5">
+                    <label className="text-xs uppercase tracking-widest text-gold">Email *</label>
+                    <input
+                      ref={emailRef}
+                      type="email"
+                      value={guest.email}
+                      onChange={(v) => { setGuest({ ...guest, email: v.target.value }); setFieldErrors(e => ({ ...e, email: undefined })); }}
+                      className={`bg-onyx border px-3 py-3 text-foreground focus:outline-none ${fieldErrors.email ? "border-red-500 focus:border-red-500" : "border-border focus:border-gold"}`}
+                    />
+                    {fieldErrors.email && <p className="text-red-400 text-xs mt-1">{fieldErrors.email}</p>}
+                  </div>
+                  <div className="flex flex-col gap-1.5">
+                    <label className="text-xs uppercase tracking-widest text-gold">Phone *</label>
+                    <input
+                      ref={phoneRef}
+                      type="tel"
+                      value={guest.phone}
+                      onChange={(v) => { setGuest({ ...guest, phone: v.target.value }); setFieldErrors(e => ({ ...e, phone: undefined })); }}
+                      className={`bg-onyx border px-3 py-3 text-foreground focus:outline-none ${fieldErrors.phone ? "border-red-500 focus:border-red-500" : "border-border focus:border-gold"}`}
+                    />
+                    {fieldErrors.phone && <p className="text-red-400 text-xs mt-1">{fieldErrors.phone}</p>}
+                  </div>
                 </div>
                 <div className="mt-4">
                   <label className="text-xs uppercase tracking-widest text-gold">Special requests</label>
@@ -765,9 +839,8 @@ const sendBookingEmails = async (reference: string) => {
                     Back
                   </button>
                   <button
-                    onClick={() => { if (guest.name && guest.email && guest.phone) { setStep(3); scrollToSummary(); } }}
-                    disabled={!guest.name || !guest.email || !guest.phone}
-                    className="px-8 py-3 bg-gold text-primary-foreground font-semibold uppercase tracking-widest text-sm hover:bg-gold-soft disabled:opacity-40 disabled:cursor-not-allowed"
+                    onClick={() => { if (validateAndContinue()) scrollToSummary(); }}
+                    className="px-8 py-3 bg-gold text-primary-foreground font-semibold uppercase tracking-widest text-sm hover:bg-gold-soft"
                   >
                     Continue to Payment
                   </button>
@@ -845,7 +918,23 @@ const sendBookingEmails = async (reference: string) => {
             <div ref={summaryTopRef} className="scroll-mt-4" />
             <div className="bg-charcoal border border-gold/30 p-6 lg:sticky lg:top-28">
               <p className="text-gold text-xs uppercase tracking-[0.4em] mb-4">Reservation Summary</p>
-              <img src={room.image} alt={room.name} className="w-full aspect-video object-cover mb-4" />
+              <div className="relative mb-4">
+                <img src={room.image} alt={room.name} className="w-full aspect-video object-cover" />
+                {step !== 3 && !summaryRevealed && (
+                  <div className="absolute inset-0 flex items-end justify-center pb-4 bg-gradient-to-t from-black/60 to-transparent">
+                    <button
+                      onClick={scrollToSummaryBottom}
+                      className="flex flex-col items-center gap-1 bg-onyx/80 backdrop-blur-sm border border-gold/40 px-5 py-3 text-gold hover:bg-onyx transition-colors"
+                      aria-label="See pricing details"
+                    >
+                      <span className="text-xs uppercase tracking-widest">See Total</span>
+                      <svg className="w-4 h-4 animate-bounce" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                      </svg>
+                    </button>
+                  </div>
+                )}
+              </div>
               <h3 className="font-serif text-xl mb-4">{room.name}</h3>
               <div className="space-y-2 text-sm border-t border-border pt-4">
                 <Row label="Check-in" value={new Date(checkIn).toLocaleDateString()} />
@@ -902,7 +991,7 @@ const sendBookingEmails = async (reference: string) => {
                 )}
               </div>
 
-              <div className="border-t border-gold/30 mt-4 pt-4">
+              <div ref={totalRef} className="border-t border-gold/30 mt-4 pt-4">
                 <Row label="Total" value={formatNaira(total)} highlight />
               </div>
 
@@ -918,58 +1007,25 @@ const sendBookingEmails = async (reference: string) => {
                 </div>
               )}
 
-              {/* Down arrow — only shown on steps 1 & 2, scrolls to promo + total */}
-              {step !== 3 && (
-                <div className="mt-6 flex justify-center">
-                  <button
-                    onClick={scrollToSummaryBottom}
-                    className="flex flex-col items-center gap-1 text-gold/60 hover:text-gold transition-colors group"
-                    aria-label="See pricing details"
-                  >
-                    <span className="text-xs uppercase tracking-widest">See total</span>
-                    <svg
-                      className="w-5 h-5 animate-bounce"
-                      fill="none" stroke="currentColor" viewBox="0 0 24 24"
-                    >
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                    </svg>
-                  </button>
-                </div>
-              )}
-            </div>
+              </div>
 
             {/* Summary bottom anchor + second continue button */}
-            <div ref={summaryBottomRef} className="scroll-mt-4 mt-6">
+            <div ref={summaryBottomRef} className="scroll-mt-4 mt-3">
               {step === 1 && (
-                <>
-                  <div className="bg-charcoal border border-gold/30 px-6 py-4">
-                    <div className="border-t border-gold/30 pt-4">
-                      <Row label="Total" value={formatNaira(total)} highlight />
-                    </div>
-                  </div>
-                  <button
-                    onClick={() => { setStep(2); scrollToForm(); }}
-                    className="w-full py-4 bg-gold text-primary-foreground font-semibold uppercase tracking-widest text-sm hover:bg-gold-soft mt-3"
-                  >
-                    Continue to Guest Details
-                  </button>
-                </>
+                <button
+                  onClick={() => { setStep(2); scrollToForm(); }}
+                  className="w-full py-4 bg-gold text-primary-foreground font-semibold uppercase tracking-widest text-sm hover:bg-gold-soft"
+                >
+                  Continue to Guest Details
+                </button>
               )}
               {step === 2 && (
-                <>
-                  <div className="bg-charcoal border border-gold/30 px-6 py-4">
-                    <div className="border-t border-gold/30 pt-4">
-                      <Row label="Total" value={formatNaira(total)} highlight />
-                    </div>
-                  </div>
-                  <button
-                    onClick={() => { if (guest.name && guest.email && guest.phone) { setStep(3); scrollToForm(); } }}
-                    disabled={!guest.name || !guest.email || !guest.phone}
-                    className="w-full py-4 bg-gold text-primary-foreground font-semibold uppercase tracking-widest text-sm hover:bg-gold-soft disabled:opacity-40 disabled:cursor-not-allowed mt-3"
-                  >
-                    Continue to Payment
-                  </button>
-                </>
+                <button
+                  onClick={() => { if (validateAndContinue()) { setStep(3); scrollToForm(); } }}
+                  className="w-full py-4 bg-gold text-primary-foreground font-semibold uppercase tracking-widest text-sm hover:bg-gold-soft"
+                >
+                  Continue to Payment
+                </button>
               )}
               {step === 3 && (
                 <button
