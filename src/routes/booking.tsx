@@ -139,13 +139,33 @@ function BookingPage() {
   const [summaryRevealed, setSummaryRevealed] = useState(false);
   const totalRef = useRef<HTMLDivElement>(null);
 
-  // First Continue → scroll to summary top, stay on current step
-  const scrollToSummary = () => {
+// First Continue → Mobile: scroll | Desktop: advance step + scroll to form
+const scrollToSummary = () => {
+  const isMobile = window.innerWidth < 1024;
+
+  if (isMobile) {
+    // Mobile behavior - unchanged as you like it
     setSummaryRevealed(false);
     setTimeout(() => {
       summaryTopRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
     }, 60);
-  };
+  } else {
+    // Desktop only: advance step and scroll to form
+    if (step === 1) {
+      setStep(2);
+      setTimeout(() => {
+        stepRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+      }, 100);
+    } else if (step === 2) {
+      if (validateAndContinue()) {
+        setStep(3);
+        setTimeout(() => {
+          stepRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+        }, 100);
+      }
+    }
+  }
+};
 
   // "See Total" clicked → scroll to summary bottom, hide the button
   const scrollToSummaryBottom = () => {
@@ -346,6 +366,16 @@ const sendBookingEmails = async (reference: string) => {
   };
 
   // ---------- PAY NOW (full amount) ----------
+  const generateRef = () => {
+    const count = String(Math.floor(Math.random() * 999) + 1).padStart(3, "0");
+    const codes: Record<string, string> = {
+      "classic": "C", "superior": "S", "executive": "E",
+      "business-suites": "BS", "executive-suites": "ES"
+    };
+    const code = codes[selectedSlug] ?? "C";
+    return `REM${count}${code}`;
+  };
+
   const handlePaystackPayNow = () => {
     setPaymentError(null);
     if (!paystackReady || !window.PaystackPop) {
@@ -358,7 +388,7 @@ const sendBookingEmails = async (reference: string) => {
     }
     try {
       const [firstName, ...rest] = guest.name.trim().split(" ");
-      const reference = `REMERITONA-${Date.now()}`;
+      const reference = generateRef();
       const handler = window.PaystackPop.setup({
         key: PAYSTACK_PUBLIC_KEY,
         email: guest.email,
@@ -405,7 +435,7 @@ const sendBookingEmails = async (reference: string) => {
       return;
     }
     setProcessing(true);
-    const reference = `REMERITONA-${Date.now()}`;
+    const reference = generateRef();
     const modal = window.FlutterwaveCheckout({
       public_key: FLUTTERWAVE_PUBLIC_KEY,
       tx_ref: reference,
@@ -449,7 +479,7 @@ const sendBookingEmails = async (reference: string) => {
       return;
     }
     try {
-      const reference = `REMERITONA-TKN-${Date.now()}`;
+      const reference = `TKN-${generateRef()}`;
       const handler = window.PaystackPop.setup({
         key: PAYSTACK_PUBLIC_KEY,
         email: guest.email,
@@ -486,7 +516,7 @@ const sendBookingEmails = async (reference: string) => {
       return;
     }
     setProcessing(true);
-    const reference = `REMERITONA-TKN-${Date.now()}`;
+    const reference = `TKN-${generateRef()}`;
     const modal = window.FlutterwaveCheckout({
       public_key: FLUTTERWAVE_PUBLIC_KEY,
       tx_ref: reference,
@@ -921,7 +951,7 @@ const sendBookingEmails = async (reference: string) => {
               <div className="relative mb-4">
                 <img src={room.image} alt={room.name} className="w-full aspect-video object-cover" />
                 {step !== 3 && !summaryRevealed && (
-                  <div className="absolute inset-0 flex items-end justify-center pb-4 bg-gradient-to-t from-black/60 to-transparent">
+                  <div className="absolute inset-0 flex items-end justify-center pb-4 bg-gradient-to-t from-black/60 to-transparent md:hidden">
                     <button
                       onClick={scrollToSummaryBottom}
                       className="flex flex-col items-center gap-1 bg-onyx/80 backdrop-blur-sm border border-gold/40 px-5 py-3 text-gold hover:bg-onyx transition-colors"
@@ -934,6 +964,7 @@ const sendBookingEmails = async (reference: string) => {
                     </button>
                   </div>
                 )}
+                
               </div>
               <h3 className="font-serif text-xl mb-4">{room.name}</h3>
               <div className="space-y-2 text-sm border-t border-border pt-4">
