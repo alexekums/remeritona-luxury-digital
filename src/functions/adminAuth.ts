@@ -51,8 +51,8 @@ export const getDashboardStats = createServerFn({ method: "POST" })
       db.prepare(`SELECT * FROM bookings WHERE hotel_id = 'remeritona' AND check_in = ? AND status != 'cancelled' ORDER BY created_at DESC`).bind(today).all(),
       db.prepare(`SELECT * FROM bookings WHERE hotel_id = 'remeritona' AND check_out = ? AND status != 'cancelled' ORDER BY created_at DESC`).bind(today).all(),
       db.prepare(`SELECT * FROM bookings WHERE hotel_id = 'remeritona' ORDER BY created_at DESC LIMIT 100`).all(),
-      db.prepare(`SELECT * FROM room_status WHERE hotel_id = 'remeritona' ORDER BY room_number ASC`).all(),
-      db.prepare(`SELECT SUM(total) as revenue FROM bookings WHERE hotel_id = 'remeritona' AND status = 'confirmed' AND created_at >= date('now', 'start of month')`).first(),
+      db.prepare(`SELECT * FROM room_status WHERE hotel_id = 'remeritona' ORDER BY CAST(room_number AS INTEGER) ASC`).all(),
+      db.prepare(`SELECT SUM(total) as revenue FROM bookings WHERE hotel_id = 'remeritona' AND status IN ('confirmed','checked_in','checked_out') AND created_at >= date('now', 'start of month')`).first(),
     ]);
     return {
       success: true,
@@ -72,6 +72,17 @@ export const updateRoomStatus = createServerFn({ method: "POST" })
       `SELECT * FROM admin_sessions WHERE token = ? AND expires_at > datetime('now') LIMIT 1`
     ).bind(data.token).first() as any;
     if (!session) return { success: false, error: "Unauthorized" };
+
+    // Block changing occupied room to vacant/dirty without going through checkout
+    if (data.status === 'vacant_clean' || data.status === 'vacant_dirty') {
+      const current = await db.prepare(
+        `SELECT status FROM room_status WHERE room_number = ? AND hotel_id = 'remeritona' LIMIT 1`
+      ).bind(data.roomNumber).first() as any;
+      if (current?.status === 'occupied') {
+        return { success: false, error: 'OCCUPIED_PROTECTION', message: 'This room has a guest checked in. Use Check Out to free the room.' };
+      }
+    }
+
     await db.prepare(
       `UPDATE room_status SET status = ?, updated_at = datetime('now'), updated_by = ? WHERE room_number = ? AND hotel_id = 'remeritona'`
     ).bind(data.status, data.updatedBy, data.roomNumber).run();
@@ -96,26 +107,88 @@ export const checkInGuest = createServerFn({ method: "POST" })
     ).bind(data.token).first() as any;
     if (!session) return { success: false, error: "Unauthorized" };
 
-    // 1. Update booking status
-    await db.prepare(
-      `UPDATE bookings SET status = 'checked_in' WHERE reference = ?`
-    ).bind(data.reference).run();
+    // 1. Get original check_in to detect early check-in
+    const originalBooking = await db.prepare(
+      `SELECT check_in FROM bookings WHERE reference = ? LIMIT 1`
+    ).bind(data.reference).first() as any;
 
-    // 2. Update room number status to occupied
+    const isEarlyCheckIn = originalBooking && data.checkIn < (originalBooking.check_in ?? "").split("T")[0];
+
+    // 2. Update booking: status, check_in (backdated if early), room_number, early_checkin flag
+    await db.prepare(
+      `UPDATE bookings SET status = 'checked_in', check_in = ?, room_number = ?, early_checkin = ? WHERE reference = ?`
+    ).bind(data.checkIn, data.roomNumber, isEarlyCheckIn ? 1 : 0, data.reference).run();
+
+    // 3. Update room status to occupied
     await db.prepare(
       `UPDATE room_status SET status = 'occupied', updated_at = datetime('now') WHERE room_number = ? AND hotel_id = 'remeritona'`
     ).bind(data.roomNumber).run();
 
-    // 3. Auto-detect tier from room number
-    const roomNum = parseInt(data.roomNumber);
-    let tier = 1;
-    let roomType = "classic";
-    if (roomNum >= 413) { tier = 5; roomType = "executive-suites"; }
-    else if (roomNum >= 401) { tier = 4; roomType = "business-suites"; }
-    else if (roomNum >= 301) { tier = 3; roomType = "executive"; }
-    else if (roomNum >= 201) { tier = 2; roomType = "superior"; }
+    // 4. Auto-detect tier from actual room number (explicit lookup map)
+    const ROOM_TIER_MAP: Record<string, { tier: number; roomType: string }> = {
+      // Classic → Tier 1
+      '102': { tier: 1, roomType: 'classic' }, '104': { tier: 1, roomType: 'classic' },
+      '105': { tier: 1, roomType: 'classic' }, '107': { tier: 1, roomType: 'classic' },
+      '108': { tier: 1, roomType: 'classic' }, '111': { tier: 1, roomType: 'classic' },
+      '113': { tier: 1, roomType: 'classic' }, '117': { tier: 1, roomType: 'classic' },
+      '118': { tier: 1, roomType: 'classic' }, '119': { tier: 1, roomType: 'classic' },
+      '121': { tier: 1, roomType: 'classic' }, '204': { tier: 1, roomType: 'classic' },
+      '207': { tier: 1, roomType: 'classic' }, '208': { tier: 1, roomType: 'classic' },
+      '209': { tier: 1, roomType: 'classic' }, '213': { tier: 1, roomType: 'classic' },
+      '217': { tier: 1, roomType: 'classic' }, '219': { tier: 1, roomType: 'classic' },
+      '221': { tier: 1, roomType: 'classic' }, '308': { tier: 1, roomType: 'classic' },
+      '309': { tier: 1, roomType: 'classic' }, '310': { tier: 1, roomType: 'classic' },
+      '402': { tier: 1, roomType: 'classic' },
+      // Superior → Tier 2
+      '101': { tier: 2, roomType: 'superior' }, '103': { tier: 2, roomType: 'superior' },
+      '109': { tier: 2, roomType: 'superior' }, '115': { tier: 2, roomType: 'superior' },
+      '120': { tier: 2, roomType: 'superior' }, '122': { tier: 2, roomType: 'superior' },
+      '123': { tier: 2, roomType: 'superior' }, '124': { tier: 2, roomType: 'superior' },
+      '202': { tier: 2, roomType: 'superior' }, '203': { tier: 2, roomType: 'superior' },
+      '205': { tier: 2, roomType: 'superior' }, '206': { tier: 2, roomType: 'superior' },
+      '211': { tier: 2, roomType: 'superior' }, '215': { tier: 2, roomType: 'superior' },
+      '218': { tier: 2, roomType: 'superior' }, '220': { tier: 2, roomType: 'superior' },
+      '222': { tier: 2, roomType: 'superior' }, '223': { tier: 2, roomType: 'superior' },
+      '224': { tier: 2, roomType: 'superior' }, '225': { tier: 2, roomType: 'superior' },
+      '226': { tier: 2, roomType: 'superior' }, '261': { tier: 2, roomType: 'superior' },
+      '301': { tier: 2, roomType: 'superior' }, '302': { tier: 2, roomType: 'superior' },
+      '303': { tier: 2, roomType: 'superior' }, '305': { tier: 2, roomType: 'superior' },
+      '306': { tier: 2, roomType: 'superior' }, '311': { tier: 2, roomType: 'superior' },
+      '312': { tier: 2, roomType: 'superior' }, '315': { tier: 2, roomType: 'superior' },
+      '317': { tier: 2, roomType: 'superior' }, '319': { tier: 2, roomType: 'superior' },
+      '321': { tier: 2, roomType: 'superior' }, '322': { tier: 2, roomType: 'superior' },
+      '323': { tier: 2, roomType: 'superior' }, '324': { tier: 2, roomType: 'superior' },
+      '325': { tier: 2, roomType: 'superior' }, '326': { tier: 2, roomType: 'superior' },
+      '401': { tier: 2, roomType: 'superior' }, '403': { tier: 2, roomType: 'superior' },
+      // Executive → Tier 3
+      '106': { tier: 3, roomType: 'executive' }, '110': { tier: 3, roomType: 'executive' },
+      '112': { tier: 3, roomType: 'executive' }, '114': { tier: 3, roomType: 'executive' },
+      '116': { tier: 3, roomType: 'executive' }, '210': { tier: 3, roomType: 'executive' },
+      '212': { tier: 3, roomType: 'executive' }, '214': { tier: 3, roomType: 'executive' },
+      '216': { tier: 3, roomType: 'executive' }, '304': { tier: 3, roomType: 'executive' },
+      '314': { tier: 3, roomType: 'executive' }, '316': { tier: 3, roomType: 'executive' },
+      '318': { tier: 3, roomType: 'executive' }, '327': { tier: 3, roomType: 'executive' },
+      '328': { tier: 3, roomType: 'executive' },
+      // Executive/Twin → Tier 3
+      '405': { tier: 3, roomType: 'executive' }, '417': { tier: 3, roomType: 'executive' },
+      '418': { tier: 3, roomType: 'executive' },
+      // Business Suites → Tier 4
+      '307': { tier: 4, roomType: 'business-suites' }, '313': { tier: 4, roomType: 'business-suites' },
+      '320': { tier: 4, roomType: 'business-suites' }, '407': { tier: 4, roomType: 'business-suites' },
+      '408': { tier: 4, roomType: 'business-suites' }, '409': { tier: 4, roomType: 'business-suites' },
+      '411': { tier: 4, roomType: 'business-suites' }, '412': { tier: 4, roomType: 'business-suites' },
+      '413': { tier: 4, roomType: 'business-suites' }, '415': { tier: 4, roomType: 'business-suites' },
+      '416': { tier: 4, roomType: 'business-suites' },
+      // Executive Suites → Tier 5
+      '404': { tier: 5, roomType: 'executive-suites' }, '406': { tier: 5, roomType: 'executive-suites' },
+      '410': { tier: 5, roomType: 'executive-suites' }, '414': { tier: 5, roomType: 'executive-suites' },
+    };
 
-    // 4. Create or update guest portal access
+    const tierInfo = ROOM_TIER_MAP[data.roomNumber] ?? { tier: 1, roomType: 'classic' };
+    const tier = tierInfo.tier;
+    const roomType = tierInfo.roomType;
+
+    // 5. Create or update guest portal access
     const existing = await db.prepare(
       `SELECT id FROM guests WHERE booking_ref = ? LIMIT 1`
     ).bind(data.reference).first() as any;
@@ -130,11 +203,12 @@ export const checkInGuest = createServerFn({ method: "POST" })
       ).bind(data.roomNumber, roomType, tier, data.reference).run();
     }
 
-    // 5. Send welcome email
+    // 6. Send welcome email
     const apiKey = cfEnv().MAILERSEND_API_KEY;
     if (apiKey && data.guestEmail) {
       const portalUrl = "https://remeritona-guest-portal.remeritona.workers.dev";
       const roomTypeLabel = roomType.replace(/-/g, " ").replace(/\b\w/g, (l: string) => l.toUpperCase());
+      const earlyNote = isEarlyCheckIn ? '<p style="color:#f59e0b;font-size:12px;text-align:center;margin:0;">Early check-in — original date adjusted</p>' : '';
       const welcomeHtml = [
         '<div style="background:#0a0a0a;color:#e8e0d0;font-family:Georgia,serif;padding:40px;max-width:600px;margin:0 auto;">',
         '<h1 style="color:#c9a96e;font-size:24px;font-weight:400;letter-spacing:4px;text-align:center;">REMERITONA</h1>',
@@ -152,6 +226,7 @@ export const checkInGuest = createServerFn({ method: "POST" })
         '<p style="margin:0 0 8px;font-size:13px;color:#aaa;">Room Number: <span style="color:#c9a96e;font-weight:bold;">' + data.roomNumber + '</span></p>',
         '<p style="margin:0;font-size:13px;color:#aaa;">Booking Reference: <span style="color:#c9a96e;font-weight:bold;">' + data.reference + '</span></p>',
         '</div>',
+        earlyNote,
         '<a href="' + portalUrl + '" style="display:block;background:#c9a96e;color:#0a0a0a;text-align:center;padding:14px;font-size:12px;letter-spacing:3px;text-transform:uppercase;font-weight:bold;text-decoration:none;margin:24px 0;">Access Your Room Portal</a>',
         '<p style="color:#555;font-size:12px;text-align:center;">Check-in: ' + data.checkIn + ' &nbsp;·&nbsp; Check-out: ' + data.checkOut + '</p>',
         '</div>',
@@ -185,19 +260,80 @@ export const checkOutGuest = createServerFn({ method: "POST" })
     ).bind(data.token).first() as any;
     if (!session) return { success: false, error: "Unauthorized" };
 
+    // Look up room_number from bookings first (stored at check-in), then guests table as fallback
+    let roomNumber = data.roomNumber;
+    if (!roomNumber) {
+      const booking = await db.prepare(
+        `SELECT room_number FROM bookings WHERE reference = ? LIMIT 1`
+      ).bind(data.reference).first() as any;
+      roomNumber = booking?.room_number;
+    }
+    if (!roomNumber) {
+      const guest = await db.prepare(
+        `SELECT room_number FROM guests WHERE booking_ref = ? LIMIT 1`
+      ).bind(data.reference).first() as any;
+      roomNumber = guest?.room_number;
+    }
+
+    // Update booking status
     await db.prepare(
       `UPDATE bookings SET status = 'checked_out' WHERE reference = ?`
     ).bind(data.reference).run();
 
-    if (data.roomNumber) {
+    // Free the room — vacant_dirty for housekeeping
+    if (roomNumber) {
       await db.prepare(
         `UPDATE room_status SET status = 'vacant_dirty', updated_at = datetime('now') WHERE room_number = ? AND hotel_id = 'remeritona'`
-      ).bind(data.roomNumber).run();
-    } else {
-      await db.prepare(
-        `UPDATE room_status SET status = 'vacant_dirty', updated_at = datetime('now') WHERE room_slug = ? AND hotel_id = 'remeritona'`
-      ).bind(data.roomSlug).run();
+      ).bind(roomNumber).run();
     }
 
-    return { success: true };
+    return { success: true, roomNumber };
+  });
+
+// ── Availability check for booking engine ──────────────────────────────────
+// Total rooms per type (from actual hotel layout)
+const ROOM_TYPE_TOTALS: Record<string, number> = {
+  classic: 23,
+  superior: 38,
+  executive: 18,        // 15 executive + 3 executive-twin
+  'business-suites': 11,
+  'executive-suites': 4,
+};
+
+export const checkRoomAvailability = createServerFn({ method: "POST" })
+  .inputValidator((data: { roomType: string; checkIn: string; checkOut: string }) => data)
+  .handler(async ({ data }): Promise<any> => {
+    const db = cfEnv().remeritona_bookings;
+
+    // Normalise room type key (booking.tsx uses display names)
+    const typeKey = data.roomType.toLowerCase()
+      .replace(/\s+/g, '-')
+      .replace('executive-suite', 'executive-suites')
+      .replace('business-suite', 'business-suites');
+
+    const total = ROOM_TYPE_TOTALS[typeKey] ?? 0;
+
+    // Count bookings that overlap with requested dates and are active
+    const result = await db.prepare(`
+      SELECT COALESCE(SUM(num_rooms), 0) as booked
+      FROM bookings
+      WHERE hotel_id = 'remeritona'
+        AND room_type_key = ?
+        AND status IN ('confirmed', 'checked_in')
+        AND check_in < ?
+        AND check_out > ?
+    `).bind(typeKey, data.checkOut, data.checkIn).first() as any;
+
+    const booked = result?.booked ?? 0;
+    const available = Math.max(0, total - booked);
+
+    return {
+      success: true,
+      roomType: data.roomType,
+      typeKey,
+      total,
+      booked,
+      available,
+      fullyBooked: available === 0,
+    };
   });

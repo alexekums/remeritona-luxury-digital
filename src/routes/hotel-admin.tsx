@@ -28,6 +28,30 @@ const ROOM_STATUSES = [
   { value: "maintenance", label: "Maintenance", color: "#8b5cf6" },
 ];
 
+// Room type display order and labels
+const ROOM_TYPE_ORDER = ["Classic", "Superior", "Executive", "Executive Twin", "Business Suite", "Executive Suite"];
+
+function getRoomTypeFromName(roomName: string): string {
+  if (roomName.includes("Executive Suite")) return "Executive Suite";
+  if (roomName.includes("Business Suite")) return "Business Suite";
+  if (roomName.includes("Executive Twin")) return "Executive Twin";
+  if (roomName.includes("Executive")) return "Executive";
+  if (roomName.includes("Superior")) return "Superior";
+  return "Classic";
+}
+
+function getRoomTypeColor(type: string): string {
+  switch (type) {
+    case "Classic": return "#888";
+    case "Superior": return "#3b82f6";
+    case "Executive": return "#c9a96e";
+    case "Executive Twin": return "#c9a96e";
+    case "Business Suite": return "#8b5cf6";
+    case "Executive Suite": return "#ef4444";
+    default: return "#888";
+  }
+}
+
 function getStatusColor(status: string) {
   return ROOM_STATUSES.find(s => s.value === status)?.color ?? "#888";
 }
@@ -62,6 +86,43 @@ function AdminPage() {
   const [selectedBooking, setSelectedBooking] = useState<any>(null);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [toast, setToast] = useState<{ message: string; type: "success" | "error" } | null>(null);
+
+  // Room picker modal state
+  const [roomPickerBooking, setRoomPickerBooking] = useState<any>(null);
+  const [selectedRoom, setSelectedRoom] = useState<any>(null);
+  const [checkingIn, setCheckingIn] = useState(false);
+
+  // Early checkout confirmation state
+  const [earlyCheckoutBooking, setEarlyCheckoutBooking] = useState<any>(null);
+  // Room search
+  const [roomSearch, setRoomSearch] = useState("");
+  // Collapsible floors
+  const [collapsedFloors, setCollapsedFloors] = useState<Set<string>>(new Set());
+  const toggleFloor = (floor: string) => setCollapsedFloors(prev => {
+    const next = new Set(prev);
+    if (next.has(floor)) next.delete(floor); else next.add(floor);
+    return next;
+  });
+  const allFloors = stats?.roomStatuses
+    ? [...new Set((stats.roomStatuses as any[]).map((r: any) => `Floor ${r.room_number?.toString()[0]}`))]
+    : [];
+
+  // Walk-in booking modal
+  const [showWalkIn, setShowWalkIn] = useState(false);
+  const [walkIn, setWalkIn] = useState({ name: "", email: "", phone: "", roomType: "classic", numRooms: 1, checkIn: "", checkOut: "", paymentMethod: "cash", notes: "" });
+  const [walkInLoading, setWalkInLoading] = useState(false);
+  // Occupied room guest detail popup
+  const [occupiedRoomDetail, setOccupiedRoomDetail] = useState<any>(null);
+  const [occupiedRoomLoading, setOccupiedRoomLoading] = useState(false);
+  // Reassign room
+  const [reassignBooking, setReassignBooking] = useState<any>(null);
+  const [reassignOldRoom, setReassignOldRoom] = useState<string | null>(null);
+  const [reassigning, setReassigning] = useState(false);
+  // Reassign room
+  const [reassigningOldRoom, setReassigningOldRoom] = useState<string | null>(null);
+
+  // Room status tab filter
+  const [roomStatusFilter, setRoomStatusFilter] = useState<string | null>(null);
 
   const isDark = theme === "dark";
 
@@ -134,11 +195,11 @@ function AdminPage() {
     setPin("");
   };
 
-  const handleRoomStatus = async (roomSlug: string, status: string) => {
+  const handleRoomStatus = async (roomNumber: string, status: string) => {
     if (!token) return;
-    setActionLoading(roomSlug);
+    setActionLoading(roomNumber);
     try {
-      await updateRoomStatus({ data: { token, roomSlug, status, updatedBy: staffName } });
+      await updateRoomStatus({ data: { token, roomNumber, status, updatedBy: staffName } });
       showToast("Room status updated");
       await loadStats(token);
     } catch {
@@ -148,26 +209,126 @@ function AdminPage() {
     }
   };
 
-  const handleCheckIn = async (booking: any) => {
-    if (!token) return;
-    setActionLoading(booking.reference);
+  // Look up active guest for an occupied room
+  const handleViewOccupiedRoom = async (room: any) => {
+    if (!stats?.allBookings) return;
+    setOccupiedRoomLoading(true);
+    // Find checked_in booking matching this room number
+    const activeBooking = stats.allBookings.find((b: any) =>
+      b.status === "checked_in" && b.room_number === room.room_number
+    );
+    setOccupiedRoomDetail({ room, booking: activeBooking ?? null });
+    setOccupiedRoomLoading(false);
+  };
+
+  // Reassign room for a checked-in guest
+;
+
+  // Reassign guest to a different room
+  const handleReassignRoom = async () => {
+    if (!token || !reassignBooking || !selectedRoom || !reassignOldRoom) return;
+    setReassigning(true);
     try {
-      await checkInGuest({ data: { token, reference: booking.reference, roomSlug: booking.room_slug } });
-      showToast(`${booking.guest_name} checked in successfully`);
-      setSelectedBooking(null);
-      await loadStats(token);
+      // Free old room → vacant_dirty
+      await updateRoomStatus({ data: { token, roomNumber: reassignOldRoom, status: "vacant_dirty", updatedBy: staffName } });
+      // Check in to new room (reuses checkInGuest which sets occupied + updates booking)
+      const result = await checkInGuest({
+        data: {
+          token,
+          reference: reassignBooking.reference,
+          roomSlug: `room-${selectedRoom.room_number}`,
+          roomNumber: selectedRoom.room_number,
+          guestName: reassignBooking.guest_name,
+          guestEmail: reassignBooking.guest_email,
+          checkIn: reassignBooking.check_in,
+          checkOut: reassignBooking.check_out,
+        }
+      }) as any;
+      if (result.success) {
+        showToast(`Room reassigned to ${selectedRoom.room_number} successfully`);
+        setReassignBooking(null);
+        setReassignOldRoom(null);
+        setSelectedRoom(null);
+        await loadStats(token);
+      } else {
+        showToast(result.error ?? "Reassignment failed", "error");
+      }
     } catch {
-      showToast("Check-in failed", "error");
+      showToast("Reassignment failed", "error");
     } finally {
-      setActionLoading(null);
+      setReassigning(false);
     }
   };
 
-  const handleCheckOut = async (booking: any) => {
+  // Opens room picker modal instead of directly checking in
+  const handleCheckIn = (booking: any) => {
+    setSelectedRoom(null);
+    setRoomPickerBooking(booking);
+    // Close booking detail modal if open
+    setSelectedBooking(null);
+  };
+
+  // Called after admin picks a room in the modal (handles both check-in and reassign)
+  const handleCheckInWithRoom = async () => {
+    if (!token || !roomPickerBooking || !selectedRoom) return;
+    setCheckingIn(true);
+    const today = new Date().toISOString().split("T")[0];
+    const bookingCheckIn = (roomPickerBooking.check_in ?? "").split("T")[0];
+    const effectiveCheckIn = today < bookingCheckIn ? today : bookingCheckIn;
+    const isReassign = !!reassigningOldRoom;
+    try {
+      // If reassigning, free the old room first
+      if (isReassign && reassigningOldRoom) {
+        await updateRoomStatus({ data: { token, roomNumber: reassigningOldRoom, status: "vacant_dirty", updatedBy: staffName } });
+      }
+      const result = await checkInGuest({
+        data: {
+          token,
+          reference: roomPickerBooking.reference,
+          roomSlug: selectedRoom.room_slug,
+          roomNumber: selectedRoom.room_number,
+          guestName: roomPickerBooking.guest_name,
+          guestEmail: roomPickerBooking.guest_email,
+          checkIn: effectiveCheckIn,
+          checkOut: roomPickerBooking.check_out,
+        }
+      }) as any;
+      if (result.success) {
+        const msg = isReassign
+          ? `${roomPickerBooking.guest_name} moved from Room ${reassigningOldRoom} to Room ${selectedRoom.room_number}`
+          : `${roomPickerBooking.guest_name} checked in to Room ${selectedRoom.room_number}`;
+        showToast(msg);
+        setRoomPickerBooking(null);
+        setSelectedRoom(null);
+        setReassigningOldRoom(null);
+        await loadStats(token);
+      } else {
+        showToast(result.error ?? "Operation failed", "error");
+      }
+    } catch {
+      showToast(isReassign ? "Room reassignment failed" : "Check-in failed", "error");
+    } finally {
+      setCheckingIn(false);
+    }
+  };
+
+  const handleCheckOut = (booking: any) => {
+    const today = new Date().toISOString().split("T")[0];
+    const checkoutDate = (booking.check_out ?? "").split("T")[0];
+    if (checkoutDate && today < checkoutDate) {
+      setEarlyCheckoutBooking(booking);
+      setSelectedBooking(null);
+    } else {
+      confirmCheckOut(booking);
+    }
+  };
+
+  const confirmCheckOut = async (booking: any) => {
     if (!token) return;
+    setEarlyCheckoutBooking(null);
     setActionLoading(booking.reference);
     try {
-      await checkOutGuest({ data: { token, reference: booking.reference, roomSlug: booking.room_slug } });
+      await checkOutGuest({ data: { token, reference: booking.reference, roomSlug: booking.room_slug, roomNumber: booking.room_number } });
       showToast(`${booking.guest_name} checked out successfully`);
       setSelectedBooking(null);
       await loadStats(token);
@@ -190,6 +351,36 @@ function AdminPage() {
   const todayArrivals = stats?.todayCheckIns?.length ?? 0;
   const todayDepartures = stats?.todayCheckOuts?.length ?? 0;
   const occupiedRooms = stats?.roomStatuses?.filter((r: any) => r.status === "occupied").length ?? 0;
+
+  // Vacant clean rooms for the picker — filtered by booked type, grouped by floor
+  const vacantRooms = stats?.roomStatuses?.filter((r: any) => r.status === "vacant_clean") ?? [];
+  const vacantByType = ROOM_TYPE_ORDER.reduce((acc: Record<string, any[]>, type) => {
+    const rooms = vacantRooms.filter((r: any) => getRoomTypeFromName(r.room_name) === type);
+    if (rooms.length > 0) acc[type] = rooms;
+    return acc;
+  }, {});
+
+  // For room picker: get booked type from booking, filter matching rooms, group by floor
+  const getPickerRooms = (booking: any) => {
+    const bookedType = booking?.room_name ?? "";
+    // Determine which room types match the booked category
+    let matchType = "Classic";
+    if (bookedType.toLowerCase().includes("executive suite")) matchType = "Executive Suite";
+    else if (bookedType.toLowerCase().includes("business suite")) matchType = "Business Suite";
+    else if (bookedType.toLowerCase().includes("executive twin")) matchType = "Executive Twin";
+    else if (bookedType.toLowerCase().includes("executive")) matchType = "Executive";
+    else if (bookedType.toLowerCase().includes("superior")) matchType = "Superior";
+
+    const matching = vacantRooms.filter((r: any) => getRoomTypeFromName(r.room_name) === matchType);
+    // Group by floor (first digit of room number)
+    const byFloor: Record<string, any[]> = {};
+    matching.forEach((r: any) => {
+      const floor = r.room_number ? `Floor ${r.room_number[0]}` : "Other";
+      if (!byFloor[floor]) byFloor[floor] = [];
+      byFloor[floor].push(r);
+    });
+    return { matchType, byFloor, total: matching.length };
+  };
 
   // ==================== LOGIN PAGE ====================
   if (!token) {
@@ -294,6 +485,19 @@ function AdminPage() {
           }}>
             <RefreshCw size={12} /> Refresh
           </button>
+          <button onClick={() => {
+            const t = new Date().toISOString().split("T")[0];
+            const t2 = new Date(Date.now()+86400000).toISOString().split("T")[0];
+            setWalkIn({ name: "", email: "", phone: "", roomType: "classic", numRooms: 1, checkIn: t, checkOut: t2, paymentMethod: "cash", notes: "" });
+            setShowWalkIn(true);
+          }} style={{
+            background: colors.gold, border: "none", padding: "6px 14px",
+            color: "#0a0a0a", cursor: "pointer", fontSize: 11, display: "flex",
+            alignItems: "center", gap: 6, fontWeight: 700, letterSpacing: "0.1em",
+            textTransform: "uppercase", fontFamily: "Georgia, serif"
+          }}>
+            + Walk-in
+          </button>
           <button onClick={toggleTheme} style={{
             background: "none", border: `1px solid ${colors.border}`,
             borderRadius: "50%", width: 36, height: 36, cursor: "pointer",
@@ -342,7 +546,7 @@ function AdminPage() {
               {[
                 { label: "Today's Arrivals", value: todayArrivals, icon: <Users size={20} />, color: "#3b82f6" },
                 { label: "Today's Departures", value: todayDepartures, icon: <CheckCircle size={20} />, color: "#22c55e" },
-                { label: "Occupied Rooms", value: `${occupiedRooms} / ${stats.roomStatuses?.length ?? 5}`, icon: <BedDouble size={20} />, color: "#ef4444" },
+                { label: "Occupied Rooms", value: `${occupiedRooms} / ${stats.roomStatuses?.length ?? 96}`, icon: <BedDouble size={20} />, color: "#ef4444" },
                 { label: "Monthly Revenue", value: formatNaira(stats.monthlyRevenue ?? 0), icon: <TrendingUp size={20} />, color: colors.gold },
               ].map(card => (
                 <div key={card.label} style={{
@@ -358,7 +562,7 @@ function AdminPage() {
               ))}
             </div>
 
-            {/* Today's Check-ins */}
+            {/* Today's Check-ins / Check-outs */}
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 24, marginBottom: 32 }}>
               {[
                 { title: "Today's Arrivals", data: stats.todayCheckIns, action: "check-in" },
@@ -382,14 +586,23 @@ function AdminPage() {
                             <p style={{ margin: "2px 0 0", fontSize: 11, color: colors.textMuted }}>{b.room_name} · {b.reference}</p>
                           </div>
                           <div style={{ display: "flex", gap: 8 }}>
-                            <span style={{
-                              fontSize: 10, padding: "3px 8px", letterSpacing: "0.1em",
-                              textTransform: "uppercase", border: `1px solid`,
-                              borderColor: getBookingStatusColor(b.status),
-                              color: getBookingStatusColor(b.status)
-                            }}>
-                              {b.status}
-                            </span>
+                            <div style={{ display: "flex", flexDirection: "column", gap: 3, alignItems: "flex-end" }}>
+                              <span style={{
+                                fontSize: 10, padding: "3px 8px", letterSpacing: "0.1em",
+                                textTransform: "uppercase", border: `1px solid`,
+                                borderColor: getBookingStatusColor(b.status),
+                                color: getBookingStatusColor(b.status)
+                              }}>
+                                {b.status}
+                              </span>
+                              {b.early_checkin && (
+                                <span style={{
+                                  fontSize: 9, padding: "2px 6px", letterSpacing: "0.08em",
+                                  textTransform: "uppercase", background: "#f59e0b22",
+                                  border: "1px solid #f59e0b", color: "#f59e0b"
+                                }}>Early</span>
+                              )}
+                            </div>
                             {b.status === "confirmed" && section.action === "check-in" && (
                               <button onClick={() => handleCheckIn(b)} disabled={actionLoading === b.reference} style={{
                                 background: "#3b82f6", color: "#fff", border: "none",
@@ -422,7 +635,6 @@ function AdminPage() {
         {/* ===== BOOKINGS TAB ===== */}
         {!loading && activeTab === "bookings" && stats && (
           <div>
-            {/* Filters */}
             <div style={{ display: "flex", gap: 12, marginBottom: 20, flexWrap: "wrap" }}>
               <div style={{ display: "flex", alignItems: "center", gap: 8, background: colors.surface, border: `1px solid ${colors.border}`, padding: "8px 12px", flex: 1, minWidth: 200 }}>
                 <Search size={14} style={{ color: colors.textMuted }} />
@@ -442,7 +654,6 @@ function AdminPage() {
               </select>
             </div>
 
-            {/* Bookings Table */}
             <div style={{ background: colors.surface, border: `1px solid ${colors.border}`, overflowX: "auto" }}>
               <table style={{ width: "100%", borderCollapse: "collapse" }}>
                 <thead>
@@ -467,14 +678,23 @@ function AdminPage() {
                       <td style={{ padding: "12px 16px", fontSize: 13, color: colors.gold }}>{formatNaira(b.total)}</td>
                       <td style={{ padding: "12px 16px", fontSize: 12, color: colors.textMuted, textTransform: "capitalize" }}>{b.gateway}</td>
                       <td style={{ padding: "12px 16px" }}>
-                        <span style={{
-                          fontSize: 10, padding: "3px 8px", letterSpacing: "0.1em",
-                          textTransform: "uppercase", border: `1px solid`,
-                          borderColor: getBookingStatusColor(b.status),
-                          color: getBookingStatusColor(b.status)
-                        }}>
-                          {b.status}
-                        </span>
+                        <div style={{ display: "flex", flexDirection: "column", gap: 4, alignItems: "flex-start" }}>
+                          <span style={{
+                            fontSize: 10, padding: "3px 8px", letterSpacing: "0.1em",
+                            textTransform: "uppercase", border: `1px solid`,
+                            borderColor: getBookingStatusColor(b.status),
+                            color: getBookingStatusColor(b.status)
+                          }}>
+                            {b.status}
+                          </span>
+                          {b.early_checkin && (
+                            <span style={{
+                              fontSize: 9, padding: "2px 6px", letterSpacing: "0.08em",
+                              textTransform: "uppercase", background: "#f59e0b22",
+                              border: "1px solid #f59e0b", color: "#f59e0b"
+                            }}>Early check-in</span>
+                          )}
+                        </div>
                       </td>
                       <td style={{ padding: "12px 16px" }}>
                         <div style={{ display: "flex", gap: 6 }}>
@@ -510,54 +730,762 @@ function AdminPage() {
         {/* ===== ROOMS TAB ===== */}
         {!loading && activeTab === "rooms" && stats && (
           <div>
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: 16 }}>
-              {stats.roomStatuses?.map((room: any) => (
-                <div key={room.room_slug} style={{
-                  background: colors.surface, border: `1px solid ${colors.border}`, padding: 20
-                }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 16 }}>
-                    <div>
-                      <h3 style={{ margin: 0, fontSize: 16, color: colors.text }}>{room.room_name}</h3>
-                      <p style={{ margin: "4px 0 0", fontSize: 11, color: colors.textMuted }}>
-                        Last updated: {new Date(room.updated_at).toLocaleString()}
-                      </p>
-                      {room.updated_by && (
-                        <p style={{ margin: "2px 0 0", fontSize: 11, color: colors.textMuted }}>By: {room.updated_by}</p>
-                      )}
-                    </div>
-                    <span style={{
-                      fontSize: 10, padding: "4px 10px", letterSpacing: "0.1em",
-                      textTransform: "uppercase", border: `1px solid`,
-                      borderColor: getStatusColor(room.status),
-                      color: getStatusColor(room.status)
-                    }}>
-                      {getStatusLabel(room.status)}
-                    </span>
-                  </div>
-                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
-                    {ROOM_STATUSES.map(s => (
-                      <button key={s.value} onClick={() => handleRoomStatus(room.room_slug, s.value)}
-                        disabled={room.status === s.value || actionLoading === room.room_slug}
-                        style={{
-                          background: room.status === s.value ? s.color : "none",
-                          border: `1px solid ${s.color}`,
-                          color: room.status === s.value ? "#fff" : s.color,
-                          padding: "6px 8px", fontSize: 10, cursor: room.status === s.value ? "default" : "pointer",
-                          letterSpacing: "0.08em", textTransform: "uppercase",
-                          opacity: actionLoading === room.room_slug ? 0.5 : 1
-                        }}>
-                        {s.label}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              ))}
+            {/* Collapse All / Expand All */}
+            <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 8 }}>
+              <button onClick={() => {
+                if (collapsedFloors.size === allFloors.length) {
+                  setCollapsedFloors(new Set());
+                } else {
+                  setCollapsedFloors(new Set(allFloors));
+                }
+              }} style={{
+                background: "none", border: `1px solid ${colors.border}`, padding: "6px 14px",
+                color: colors.textMuted, cursor: "pointer", fontSize: 11,
+                letterSpacing: "0.1em", textTransform: "uppercase", fontFamily: "Georgia, serif"
+              }}>
+                {collapsedFloors.size === allFloors.length ? "▶ Expand All" : "▼ Collapse All"}
+              </button>
             </div>
+
+            {/* Room search */}
+            <div style={{ display: "flex", alignItems: "center", gap: 8, background: colors.surface, border: `1px solid ${colors.border}`, padding: "10px 14px", marginBottom: 12, maxWidth: 320 }}>
+              <Search size={14} style={{ color: colors.textMuted, flexShrink: 0 }} />
+              <input
+                value={roomSearch}
+                onChange={e => setRoomSearch(e.target.value)}
+                placeholder="Search room number or type..."
+                style={{ background: "none", border: "none", outline: "none", color: colors.text, fontSize: 13, width: "100%", fontFamily: "Georgia, serif" }}
+              />
+              {roomSearch && (
+                <button onClick={() => setRoomSearch("")} style={{ background: "none", border: "none", cursor: "pointer", color: colors.textMuted, padding: 0, display: "flex" }}>
+                  <X size={12} />
+                </button>
+              )}
+            </div>
+
+            {/* Clickable filter badges */}
+            <div style={{ display: "flex", gap: 10, marginBottom: 20, flexWrap: "wrap", alignItems: "center" }}>
+              {ROOM_STATUSES.map(s => {
+                const count = stats.roomStatuses?.filter((r: any) => r.status === s.value).length ?? 0;
+                const isActive = roomStatusFilter === s.value;
+                return (
+                  <button key={s.value} onClick={() => setRoomStatusFilter(isActive ? null : s.value)} style={{
+                    background: isActive ? s.color : colors.surface,
+                    border: `1px solid ${isActive ? s.color : colors.border}`,
+                    padding: "10px 16px", display: "flex", alignItems: "center", gap: 10,
+                    cursor: "pointer", transition: "all 0.15s ease",
+                    boxShadow: isActive ? `0 0 0 3px ${s.color}33` : "none"
+                  }}>
+                    <span style={{ width: 8, height: 8, borderRadius: "50%", background: isActive ? "#fff" : s.color, display: "inline-block", flexShrink: 0 }} />
+                    <span style={{ fontSize: 12, color: isActive ? "#fff" : colors.textMuted }}>{s.label}</span>
+                    <span style={{ fontSize: 15, color: isActive ? "#fff" : s.color, fontWeight: 600, minWidth: 20 }}>{count}</span>
+                  </button>
+                );
+              })}
+              {roomStatusFilter && (
+                <button onClick={() => setRoomStatusFilter(null)} style={{
+                  background: "none", border: `1px solid ${colors.border}`, padding: "10px 14px",
+                  cursor: "pointer", color: colors.textMuted, fontSize: 11,
+                  letterSpacing: "0.1em", textTransform: "uppercase", display: "flex", alignItems: "center", gap: 6
+                }}>
+                  <X size={12} /> Clear filter
+                </button>
+              )}
+            </div>
+
+            {/* Rooms grouped by floor */}
+            {(() => {
+              const allRooms = stats.roomStatuses ?? [];
+              const filtered = allRooms.filter((r: any) => {
+                const matchStatus = !roomStatusFilter || r.status === roomStatusFilter;
+                const matchSearch = !roomSearch || 
+                  r.room_number?.includes(roomSearch) || 
+                  r.room_name?.toLowerCase().includes(roomSearch.toLowerCase());
+                return matchStatus && matchSearch;
+              });
+              // Group by floor
+              const byFloor: Record<string, any[]> = {};
+              filtered.forEach((r: any) => {
+                const floor = r.room_number ? `Floor ${r.room_number[0]}` : "Other";
+                if (!byFloor[floor]) byFloor[floor] = [];
+                byFloor[floor].push(r);
+              });
+              if (filtered.length === 0) {
+                return <p style={{ color: colors.textMuted, textAlign: "center", padding: 40 }}>No rooms match this filter</p>;
+              }
+              return Object.entries(byFloor).sort().map(([floor, rooms]) => {
+                const isCollapsed = collapsedFloors.has(floor);
+                return (
+                <div key={floor} style={{ marginBottom: 24 }}>
+                  {/* Clickable floor header */}
+                  <button onClick={() => toggleFloor(floor)} style={{
+                    width: "100%", background: "none", border: "none", cursor: "pointer",
+                    display: "flex", alignItems: "center", gap: 12, marginBottom: isCollapsed ? 0 : 12,
+                    padding: "6px 0"
+                  }}>
+                    <h3 style={{ margin: 0, fontSize: 13, color: colors.gold, letterSpacing: "0.2em", textTransform: "uppercase" }}>{floor}</h3>
+                    <div style={{ flex: 1, height: 1, background: colors.border }} />
+                    <span style={{ fontSize: 11, color: colors.textMuted }}>{(rooms as any[]).length} room{rooms.length !== 1 ? "s" : ""}</span>
+                    <span style={{ fontSize: 12, color: colors.textMuted, marginLeft: 4 }}>{isCollapsed ? "▶" : "▼"}</span>
+                  </button>
+                  {!isCollapsed && <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))", gap: 10 }}>
+                    {(rooms as any[]).sort((a, b) => parseInt(a.room_number) - parseInt(b.room_number)).map((room: any) => {
+                      const roomType = getRoomTypeFromName(room.room_name);
+                      const typeColor = getRoomTypeColor(roomType);
+                      return (
+                        <div key={room.room_slug} style={{
+                          background: colors.surface,
+                          border: `1px solid ${room.status === "occupied" ? "#ef444433" : room.status === "maintenance" ? "#8b5cf633" : colors.border}`,
+                          padding: 14
+                        }}>
+                          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 10 }}>
+                            <div>
+                              <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 3 }}>
+                                <span style={{ fontSize: 16, color: colors.text, fontWeight: 400 }}>
+                                  {room.room_name.split(" - ")[0]}
+                                </span>
+                                <span style={{ fontSize: 9, padding: "2px 5px", border: `1px solid ${typeColor}`, color: typeColor, letterSpacing: "0.08em", textTransform: "uppercase" }}>
+                                  {roomType}
+                                </span>
+                              </div>
+                              <p style={{ margin: 0, fontSize: 9, color: colors.textMuted }}>
+                                {new Date(room.updated_at).toLocaleString()}
+                              </p>
+                            </div>
+                            <span style={{
+                              fontSize: 9, padding: "3px 7px", letterSpacing: "0.08em",
+                              textTransform: "uppercase", border: `1px solid`,
+                              borderColor: getStatusColor(room.status),
+                              color: getStatusColor(room.status), whiteSpace: "nowrap", flexShrink: 0
+                            }}>
+                              {getStatusLabel(room.status)}
+                            </span>
+                          </div>
+                          {room.status === "occupied" ? (
+                            <div style={{
+                              background: "#ef444411", border: "1px solid #ef444466",
+                              padding: "8px", fontSize: 9, color: "#ef4444",
+                              lineHeight: 1.6
+                            }}>
+                              <button
+                                onClick={() => handleViewOccupiedRoom(room)}
+                                style={{
+                                  width: "100%", background: "none", border: "none",
+                                  cursor: "pointer", textAlign: "center", padding: "4px 0"
+                                }}
+                              >
+                                <span style={{ color: "#ef4444", fontSize: 9, letterSpacing: "0.06em" }}>
+                                  👤 Guest checked in
+                                </span><br />
+                                <span style={{ color: "#888", fontSize: 8 }}>Tap to view guest details</span>
+                              </button>
+                              <div style={{ marginTop: 6, textAlign: "center" }}>
+                                <button onClick={() => handleRoomStatus(room.room_number, "maintenance")}
+                                  disabled={actionLoading === room.room_number}
+                                  style={{
+                                    background: "none", border: "1px solid #8b5cf6", color: "#8b5cf6",
+                                    padding: "3px 8px", fontSize: 8, cursor: "pointer",
+                                    letterSpacing: "0.06em", textTransform: "uppercase"
+                                  }}>Maintenance</button>
+                              </div>
+                            </div>
+                          ) : (
+                            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 5 }}>
+                              {ROOM_STATUSES.map(s => (
+                                <button key={s.value} onClick={() => handleRoomStatus(room.room_number, s.value)}
+                                  disabled={room.status === s.value || actionLoading === room.room_number}
+                                  style={{
+                                    background: room.status === s.value ? s.color : "none",
+                                    border: `1px solid ${s.color}`,
+                                    color: room.status === s.value ? "#fff" : s.color,
+                                    padding: "5px 4px", fontSize: 8, cursor: room.status === s.value ? "default" : "pointer",
+                                    letterSpacing: "0.06em", textTransform: "uppercase",
+                                    opacity: actionLoading === room.room_number ? 0.5 : 1
+                                  }}>
+                                  {s.label}
+                                </button>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>}
+                </div>
+                );
+              });
+            })()}
           </div>
         )}
       </main>
 
-      {/* Booking Detail Modal */}
+      {/* ==================== ROOM PICKER MODAL ==================== */}
+      {roomPickerBooking && (
+        <div style={{
+          position: "fixed", inset: 0, background: "rgba(0,0,0,0.8)",
+          zIndex: 300, display: "flex", alignItems: "center", justifyContent: "center", padding: 20
+        }}>
+          <div style={{
+            background: colors.surface, border: `1px solid ${colors.border}`,
+            padding: 32, maxWidth: 620, width: "100%", maxHeight: "90vh", overflowY: "auto"
+          }}>
+            {/* Header */}
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 24 }}>
+              <div>
+                <p style={{ color: colors.gold, fontSize: 11, letterSpacing: "0.3em", textTransform: "uppercase", margin: "0 0 6px" }}>
+                  Assign Room — Check In
+                </p>
+                <h2 style={{ color: colors.text, fontSize: 20, fontWeight: 400, margin: 0 }}>
+                  {roomPickerBooking.guest_name}
+                </h2>
+                <p style={{ color: colors.textMuted, fontSize: 12, margin: "4px 0 0" }}>
+                  {roomPickerBooking.reference} · Booked: {roomPickerBooking.room_name}
+                </p>
+              </div>
+              <button onClick={() => { setRoomPickerBooking(null); setSelectedRoom(null); }} style={{
+                background: "none", border: "none", cursor: "pointer", color: colors.textMuted, padding: 4
+              }}>
+                <X size={20} />
+              </button>
+            </div>
+
+            {/* Early check-in warning */}
+            {(() => {
+              const today = new Date().toISOString().split("T")[0];
+              const bookingDate = (roomPickerBooking.check_in ?? "").split("T")[0];
+              if (today < bookingDate) {
+                return (
+                  <div style={{
+                    background: "#f59e0b22", border: "1px solid #f59e0b",
+                    padding: "10px 16px", marginBottom: 12,
+                    display: "flex", alignItems: "center", gap: 10
+                  }}>
+                    <AlertCircle size={14} style={{ color: "#f59e0b", flexShrink: 0 }} />
+                    <span style={{ fontSize: 12, color: "#f59e0b" }}>
+                      Early check-in — booking date is {new Date(bookingDate).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}. Check-in will be backdated to today.
+                    </span>
+                  </div>
+                );
+              }
+              return null;
+            })()}
+
+            {/* Room type + count */}
+            {(() => {
+              const { matchType, byFloor, total } = getPickerRooms(roomPickerBooking);
+              const typeColor = getRoomTypeColor(matchType);
+              return (
+                <>
+                  <div style={{
+                    background: colors.surface2, border: `1px solid ${colors.border}`,
+                    padding: "10px 16px", marginBottom: 20,
+                    display: "flex", alignItems: "center", justifyContent: "space-between"
+                  }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                      <span style={{ width: 8, height: 8, borderRadius: "50%", background: "#22c55e", display: "inline-block" }} />
+                      <span style={{ fontSize: 12, color: colors.textMuted }}>
+                        {total} <span style={{ color: typeColor }}>{matchType}</span> room{total !== 1 ? "s" : ""} available
+                      </span>
+                    </div>
+                    <span style={{ fontSize: 10, color: colors.textMuted, letterSpacing: "0.1em" }}>
+                      Showing matching room type only
+                    </span>
+                  </div>
+
+                  {total === 0 ? (
+                    <div style={{ textAlign: "center", padding: "40px 0", color: colors.textMuted }}>
+                      <BedDouble size={32} style={{ marginBottom: 12, opacity: 0.4 }} />
+                      <p style={{ fontSize: 14 }}>No vacant {matchType} rooms available</p>
+                      <p style={{ fontSize: 12, marginTop: 4 }}>Mark a {matchType} room as Vacant — Clean in the Room Status tab first</p>
+                    </div>
+                  ) : (
+                    <>
+                      {/* Rooms grouped by floor */}
+                      {Object.entries(byFloor).sort().map(([floor, rooms]) => (
+                        <div key={floor} style={{ marginBottom: 20 }}>
+                          <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
+                            <span style={{ fontSize: 10, color: typeColor, letterSpacing: "0.2em", textTransform: "uppercase", fontWeight: 600 }}>
+                              {floor}
+                            </span>
+                            <div style={{ flex: 1, height: 1, background: colors.border }} />
+                            <span style={{ fontSize: 10, color: colors.textMuted }}>{(rooms as any[]).length} available</span>
+                          </div>
+                          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(90px, 1fr))", gap: 8 }}>
+                            {(rooms as any[]).sort((a, b) => parseInt(a.room_number) - parseInt(b.room_number)).map((room: any) => {
+                              const isSelected = selectedRoom?.room_number === room.room_number;
+                              return (
+                                <button
+                                  key={room.room_number}
+                                  onClick={() => setSelectedRoom(room)}
+                                  style={{
+                                    background: isSelected ? typeColor : colors.surface2,
+                                    border: `2px solid ${isSelected ? typeColor : colors.border}`,
+                                    color: isSelected ? "#fff" : colors.text,
+                                    padding: "14px 8px", cursor: "pointer", textAlign: "center",
+                                    transition: "all 0.15s ease",
+                                    boxShadow: isSelected ? `0 0 0 3px ${typeColor}33` : "none"
+                                  }}
+                                >
+                                  <div style={{ fontSize: 20, fontWeight: 400, marginBottom: 2 }}>
+                                    {room.room_number}
+                                  </div>
+                                  <div style={{ fontSize: 9, opacity: 0.7, letterSpacing: "0.05em", textTransform: "uppercase" }}>
+                                    {matchType}
+                                  </div>
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      ))}
+
+                      {/* Selected room summary + confirm */}
+                      <div style={{
+                        borderTop: `1px solid ${colors.border}`, paddingTop: 20, marginTop: 8,
+                        display: "flex", justifyContent: "space-between", alignItems: "center", gap: 16
+                      }}>
+                        <div>
+                          {selectedRoom ? (
+                            <>
+                              <p style={{ margin: 0, fontSize: 13, color: colors.text }}>
+                                Assigning <span style={{ color: colors.gold }}>Room {selectedRoom.room_number}</span> to {roomPickerBooking.guest_name}
+                              </p>
+                              <p style={{ margin: "2px 0 0", fontSize: 11, color: colors.textMuted }}>
+                                {selectedRoom.room_name} · Welcome email will be sent
+                              </p>
+                            </>
+                          ) : (
+                            <p style={{ margin: 0, fontSize: 13, color: colors.textMuted }}>Select a room above to proceed</p>
+                          )}
+                        </div>
+                        <button
+                          onClick={handleCheckInWithRoom}
+                          disabled={!selectedRoom || checkingIn}
+                          style={{
+                            background: selectedRoom ? colors.gold : colors.surface2,
+                            color: selectedRoom ? "#0a0a0a" : colors.textMuted,
+                            border: "none", padding: "12px 24px", fontSize: 11,
+                            letterSpacing: "0.15em", textTransform: "uppercase", fontWeight: 700,
+                            cursor: selectedRoom && !checkingIn ? "pointer" : "not-allowed",
+                            whiteSpace: "nowrap", fontFamily: "Georgia, serif",
+                            opacity: checkingIn ? 0.7 : 1
+                          }}
+                        >
+                          {checkingIn ? "Checking In..." : "Confirm Check In"}
+                        </button>
+                      </div>
+                    </>
+                  )}
+                </>
+              );
+            })()}
+          </div>
+        </div>
+      )}
+
+      {/* ==================== WALK-IN BOOKING MODAL ==================== */}
+      {showWalkIn && (
+        <div style={{
+          position: "fixed", inset: 0, background: "rgba(0,0,0,0.8)",
+          zIndex: 400, display: "flex", alignItems: "center", justifyContent: "center", padding: 20
+        }}>
+          <div style={{
+            background: colors.surface, border: `1px solid ${colors.gold}`,
+            padding: 32, maxWidth: 560, width: "100%", maxHeight: "92vh", overflowY: "auto"
+          }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 24 }}>
+              <div>
+                <p style={{ color: colors.gold, fontSize: 11, letterSpacing: "0.3em", textTransform: "uppercase", margin: "0 0 4px" }}>Front Desk</p>
+                <h2 style={{ color: colors.text, fontSize: 22, fontWeight: 400, margin: 0 }}>Walk-in Booking</h2>
+              </div>
+              <button onClick={() => setShowWalkIn(false)} style={{ background: "none", border: "none", cursor: "pointer", color: colors.textMuted }}><X size={20} /></button>
+            </div>
+
+            {/* Guest Info */}
+            <p style={{ color: colors.gold, fontSize: 10, letterSpacing: "0.2em", textTransform: "uppercase", margin: "0 0 10px" }}>Guest Information</p>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 16 }}>
+              {[
+                { label: "Full Name *", key: "name", type: "text", placeholder: "e.g. John Doe" },
+                { label: "Phone *", key: "phone", type: "tel", placeholder: "e.g. 08012345678" },
+                { label: "Email", key: "email", type: "email", placeholder: "guest@email.com" },
+              ].map(f => (
+                <div key={f.key} style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                  <label style={{ fontSize: 10, color: colors.textMuted, letterSpacing: "0.15em", textTransform: "uppercase" }}>{f.label}</label>
+                  <input
+                    type={f.type}
+                    value={(walkIn as any)[f.key]}
+                    placeholder={f.placeholder}
+                    onChange={e => {
+                      let val = e.target.value;
+                      if (f.key === "name") val = val.replace(/(^|\s)\S/g, c => c.toUpperCase());
+                      setWalkIn(w => ({ ...w, [f.key]: val }));
+                    }}
+                    style={{
+                      background: colors.surface2, border: `1px solid ${colors.border}`,
+                      padding: "9px 12px", color: colors.text, fontSize: 13,
+                      fontFamily: "Georgia, serif", outline: "none"
+                    }}
+                  />
+                </div>
+              ))}
+            </div>
+
+            {/* Stay Details */}
+            <p style={{ color: colors.gold, fontSize: 10, letterSpacing: "0.2em", textTransform: "uppercase", margin: "16px 0 10px" }}>Stay Details</p>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 10 }}>
+              <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                <label style={{ fontSize: 10, color: colors.textMuted, letterSpacing: "0.15em", textTransform: "uppercase" }}>Check-in *</label>
+                <input type="date" value={walkIn.checkIn} min={new Date().toISOString().split("T")[0]}
+                  onChange={e => setWalkIn(w => ({ ...w, checkIn: e.target.value }))}
+                  style={{ background: colors.surface2, border: `1px solid ${colors.border}`, padding: "9px 12px", color: colors.text, fontSize: 13, fontFamily: "Georgia, serif", outline: "none" }} />
+              </div>
+              <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                <label style={{ fontSize: 10, color: colors.textMuted, letterSpacing: "0.15em", textTransform: "uppercase" }}>Check-out *</label>
+                <input type="date" value={walkIn.checkOut} min={walkIn.checkIn}
+                  onChange={e => setWalkIn(w => ({ ...w, checkOut: e.target.value }))}
+                  style={{ background: colors.surface2, border: `1px solid ${colors.border}`, padding: "9px 12px", color: colors.text, fontSize: 13, fontFamily: "Georgia, serif", outline: "none" }} />
+              </div>
+            </div>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10, marginBottom: 10 }}>
+              <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                <label style={{ fontSize: 10, color: colors.textMuted, letterSpacing: "0.15em", textTransform: "uppercase" }}>Room Type *</label>
+                <select value={walkIn.roomType} onChange={e => setWalkIn(w => ({ ...w, roomType: e.target.value }))}
+                  style={{ background: colors.surface2, border: `1px solid ${colors.border}`, padding: "9px 12px", color: colors.text, fontSize: 12, fontFamily: "Georgia, serif", outline: "none", cursor: "pointer" }}>
+                  {[
+                    { value: "classic", label: "Classic" },
+                    { value: "superior", label: "Superior" },
+                    { value: "executive", label: "Executive" },
+                    { value: "executive-twin", label: "Executive Twin" },
+                    { value: "business-suites", label: "Business Suite" },
+                    { value: "executive-suites", label: "Executive Suite" },
+                  ].map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                </select>
+              </div>
+              <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                <label style={{ fontSize: 10, color: colors.textMuted, letterSpacing: "0.15em", textTransform: "uppercase" }}>No. of Rooms</label>
+                <select value={walkIn.numRooms} onChange={e => setWalkIn(w => ({ ...w, numRooms: Number(e.target.value) }))}
+                  style={{ background: colors.surface2, border: `1px solid ${colors.border}`, padding: "9px 12px", color: colors.text, fontSize: 13, fontFamily: "Georgia, serif", outline: "none", cursor: "pointer" }}>
+                  {[1,2,3,4,5,6,7,8,9,10].map(n => <option key={n} value={n}>{n}</option>)}
+                </select>
+              </div>
+              <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                <label style={{ fontSize: 10, color: colors.textMuted, letterSpacing: "0.15em", textTransform: "uppercase" }}>Payment</label>
+                <select value={walkIn.paymentMethod} onChange={e => setWalkIn(w => ({ ...w, paymentMethod: e.target.value }))}
+                  style={{ background: colors.surface2, border: `1px solid ${colors.border}`, padding: "9px 12px", color: colors.text, fontSize: 13, fontFamily: "Georgia, serif", outline: "none", cursor: "pointer" }}>
+                  <option value="cash">Cash</option>
+                  <option value="pos">POS</option>
+                  <option value="transfer">Bank Transfer</option>
+                  <option value="complimentary">Complimentary</option>
+                </select>
+              </div>
+            </div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 4, marginBottom: 20 }}>
+              <label style={{ fontSize: 10, color: colors.textMuted, letterSpacing: "0.15em", textTransform: "uppercase" }}>Notes / Special Requests</label>
+              <textarea value={walkIn.notes} onChange={e => setWalkIn(w => ({ ...w, notes: e.target.value }))} rows={2}
+                style={{ background: colors.surface2, border: `1px solid ${colors.border}`, padding: "9px 12px", color: colors.text, fontSize: 13, fontFamily: "Georgia, serif", outline: "none", resize: "none" }} />
+            </div>
+
+            {/* Nights summary */}
+            {walkIn.checkIn && walkIn.checkOut && (
+              <div style={{ background: colors.surface2, border: `1px solid ${colors.border}`, padding: "10px 14px", marginBottom: 16, display: "flex", gap: 16, fontSize: 12, color: colors.textMuted }}>
+                <span>Nights: <strong style={{ color: colors.text }}>{Math.max(1, Math.round((new Date(walkIn.checkOut).getTime() - new Date(walkIn.checkIn).getTime()) / 86400000))}</strong></span>
+                <span>Rooms: <strong style={{ color: colors.text }}>{walkIn.numRooms}</strong></span>
+                <span>Type: <strong style={{ color: colors.gold }}>{walkIn.roomType}</strong></span>
+                <span>Payment: <strong style={{ color: colors.text, textTransform: "capitalize" }}>{walkIn.paymentMethod}</strong></span>
+              </div>
+            )}
+
+            <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
+              <button onClick={() => setShowWalkIn(false)} style={{
+                background: "none", border: `1px solid ${colors.border}`, padding: "10px 20px",
+                color: colors.textMuted, cursor: "pointer", fontSize: 11,
+                letterSpacing: "0.1em", textTransform: "uppercase", fontFamily: "Georgia, serif"
+              }}>Cancel</button>
+              <button
+                disabled={walkInLoading || !walkIn.name || !walkIn.phone || !walkIn.checkIn || !walkIn.checkOut}
+                onClick={async () => {
+                  if (!token) return;
+                  setWalkInLoading(true);
+                  try {
+                    const nights = Math.max(1, Math.round((new Date(walkIn.checkOut).getTime() - new Date(walkIn.checkIn).getTime()) / 86400000));
+                    const refNum = String(Math.floor(Math.random() * 999) + 1).padStart(3, "0");
+                    const codes: Record<string, string> = { "classic":"C","superior":"S","executive":"E","executive-twin":"E","business-suites":"BS","executive-suites":"ES" };
+                    const reference = `REM${refNum}${codes[walkIn.roomType] ?? "C"}`;
+                    const db = (window as any).__D1;
+
+                    // Save via saveBookingToDb-compatible structure
+                    const { saveBookingToDb } = await import("@/functions/saveBookingToDb");
+                    await saveBookingToDb({ data: {
+                      reference, createdAt: new Date().toISOString(),
+                      guest: { name: walkIn.name, email: walkIn.email || `walkin-${Date.now()}@remeritona.local`, phone: walkIn.phone, notes: walkIn.notes },
+                      roomSlug: walkIn.roomType, roomName: walkIn.roomType.replace(/-/g," ").replace(/\b\w/g,(c:string)=>c.toUpperCase()),
+                      roomPrice: 0, checkIn: walkIn.checkIn, checkOut: walkIn.checkOut,
+                      nights, numRooms: walkIn.numRooms, guests: walkIn.numRooms,
+                      addons: [], subtotal: 0, discount: 0, tax: 0, total: 0,
+                      gateway: walkIn.paymentMethod, paymentMode: "pay_now",
+                      pendingBalance: 0, amountCharged: 0, status: "confirmed",
+                    }});
+                    showToast(`Walk-in booking created — ${reference}`);
+                    setShowWalkIn(false);
+                    await loadStats(token);
+                  } catch(e) {
+                    console.error(e);
+                    showToast("Failed to create walk-in booking", "error");
+                  } finally {
+                    setWalkInLoading(false);
+                  }
+                }}
+                style={{
+                  background: walkIn.name && walkIn.phone && walkIn.checkIn && walkIn.checkOut ? colors.gold : colors.surface2,
+                  color: walkIn.name && walkIn.phone ? "#0a0a0a" : colors.textMuted,
+                  border: "none", padding: "10px 24px", fontSize: 11,
+                  letterSpacing: "0.15em", textTransform: "uppercase", fontWeight: 700,
+                  cursor: !walkInLoading && walkIn.name && walkIn.phone ? "pointer" : "not-allowed",
+                  fontFamily: "Georgia, serif"
+                }}
+              >{walkInLoading ? "Creating..." : "Create Booking"}</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ==================== REASSIGN ROOM MODAL ==================== */}
+      {reassignBooking && (
+        <div style={{
+          position: "fixed", inset: 0, background: "rgba(0,0,0,0.8)",
+          zIndex: 350, display: "flex", alignItems: "center", justifyContent: "center", padding: 20
+        }}>
+          <div style={{
+            background: colors.surface, border: `1px solid #f59e0b`,
+            padding: 32, maxWidth: 620, width: "100%", maxHeight: "90vh", overflowY: "auto"
+          }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 16 }}>
+              <div>
+                <p style={{ color: "#f59e0b", fontSize: 11, letterSpacing: "0.3em", textTransform: "uppercase", margin: "0 0 6px" }}>
+                  Reassign Room
+                </p>
+                <h2 style={{ color: colors.text, fontSize: 20, fontWeight: 400, margin: 0 }}>
+                  {reassignBooking.guest_name}
+                </h2>
+                <p style={{ color: colors.textMuted, fontSize: 12, margin: "4px 0 0" }}>
+                  Moving from Room {reassignOldRoom} · {reassignBooking.reference}
+                </p>
+              </div>
+              <button onClick={() => { setReassignBooking(null); setReassignOldRoom(null); setSelectedRoom(null); }} style={{
+                background: "none", border: "none", cursor: "pointer", color: colors.textMuted
+              }}><X size={20} /></button>
+            </div>
+
+            <div style={{ background: "#f59e0b11", border: "1px solid #f59e0b55", padding: "10px 14px", marginBottom: 16, display: "flex", gap: 8, alignItems: "center" }}>
+              <AlertCircle size={14} style={{ color: "#f59e0b", flexShrink: 0 }} />
+              <span style={{ fontSize: 12, color: "#f59e0b" }}>
+                Room {reassignOldRoom} will be marked Vacant — Dirty. Select a new room below.
+              </span>
+            </div>
+
+            <div style={{ background: colors.surface2, border: `1px solid ${colors.border}`, padding: "10px 16px", marginBottom: 20, display: "flex", gap: 8 }}>
+              <span style={{ width: 8, height: 8, borderRadius: "50%", background: "#22c55e", display: "inline-block", marginTop: 3, flexShrink: 0 }} />
+              <span style={{ fontSize: 12, color: colors.textMuted }}>
+                {vacantRooms.length} vacant clean room{vacantRooms.length !== 1 ? "s" : ""} available
+              </span>
+            </div>
+
+            {vacantRooms.length === 0 ? (
+              <p style={{ color: colors.textMuted, textAlign: "center", padding: "32px 0", fontSize: 13 }}>No vacant clean rooms available</p>
+            ) : (
+              <>
+                {Object.entries(vacantByType).map(([type, rooms]) => (
+                  <div key={type} style={{ marginBottom: 20 }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
+                      <span style={{ fontSize: 10, color: getRoomTypeColor(type), letterSpacing: "0.2em", textTransform: "uppercase" }}>{type}</span>
+                      <span style={{ fontSize: 10, color: colors.textMuted }}>({rooms.length} available)</span>
+                    </div>
+                    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(90px, 1fr))", gap: 8 }}>
+                      {rooms.map((room: any) => {
+                        const isSelected = selectedRoom?.room_number === room.room_number;
+                        const typeColor = getRoomTypeColor(type);
+                        return (
+                          <button key={room.room_number} onClick={() => setSelectedRoom(room)} style={{
+                            background: isSelected ? typeColor : colors.surface2,
+                            border: `2px solid ${isSelected ? typeColor : colors.border}`,
+                            color: isSelected ? "#fff" : colors.text,
+                            padding: "10px 6px", cursor: "pointer", textAlign: "center",
+                            boxShadow: isSelected ? `0 0 0 3px ${typeColor}33` : "none"
+                          }}>
+                            <div style={{ fontSize: 17, fontWeight: 400 }}>{room.room_number}</div>
+                            <div style={{ fontSize: 9, opacity: 0.6 }}>Room</div>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ))}
+                <div style={{ borderTop: `1px solid ${colors.border}`, paddingTop: 20, display: "flex", justifyContent: "space-between", alignItems: "center", gap: 16 }}>
+                  <div>
+                    {selectedRoom ? (
+                      <p style={{ margin: 0, fontSize: 13, color: colors.text }}>
+                        Move to <span style={{ color: "#f59e0b" }}>Room {selectedRoom.room_number}</span>
+                      </p>
+                    ) : (
+                      <p style={{ margin: 0, fontSize: 13, color: colors.textMuted }}>Select a new room above</p>
+                    )}
+                  </div>
+                  <button
+                    onClick={handleReassignRoom}
+                    disabled={!selectedRoom || reassigning}
+                    style={{
+                      background: selectedRoom ? "#f59e0b" : colors.surface2,
+                      color: selectedRoom ? "#0a0a0a" : colors.textMuted,
+                      border: "none", padding: "12px 24px", fontSize: 11,
+                      letterSpacing: "0.15em", textTransform: "uppercase", fontWeight: 700,
+                      cursor: selectedRoom && !reassigning ? "pointer" : "not-allowed",
+                      fontFamily: "Georgia, serif", whiteSpace: "nowrap"
+                    }}
+                  >{reassigning ? "Reassigning..." : "Confirm Reassign"}</button>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ==================== OCCUPIED ROOM GUEST DETAIL ==================== */}
+      {occupiedRoomDetail && (
+        <div style={{
+          position: "fixed", inset: 0, background: "rgba(0,0,0,0.75)",
+          zIndex: 350, display: "flex", alignItems: "center", justifyContent: "center", padding: 20
+        }} onClick={() => setOccupiedRoomDetail(null)}>
+          <div style={{
+            background: colors.surface, border: `1px solid #ef444466`,
+            padding: 28, maxWidth: 400, width: "100%", borderRadius: 2
+          }} onClick={e => e.stopPropagation()}>
+            {/* Header */}
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 20 }}>
+              <div>
+                <p style={{ margin: "0 0 4px", fontSize: 10, color: "#ef4444", letterSpacing: "0.25em", textTransform: "uppercase" }}>
+                  Occupied — {occupiedRoomDetail.room.room_name}
+                </p>
+                <h2 style={{ margin: 0, fontSize: 22, fontWeight: 400, color: colors.text }}>
+                  Room {occupiedRoomDetail.room.room_number}
+                </h2>
+              </div>
+              <button onClick={() => setOccupiedRoomDetail(null)} style={{
+                background: "none", border: "none", cursor: "pointer", color: colors.textMuted, padding: 4
+              }}><X size={18} /></button>
+            </div>
+
+            {occupiedRoomDetail.booking ? (
+              <>
+                {/* Guest info */}
+                <div style={{ background: colors.surface2, border: `1px solid ${colors.border}`, padding: 16, marginBottom: 12 }}>
+                  <p style={{ margin: "0 0 12px", fontSize: 10, color: colors.gold, letterSpacing: "0.2em", textTransform: "uppercase" }}>Guest</p>
+                  <p style={{ margin: "0 0 4px", fontSize: 16, color: colors.text }}>{occupiedRoomDetail.booking.guest_name}</p>
+                  <p style={{ margin: "0 0 4px", fontSize: 12, color: colors.textMuted }}>{occupiedRoomDetail.booking.guest_email}</p>
+                  {occupiedRoomDetail.booking.guest_phone && (
+                    <p style={{ margin: 0, fontSize: 12, color: colors.textMuted }}>{occupiedRoomDetail.booking.guest_phone}</p>
+                  )}
+                </div>
+
+                {/* Stay info */}
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8, marginBottom: 16 }}>
+                  {[
+                    { label: "Guests", value: occupiedRoomDetail.booking.guests ?? 1 },
+                    { label: "Check-in", value: new Date(occupiedRoomDetail.booking.check_in).toLocaleDateString("en-GB", { day: "numeric", month: "short" }) },
+                    { label: "Check-out", value: new Date(occupiedRoomDetail.booking.check_out).toLocaleDateString("en-GB", { day: "numeric", month: "short" }) },
+                  ].map(item => (
+                    <div key={item.label} style={{ background: colors.surface2, border: `1px solid ${colors.border}`, padding: "10px 12px", textAlign: "center" }}>
+                      <p style={{ margin: "0 0 4px", fontSize: 9, color: colors.textMuted, letterSpacing: "0.15em", textTransform: "uppercase" }}>{item.label}</p>
+                      <p style={{ margin: 0, fontSize: 15, color: colors.text }}>{item.value}</p>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Reference */}
+                <p style={{ margin: "0 0 16px", fontSize: 10, color: colors.textMuted, textAlign: "center" }}>
+                  Ref: {occupiedRoomDetail.booking.reference}
+                  {occupiedRoomDetail.booking.early_checkin ? (
+                    <span style={{ marginLeft: 8, color: "#f59e0b", border: "1px solid #f59e0b", padding: "1px 5px", fontSize: 8 }}>EARLY CHECK-IN</span>
+                  ) : null}
+                </p>
+
+                {/* Actions */}
+                {occupiedRoomDetail.booking.status === "checked_in" && (
+                  <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                    <button onClick={() => {
+                      setOccupiedRoomDetail(null);
+                      handleCheckOut(occupiedRoomDetail.booking);
+                    }} style={{
+                      width: "100%", background: "#22c55e", color: "#0a0a0a", border: "none",
+                      padding: "12px", fontSize: 11, cursor: "pointer",
+                      letterSpacing: "0.15em", textTransform: "uppercase", fontWeight: 700,
+                      fontFamily: "Georgia, serif"
+                    }}>Check Out Guest</button>
+                    <button onClick={() => {
+                      const oldRoom = occupiedRoomDetail.room.room_number;
+                      setOccupiedRoomDetail(null);
+                      setSelectedRoom(null);
+                      setReassignOldRoom(oldRoom);
+                      setReassignBooking(occupiedRoomDetail.booking);
+                    }} style={{
+                      width: "100%", background: "none", border: `1px solid #f59e0b`, color: "#f59e0b",
+                      padding: "11px", fontSize: 11, cursor: "pointer",
+                      letterSpacing: "0.15em", textTransform: "uppercase",
+                      fontFamily: "Georgia, serif"
+                    }}>Reassign Room</button>
+                  </div>
+                )}
+              </>
+            ) : (
+              <div style={{ textAlign: "center", padding: "24px 0", color: colors.textMuted }}>
+                <p style={{ fontSize: 13 }}>No active booking found for this room.</p>
+                <p style={{ fontSize: 11, marginTop: 4 }}>The room may have been manually set to Occupied.</p>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ==================== EARLY CHECKOUT CONFIRMATION ==================== */}
+      {earlyCheckoutBooking && (
+        <div style={{
+          position: "fixed", inset: 0, background: "rgba(0,0,0,0.8)",
+          zIndex: 400, display: "flex", alignItems: "center", justifyContent: "center", padding: 20
+        }}>
+          <div style={{
+            background: colors.surface, border: `1px solid #f59e0b`,
+            padding: 32, maxWidth: 440, width: "100%"
+          }}>
+            <div style={{ display: "flex", alignItems: "flex-start", gap: 16, marginBottom: 20 }}>
+              <AlertCircle size={24} style={{ color: "#f59e0b", flexShrink: 0, marginTop: 2 }} />
+              <div>
+                <h3 style={{ margin: "0 0 8px", fontSize: 17, fontWeight: 400, color: colors.text }}>Early Check-out</h3>
+                <p style={{ margin: 0, fontSize: 13, color: colors.textMuted, lineHeight: 1.6 }}>
+                  <strong style={{ color: colors.text }}>{earlyCheckoutBooking.guest_name}</strong> is checking out early.
+                  Scheduled checkout is <strong style={{ color: "#f59e0b" }}>
+                    {new Date((earlyCheckoutBooking.check_out ?? "").split("T")[0]).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}
+                  </strong>. Are you sure you want to proceed?
+                </p>
+              </div>
+            </div>
+            <div style={{ display: "flex", gap: 12, justifyContent: "flex-end" }}>
+              <button onClick={() => setEarlyCheckoutBooking(null)} style={{
+                background: "none", border: `1px solid ${colors.border}`,
+                padding: "10px 20px", fontSize: 11, cursor: "pointer",
+                color: colors.textMuted, letterSpacing: "0.15em", textTransform: "uppercase",
+                fontFamily: "Georgia, serif"
+              }}>Cancel</button>
+              <button onClick={() => confirmCheckOut(earlyCheckoutBooking)} style={{
+                background: "#f59e0b", color: "#0a0a0a", border: "none",
+                padding: "10px 20px", fontSize: 11, cursor: "pointer",
+                letterSpacing: "0.15em", textTransform: "uppercase", fontWeight: 700,
+                fontFamily: "Georgia, serif"
+              }}>Confirm Early Check-out</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ==================== BOOKING DETAIL MODAL ==================== */}
       {selectedBooking && (
         <div style={{
           position: "fixed", inset: 0, background: "rgba(0,0,0,0.7)",
@@ -604,7 +1532,7 @@ function AdminPage() {
                   flex: 1, background: "#3b82f6", color: "#fff", border: "none",
                   padding: "12px", fontSize: 11, cursor: "pointer",
                   letterSpacing: "0.15em", textTransform: "uppercase"
-                }}>Check In Guest</button>
+                }}>Assign Room & Check In</button>
               )}
               {selectedBooking.status === "checked_in" && (
                 <button onClick={() => handleCheckOut(selectedBooking)} style={{

@@ -9,6 +9,7 @@ import { z } from "zod";
 import { saveBooking, type StoredBooking } from "@/data/bookings-store";
 import { sendBookingEmail } from "@/functions/sendBookingEmail";
 import { saveBookingToDb } from "@/functions/saveBookingToDb";
+import { checkRoomAvailability } from "@/functions/adminAuth";
 
 const TOKENIZATION_FEE = 100; // NGN — small Save-card-now charge to capture authorization
 const SAVE_CARD_MIN_HOURS = 72;
@@ -69,10 +70,31 @@ function BookingPage() {
   const [bookingType, setBookingType] = useState<"self" | "family" | "corporate">("self");
   const [numRooms, setNumRooms] = useState<number>(1);
 
-  // "Book for myself" always uses 1 room.
+  // Availability per room type — fetched when dates change
+  const [availability, setAvailability] = useState<Record<string, { available: number; fullyBooked: boolean }>>({});
+
   useEffect(() => {
-    if (bookingType === "self" && numRooms !== 1) setNumRooms(1);
-  }, [bookingType, numRooms]);
+    if (!checkIn || !checkOut) return;
+    const fetchAll = async () => {
+      try {
+        const results = await Promise.all(
+          rooms.map(r => checkRoomAvailability({ data: { roomType: r.slug, checkIn, checkOut } }))
+        );
+        const map: Record<string, { available: number; fullyBooked: boolean }> = {};
+        results.forEach((r: any) => {
+          if (r.success) map[r.typeKey] = { available: r.available, fullyBooked: r.fullyBooked };
+        });
+        setAvailability(map);
+      } catch (e) {
+        console.error("Availability check failed:", e);
+      }
+    };
+    fetchAll();
+  }, [checkIn, checkOut]);
+
+  // Auto-capitalize: first letter of each word
+  const toTitleCase = (str: string) =>
+    str.replace(/(^|\s)\S/g, c => c.toUpperCase());
 
   const maxAdults = 2 * numRooms;
   const maxChildren = 1 * numRooms;
@@ -686,11 +708,15 @@ const sendBookingEmails = async (reference: string) => {
                       onChange={(e) => setNumRooms(Number(e.target.value))}
                       className="bg-onyx border border-border px-3 py-3 text-foreground focus:border-gold focus:outline-none"
                     >
-                      {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((n) => (
-                        <option key={n} value={n} className="bg-charcoal">
-                          {n} {n === 1 ? "Room" : "Rooms"}
-                        </option>
-                      ))}
+                      {(() => {
+                        const avail = availability[selectedSlug]?.available ?? 10;
+                        const max = Math.min(10, Math.max(1, avail));
+                        return Array.from({ length: max }, (_, i) => i + 1).map((n) => (
+                          <option key={n} value={n} className="bg-charcoal">
+                            {n} {n === 1 ? "Room" : "Rooms"}
+                          </option>
+                        ));
+                      })()}
                     </select>
                   </div>
                 )}
@@ -736,27 +762,47 @@ const sendBookingEmails = async (reference: string) => {
 
                 <h3 className="font-serif text-2xl mt-8 mb-4">Select a room</h3>
                 <div className="space-y-3">
-                  {rooms.map((r) => (
-                    <button
-                      key={r.slug}
-                      type="button"
-                      onClick={() => setSelectedSlug(r.slug)}
-                      className={`w-full text-left flex gap-4 p-3 border transition-colors ${
-                        selectedSlug === r.slug ? "border-gold bg-onyx" : "border-border hover:border-gold/40"
-                      }`}
-                    >
-                      <img src={r.image} alt={r.name} className="w-32 h-24 object-cover shrink-0" />
-                      <div className="flex-1 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                        <div>
-                          <p className="font-serif text-lg">{r.name}</p>
-                          <p className="text-xs text-muted-foreground">{r.size} · {r.beds} · {r.occupancy}</p>
+                  {rooms.map((r) => {
+                    const avail = availability[r.slug];
+                    const isFullyBooked = avail?.fullyBooked ?? false;
+                    const availCount = avail?.available ?? null;
+                    return (
+                      <button
+                        key={r.slug}
+                        type="button"
+                        onClick={() => { if (!isFullyBooked) setSelectedSlug(r.slug); }}
+                        disabled={isFullyBooked}
+                        className={`w-full text-left flex gap-4 p-3 border transition-colors ${
+                          isFullyBooked
+                            ? "border-border opacity-50 cursor-not-allowed"
+                            : selectedSlug === r.slug ? "border-gold bg-onyx" : "border-border hover:border-gold/40"
+                        }`}
+                      >
+                        <img src={r.image} alt={r.name} className="w-32 h-24 object-cover shrink-0" />
+                        <div className="flex-1 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                          <div>
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <p className="font-serif text-lg">{r.name}</p>
+                              {isFullyBooked && (
+                                <span className="text-[10px] uppercase tracking-widest bg-red-900/40 text-red-400 border border-red-800 px-2 py-0.5">
+                                  Fully Booked
+                                </span>
+                              )}
+                              {!isFullyBooked && availCount !== null && availCount <= 3 && (
+                                <span className="text-[10px] uppercase tracking-widest bg-amber-900/30 text-amber-400 border border-amber-700 px-2 py-0.5">
+                                  Only {availCount} left
+                                </span>
+              )}
+                            </div>
+                            <p className="text-xs text-muted-foreground">{r.size} · {r.beds} · {r.occupancy}</p>
+                          </div>
+                          <p className="text-gold font-serif text-xl">
+                            {formatNaira(r.price)}<span className="text-xs text-muted-foreground">/night</span>
+                          </p>
                         </div>
-                        <p className="text-gold font-serif text-xl">
-                          {formatNaira(r.price)}<span className="text-xs text-muted-foreground">/night</span>
-                        </p>
-                      </div>
-                    </button>
-                  ))}
+                      </button>
+                    );
+                  })}
                 </div>
 
                 <div className="flex justify-end mt-8">
@@ -779,7 +825,7 @@ const sendBookingEmails = async (reference: string) => {
                       ref={nameRef}
                       type="text"
                       value={guest.name}
-                      onChange={(v) => { setGuest({ ...guest, name: v.target.value }); setFieldErrors(e => ({ ...e, name: undefined })); }}
+                      onChange={(v) => { setGuest({ ...guest, name: toTitleCase(v.target.value) }); setFieldErrors(e => ({ ...e, name: undefined })); }}
                       className={`bg-onyx border px-3 py-3 text-foreground focus:outline-none ${fieldErrors.name ? "border-red-500 focus:border-red-500" : "border-border focus:border-gold"}`}
                     />
                     {fieldErrors.name && <p className="text-red-400 text-xs mt-1">{fieldErrors.name}</p>}
