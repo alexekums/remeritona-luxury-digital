@@ -4,6 +4,7 @@ import {
   adminLogin, getDashboardStats, updateRoomStatus,
   checkInGuest, checkOutGuest
 } from "@/functions/adminAuth";
+import { saveGuestRegistration, getGuestRegistration } from "@/functions/saveRegistration";
 import { formatNaira } from "@/data/rooms";
 import {
   LogOut, Moon, Sun, Users, Hotel, TrendingUp,
@@ -111,6 +112,37 @@ function AdminPage() {
   const [showWalkIn, setShowWalkIn] = useState(false);
   const [walkIn, setWalkIn] = useState({ name: "", email: "", phone: "", roomType: "classic", numRooms: 1, checkIn: "", checkOut: "", paymentMethod: "cash", notes: "" });
   const [walkInLoading, setWalkInLoading] = useState(false);
+
+
+
+  // Guest registration card
+  const [regCard, setRegCard] = useState<any>(null); // booking that needs registration
+  const [regForm, setRegForm] = useState<any>({});
+  const [regSaving, setRegSaving] = useState(false);
+  const [regPrinting, setRegPrinting] = useState(false);
+
+  const openRegCard = (booking: any, assignedRoom?: string) => {
+    const nameParts = (booking.guest_name ?? "").trim().split(" ");
+    const surname = nameParts[nameParts.length - 1] ?? "";
+    const otherNames = nameParts.slice(0, -1).join(" ");
+    setRegForm({
+      bookingRef: booking.reference,
+      roomNumber: assignedRoom ?? booking.room_number ?? "",
+      roomType: booking.room_name ?? "",
+      tariff: booking.total ? `₦${Number(booking.total).toLocaleString()}` : "",
+      arrival: (booking.check_in ?? "").split("T")[0],
+      departure: (booking.check_out ?? "").split("T")[0],
+      surname, otherNames,
+      residentialAddress: "", state: "", companyAddress: "", occupation: "",
+      email: booking.guest_email ?? "", address: "", purpose: "Leisure",
+      tel: booking.guest_phone ?? "", nationality: "Nigerian",
+      passportNo: "", dateIssued: "", visaPermitNo: "",
+      nextOfKin: "", nextOfKinPhone: "", carReg: "",
+      receptionist: staffName, billingInstruction: "Room Only",
+      signatureObtained: false,
+    });
+    setRegCard(booking);
+  };
   // Occupied room guest detail popup
   const [occupiedRoomDetail, setOccupiedRoomDetail] = useState<any>(null);
   const [occupiedRoomLoading, setOccupiedRoomLoading] = useState(false);
@@ -118,6 +150,14 @@ function AdminPage() {
   const [reassignBooking, setReassignBooking] = useState<any>(null);
   const [reassignOldRoom, setReassignOldRoom] = useState<string | null>(null);
   const [reassigning, setReassigning] = useState(false);
+  // Reassign reason
+  const [reassignReason, setReassignReason] = useState("");
+  const [reassignReasonOther, setReassignReasonOther] = useState("");
+  const [showReassignReason, setShowReassignReason] = useState(false);
+  const [pendingReassignRoom, setPendingReassignRoom] = useState<any>(null);
+  // Idle timer
+  const [idleWarning, setIdleWarning] = useState(false);
+  const [idleCountdown, setIdleCountdown] = useState(60);
   // Reassign room
   const [reassigningOldRoom, setReassigningOldRoom] = useState<string | null>(null);
 
@@ -169,6 +209,50 @@ function AdminPage() {
   useEffect(() => {
     if (token) loadStats(token);
   }, [token, loadStats]);
+
+  // ── Idle timer: 10min warning → 60sec countdown → auto logout ──
+  useEffect(() => {
+    if (!token) return;
+    let idleTimer: ReturnType<typeof setTimeout>;
+    let countdownInterval: ReturnType<typeof setInterval>;
+    let countdown = 60;
+
+    const resetIdle = () => {
+      clearTimeout(idleTimer);
+      clearInterval(countdownInterval);
+      setIdleWarning(false);
+      setIdleCountdown(60);
+      countdown = 60;
+      idleTimer = setTimeout(() => {
+        setIdleWarning(true);
+        countdownInterval = setInterval(() => {
+          countdown -= 1;
+          setIdleCountdown(countdown);
+          if (countdown <= 0) {
+            clearInterval(countdownInterval);
+            handleLogout();
+          }
+        }, 1000);
+      }, 10 * 60 * 1000); // 10 minutes
+    };
+
+    const events = ["mousemove", "keydown", "click", "scroll", "touchstart"];
+    events.forEach(e => window.addEventListener(e, resetIdle));
+    resetIdle();
+
+    // Logout on browser close/tab close
+    const handleUnload = () => {
+      localStorage.removeItem(TOKEN_KEY);
+    };
+    window.addEventListener("beforeunload", handleUnload);
+
+    return () => {
+      clearTimeout(idleTimer);
+      clearInterval(countdownInterval);
+      events.forEach(e => window.removeEventListener(e, resetIdle));
+      window.removeEventListener("beforeunload", handleUnload);
+    };
+  }, [token]);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -298,10 +382,14 @@ function AdminPage() {
           ? `${roomPickerBooking.guest_name} moved from Room ${reassigningOldRoom} to Room ${selectedRoom.room_number}`
           : `${roomPickerBooking.guest_name} checked in to Room ${selectedRoom.room_number}`;
         showToast(msg);
+        const completedBooking = { ...roomPickerBooking };
+        const assignedRoomNum = selectedRoom?.room_number;
         setRoomPickerBooking(null);
         setSelectedRoom(null);
         setReassigningOldRoom(null);
         await loadStats(token);
+        // Auto-open registration card on new check-in (not reassign)
+        if (!isReassign) openRegCard(completedBooking, assignedRoomNum);
       } else {
         showToast(result.error ?? "Operation failed", "error");
       }
@@ -464,6 +552,13 @@ function AdminPage() {
           {toast.message}
         </div>
       )}
+
+      {/* Suppress external chat widget in PMS */}
+      <style>{`
+        #tidio-chat, #tidio-chat-iframe, .tidio-1, [id*="tidio"], [class*="tidio"],
+        #hubspot-messages-iframe-container, .intercom-launcher,
+        [class*="chat-widget"], [id*="chat-widget"] { display: none !important; }
+      `}</style>
 
       {/* Header */}
       <header style={{
@@ -1083,6 +1178,356 @@ function AdminPage() {
         </div>
       )}
 
+      {/* ==================== GUEST REGISTRATION CARD ==================== */}
+      {regCard && (
+        <div style={{
+          position: "fixed", inset: 0, background: "rgba(0,0,0,0.85)",
+          zIndex: 500, display: "flex", alignItems: "flex-start", justifyContent: "center",
+          padding: "20px", overflowY: "auto"
+        }}>
+          <div style={{
+            background: "#fff", color: "#111", width: "100%", maxWidth: 680,
+            fontFamily: "Arial, sans-serif", fontSize: 12, marginTop: 10
+          }} id="reg-card-print">
+            {/* Print Header */}
+            <div style={{ padding: "16px 20px", borderBottom: "2px solid #111", display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+              <div>
+                <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 4 }}>
+                  <div style={{ width: 36, height: 36, border: "2px solid #111", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 14, fontWeight: 700 }}>RC</div>
+                  <div>
+                    <p style={{ margin: 0, fontSize: 9, color: "#555" }}>41 Igweliga Street, Abakaliki, Ebonyi State.</p>
+                    <h2 style={{ margin: 0, fontSize: 20, fontWeight: 900, letterSpacing: 1 }}>REMERITONA</h2>
+                    <p style={{ margin: 0, fontSize: 10, letterSpacing: 3 }}>HOTEL</p>
+                  </div>
+                </div>
+              </div>
+              <div style={{ textAlign: "right" }}>
+                <p style={{ margin: 0, fontSize: 11, fontWeight: 700 }}>RC: 1595090</p>
+                <p style={{ margin: "4px 0 0", fontSize: 11 }}>R/N: <strong>{regForm.roomNumber}</strong></p>
+              </div>
+            </div>
+
+            <div style={{ padding: "8px 20px", background: "#f0f0f0", textAlign: "center", borderBottom: "1px solid #ccc" }}>
+              <strong style={{ fontSize: 13, letterSpacing: 2 }}>GUEST REGISTRATION CARD</strong>
+            </div>
+
+            <div style={{ padding: "12px 20px" }}>
+              {/* Row 1: Arrival/Departure + Name */}
+              <table style={{ width: "100%", borderCollapse: "collapse", marginBottom: 0 }}>
+                <tbody>
+                  <tr>
+                    <td style={{ border: "1px solid #999", padding: "4px 8px", width: 90, fontWeight: 700, fontSize: 10, background: "#f9f9f9" }}>ARRIVAL</td>
+                    <td colSpan={2} style={{ border: "1px solid #999", padding: "4px 8px" }}>
+                      <RegInput label="SURNAME" value={regForm.surname} onChange={v => setRegForm((f:any) => ({ ...f, surname: v }))} />
+                    </td>
+                    <td style={{ border: "1px solid #999", padding: "4px 8px" }}>
+                      <RegInput label="OTHER NAMES" value={regForm.otherNames} onChange={v => setRegForm((f:any) => ({ ...f, otherNames: v }))} />
+                    </td>
+                  </tr>
+                  <tr>
+                    <td style={{ border: "1px solid #999", padding: "4px 8px", background: "#f9f9f9" }}>
+                      <input type="date" value={regForm.arrival} onChange={e => setRegForm((f:any) => ({ ...f, arrival: e.target.value }))}
+                        style={{ border: "none", outline: "none", fontSize: 11, width: "100%", background: "transparent" }} />
+                    </td>
+                    <td colSpan={3} style={{ border: "1px solid #999", padding: "4px 8px" }}>
+                      <RegInput label="RESIDENTIAL ADDRESS" value={regForm.residentialAddress} onChange={v => setRegForm((f:any) => ({ ...f, residentialAddress: v }))} />
+                    </td>
+                  </tr>
+                  <tr>
+                    <td style={{ border: "1px solid #999", padding: "4px 8px", fontWeight: 700, fontSize: 10, background: "#f9f9f9" }}>DEPARTURE</td>
+                    <td colSpan={2} style={{ border: "1px solid #999", padding: "4px 8px" }}>
+                      <RegInput label="COMPANY ADDRESS" value={regForm.companyAddress} onChange={v => setRegForm((f:any) => ({ ...f, companyAddress: v }))} />
+                    </td>
+                    <td style={{ border: "1px solid #999", padding: "4px 8px" }}>
+                      <RegInput label="STATE" value={regForm.state} onChange={v => setRegForm((f:any) => ({ ...f, state: v }))} />
+                    </td>
+                  </tr>
+                  <tr>
+                    <td style={{ border: "1px solid #999", padding: "4px 8px", background: "#f9f9f9" }}>
+                      <input type="date" value={regForm.departure} onChange={e => setRegForm((f:any) => ({ ...f, departure: e.target.value }))}
+                        style={{ border: "none", outline: "none", fontSize: 11, width: "100%", background: "transparent" }} />
+                    </td>
+                    <td colSpan={2} style={{ border: "1px solid #999", padding: "4px 8px" }}>
+                      <RegInput label="E-MAIL" value={regForm.email} onChange={v => setRegForm((f:any) => ({ ...f, email: v }))} />
+                    </td>
+                    <td style={{ border: "1px solid #999", padding: "4px 8px" }}>
+                      <RegInput label="OCCUPATION" value={regForm.occupation} onChange={v => setRegForm((f:any) => ({ ...f, occupation: v }))} />
+                    </td>
+                  </tr>
+                  <tr>
+                    <td style={{ border: "1px solid #999", padding: "4px 8px", background: "#f9f9f9" }}></td>
+                    <td colSpan={2} style={{ border: "1px solid #999", padding: "4px 8px" }}>
+                      <RegInput label="ADDRESS" value={regForm.address} onChange={v => setRegForm((f:any) => ({ ...f, address: v }))} />
+                    </td>
+                    <td style={{ border: "1px solid #999", padding: "4px 8px" }}>
+                      <RegInput label="PURPOSE" value={regForm.purpose} onChange={v => setRegForm((f:any) => ({ ...f, purpose: v }))} />
+                    </td>
+                  </tr>
+                  <tr>
+                    <td style={{ border: "1px solid #999", padding: "4px 8px", fontWeight: 700, fontSize: 10, background: "#f9f9f9" }}>ROOM TYPE</td>
+                    <td colSpan={3} style={{ border: "1px solid #999", padding: "4px 8px" }}>
+                      <RegInput label="TEL" value={regForm.tel} onChange={v => setRegForm((f:any) => ({ ...f, tel: v }))} />
+                    </td>
+                  </tr>
+                  <tr>
+                    <td style={{ border: "1px solid #999", padding: "4px 8px", fontSize: 11, background: "#f9f9f9" }}>{regForm.roomType}</td>
+                    <td style={{ border: "1px solid #999", padding: "4px 8px" }}>
+                      <RegInput label="NATIONALITY" value={regForm.nationality} onChange={v => setRegForm((f:any) => ({ ...f, nationality: v }))} />
+                    </td>
+                    <td style={{ border: "1px solid #999", padding: "4px 8px" }}>
+                      <RegInput label="PASSPORT NO" value={regForm.passportNo} onChange={v => setRegForm((f:any) => ({ ...f, passportNo: v }))} />
+                    </td>
+                    <td style={{ border: "1px solid #999", padding: "4px 8px" }}>
+                      <RegInput label="DATE ISSUED" value={regForm.dateIssued} onChange={v => setRegForm((f:any) => ({ ...f, dateIssued: v }))} />
+                    </td>
+                  </tr>
+                  <tr>
+                    <td style={{ border: "1px solid #999", padding: "4px 8px", background: "#f9f9f9" }}></td>
+                    <td colSpan={2} style={{ border: "1px solid #999", padding: "4px 8px" }}>
+                      <RegInput label="NEXT OF KIN" value={regForm.nextOfKin} onChange={v => setRegForm((f:any) => ({ ...f, nextOfKin: v }))} />
+                    </td>
+                    <td style={{ border: "1px solid #999", padding: "4px 8px" }}>
+                      <RegInput label="VISA/RESIDENTIAL PERMIT NO" value={regForm.visaPermitNo} onChange={v => setRegForm((f:any) => ({ ...f, visaPermitNo: v }))} />
+                    </td>
+                  </tr>
+                  <tr>
+                    <td style={{ border: "1px solid #999", padding: "4px 8px", fontWeight: 700, fontSize: 10, background: "#f9f9f9" }}>ROOM NO</td>
+                    <td colSpan={3} style={{ border: "1px solid #999", padding: "4px 8px" }}>
+                      <RegInput label="PHONE NO" value={regForm.nextOfKinPhone} onChange={v => setRegForm((f:any) => ({ ...f, nextOfKinPhone: v }))} />
+                    </td>
+                  </tr>
+                  <tr>
+                    <td style={{ border: "1px solid #999", padding: "4px 8px", fontSize: 13, fontWeight: 700, background: "#f9f9f9" }}>{regForm.roomNumber}</td>
+                    <td colSpan={3} style={{ border: "1px solid #999", padding: "4px 8px", fontWeight: 700, fontSize: 10 }}>BILLING INSTRUCTION</td>
+                  </tr>
+                  <tr>
+                    <td style={{ border: "1px solid #999", padding: "4px 8px", fontWeight: 700, fontSize: 10, background: "#f9f9f9" }}>CAR REG NO</td>
+                    <td colSpan={3} style={{ border: "1px solid #999", padding: "4px 8px" }}>
+                      <input value={regForm.billingInstruction} onChange={e => setRegForm((f:any) => ({ ...f, billingInstruction: e.target.value }))}
+                        style={{ border: "none", outline: "none", fontSize: 11, width: "100%", background: "transparent" }} />
+                    </td>
+                  </tr>
+                  <tr>
+                    <td style={{ border: "1px solid #999", padding: "4px 8px", background: "#f9f9f9" }}>
+                      <input value={regForm.carReg} onChange={e => setRegForm((f:any) => ({ ...f, carReg: e.target.value }))}
+                        style={{ border: "none", outline: "none", fontSize: 11, width: "100%", background: "transparent" }} />
+                    </td>
+                    <td colSpan={3} style={{ border: "1px solid #999", padding: "4px 8px", fontWeight: 700, fontSize: 11 }}>ON SIGNING THIS REGISTRATION CARD</td>
+                  </tr>
+                  <tr>
+                    <td style={{ border: "1px solid #999", padding: "4px 8px", fontWeight: 700, fontSize: 10, background: "#f9f9f9" }}>TARIFF</td>
+                    <td colSpan={3} rowSpan={4} style={{ border: "1px solid #999", padding: "8px", fontSize: 10, lineHeight: 1.7, verticalAlign: "top", color: "#333" }}>
+                      I/We agree that the hotel will not be responsible for any valuables kept in the rooms or public place at any time by myself or my visitor.<br /><br />
+                      Food and beverages from outside are not allowed into the hotel. This application is subject to the hotel's display rules and regulation.<br /><br />
+                      The guest acknowledges joint and several liabilities for all service rendered until full payment of the bill. Personal cheque is not accepted.<br /><br />
+                      Access to room is limited to hotel guest. Visitors are allowed subject to communication of the visitor's name to receptionist.<br /><br />
+                      Visitors are not allowed after 22:00hrs<br /><br />
+                      <strong>Checkout time is 12noon. Between checkout time and 6:00pm extra 50% of the room rate will be charged.</strong><br /><br />
+                      Our rooms are non smoking rooms, any default on this attract the fine of 150,000 for fumigation of the room.<br /><br />
+                      Signature.......................................................
+                    </td>
+                  </tr>
+                  <tr>
+                    <td style={{ border: "1px solid #999", padding: "4px 8px", background: "#f9f9f9" }}>{regForm.tariff}</td>
+                  </tr>
+                  <tr>
+                    <td style={{ border: "1px solid #999", padding: "4px 8px", fontWeight: 700, fontSize: 10, background: "#f9f9f9" }}>RECEPTIONIST</td>
+                  </tr>
+                  <tr>
+                    <td style={{ border: "1px solid #999", padding: "4px 8px", background: "#f9f9f9" }}>
+                      <input value={regForm.receptionist} onChange={e => setRegForm((f:any) => ({ ...f, receptionist: e.target.value }))}
+                        style={{ border: "none", outline: "none", fontSize: 11, width: "100%", background: "transparent" }} />
+                    </td>
+                  </tr>
+                  <tr>
+                    <td colSpan={4} style={{ border: "1px solid #999", padding: "6px 8px" }}>
+                      <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer", fontSize: 11 }}>
+                        <input type="checkbox" checked={regForm.signatureObtained}
+                          onChange={e => setRegForm((f:any) => ({ ...f, signatureObtained: e.target.checked }))}
+                          style={{ width: 14, height: 14 }} />
+                        Physical signature obtained from guest ✓
+                      </label>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
+            {/* Action buttons — hidden on print */}
+            <div className="no-print" style={{
+              padding: "12px 20px", background: "#f5f5f5", borderTop: "1px solid #ddd",
+              display: "flex", gap: 10, justifyContent: "flex-end"
+            }}>
+              <button onClick={() => setRegCard(null)} style={{
+                background: "none", border: "1px solid #ccc", padding: "8px 16px",
+                fontSize: 11, cursor: "pointer", letterSpacing: "0.1em", textTransform: "uppercase"
+              }}>Close</button>
+              <button onClick={async () => {
+                if (!token) return;
+                setRegSaving(true);
+                try {
+                  await saveGuestRegistration({ data: { token, ...regForm } });
+                  showToast("Registration card saved");
+                } catch { showToast("Save failed", "error"); }
+                finally { setRegSaving(false); }
+              }} style={{
+                background: "#1a1a1a", color: "#fff", border: "none",
+                padding: "8px 16px", fontSize: 11, cursor: "pointer",
+                letterSpacing: "0.1em", textTransform: "uppercase"
+              }}>{regSaving ? "Saving..." : "Save"}</button>
+              <button onClick={() => {
+                // Inject print styles and trigger print
+                const style = document.createElement("style");
+                style.id = "reg-print-style";
+                style.innerHTML = `@media print { body > *:not(#reg-card-print-wrapper) { display: none !important; } #reg-card-print-wrapper { position: fixed; inset: 0; z-index: 9999; } .no-print { display: none !important; } }`;
+                document.head.appendChild(style);
+                window.print();
+                setTimeout(() => document.getElementById("reg-print-style")?.remove(), 1000);
+              }} style={{
+                background: "#c9a96e", color: "#0a0a0a", border: "none",
+                padding: "8px 20px", fontSize: 11, cursor: "pointer",
+                letterSpacing: "0.1em", textTransform: "uppercase", fontWeight: 700
+              }}>🖨 Print Card</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ==================== IDLE WARNING MODAL ==================== */}
+      {idleWarning && (
+        <div style={{
+          position: "fixed", inset: 0, background: "rgba(0,0,0,0.85)",
+          zIndex: 9999, display: "flex", alignItems: "center", justifyContent: "center", padding: 20
+        }}>
+          <div style={{
+            background: colors.surface, border: `2px solid ${colors.gold}`,
+            padding: 40, maxWidth: 380, width: "100%", textAlign: "center"
+          }}>
+            <p style={{ color: colors.gold, fontSize: 11, letterSpacing: "0.3em", textTransform: "uppercase", margin: "0 0 12px" }}>
+              Session Expiring
+            </p>
+            <h2 style={{ color: colors.text, fontSize: 22, fontWeight: 400, margin: "0 0 12px" }}>
+              Are you still there?
+            </h2>
+            <p style={{ color: colors.textMuted, fontSize: 13, margin: "0 0 8px", lineHeight: 1.6 }}>
+              You've been inactive. This session will automatically log out in
+            </p>
+            <div style={{ fontSize: 52, color: colors.gold, fontFamily: "Georgia, serif", margin: "12px 0" }}>
+              {idleCountdown}
+            </div>
+            <p style={{ color: colors.textMuted, fontSize: 11, margin: "0 0 24px" }}>seconds</p>
+            <button onClick={() => { setIdleWarning(false); setIdleCountdown(60); }} style={{
+              background: colors.gold, color: "#0a0a0a", border: "none",
+              padding: "13px 32px", fontSize: 12, cursor: "pointer",
+              letterSpacing: "0.2em", textTransform: "uppercase", fontWeight: 700,
+              fontFamily: "Georgia, serif", width: "100%"
+            }}>I'm still here</button>
+          </div>
+        </div>
+      )}
+
+      {/* ==================== REASSIGN REASON MODAL ==================== */}
+      {showReassignReason && (
+        <div style={{
+          position: "fixed", inset: 0, background: "rgba(0,0,0,0.8)",
+          zIndex: 500, display: "flex", alignItems: "center", justifyContent: "center", padding: 20
+        }}>
+          <div style={{
+            background: colors.surface, border: `1px solid #f59e0b`,
+            padding: 32, maxWidth: 440, width: "100%"
+          }}>
+            <p style={{ color: "#f59e0b", fontSize: 11, letterSpacing: "0.3em", textTransform: "uppercase", margin: "0 0 8px" }}>
+              Reassign Room — Reason Required
+            </p>
+            <h2 style={{ color: colors.text, fontSize: 20, fontWeight: 400, margin: "0 0 20px" }}>
+              Why is this room being reassigned?
+            </h2>
+            <div style={{ display: "flex", flexDirection: "column", gap: 10, marginBottom: 16 }}>
+              {[
+                "Guest is not satisfied with the room",
+                "Guest wants another room for personal reasons",
+                "Room needs maintenance",
+                "Management decision",
+                "Other",
+              ].map(reason => (
+                <label key={reason} style={{
+                  display: "flex", alignItems: "center", gap: 12, padding: "10px 14px",
+                  border: `1px solid ${reassignReason === reason ? "#f59e0b" : colors.border}`,
+                  background: reassignReason === reason ? "#f59e0b11" : colors.surface2,
+                  cursor: "pointer"
+                }}>
+                  <input type="radio" name="reassignReason" value={reason}
+                    checked={reassignReason === reason}
+                    onChange={() => setReassignReason(reason)}
+                    style={{ accentColor: "#f59e0b" }} />
+                  <span style={{ fontSize: 13, color: colors.text }}>{reason}</span>
+                </label>
+              ))}
+            </div>
+            {reassignReason === "Other" && (
+              <textarea
+                value={reassignReasonOther}
+                onChange={e => setReassignReasonOther(e.target.value)}
+                placeholder="Please describe the reason..."
+                rows={2}
+                style={{
+                  width: "100%", background: colors.surface2, border: `1px solid #f59e0b`,
+                  padding: "10px 12px", color: colors.text, fontSize: 13,
+                  fontFamily: "Georgia, serif", outline: "none", resize: "none",
+                  marginBottom: 16, boxSizing: "border-box"
+                }}
+              />
+            )}
+            <div style={{ display: "flex", gap: 10, justifyContent: "flex-end", marginTop: 8 }}>
+              <button onClick={() => { setShowReassignReason(false); setPendingReassignRoom(null); }} style={{
+                background: "none", border: `1px solid ${colors.border}`, padding: "10px 20px",
+                color: colors.textMuted, cursor: "pointer", fontSize: 11,
+                letterSpacing: "0.1em", textTransform: "uppercase", fontFamily: "Georgia, serif"
+              }}>Cancel</button>
+              <button
+                disabled={!reassignReason || (reassignReason === "Other" && !reassignReasonOther.trim()) || reassigning}
+                onClick={async () => {
+                  if (!token || !reassignBooking || !pendingReassignRoom || !reassignOldRoom) return;
+                  setShowReassignReason(false);
+                  setReassigning(true);
+                  const finalReason = reassignReason === "Other" ? reassignReasonOther : reassignReason;
+                  try {
+                    await updateRoomStatus({ data: { token, roomNumber: reassignOldRoom, status: "vacant_dirty", updatedBy: `${staffName} — Reassign: ${finalReason}` } });
+                    const result = await checkInGuest({
+                      data: {
+                        token, reference: reassignBooking.reference,
+                        roomSlug: `room-${pendingReassignRoom.room_number}`,
+                        roomNumber: pendingReassignRoom.room_number,
+                        guestName: reassignBooking.guest_name,
+                        guestEmail: reassignBooking.guest_email,
+                        checkIn: reassignBooking.check_in,
+                        checkOut: reassignBooking.check_out,
+                      }
+                    }) as any;
+                    if (result.success) {
+                      showToast(`Room reassigned to ${pendingReassignRoom.room_number} — ${finalReason}`);
+                      setReassignBooking(null); setReassignOldRoom(null);
+                      setSelectedRoom(null); setPendingReassignRoom(null);
+                      await loadStats(token);
+                    } else {
+                      showToast(result.error ?? "Reassignment failed", "error");
+                    }
+                  } catch { showToast("Reassignment failed", "error"); }
+                  finally { setReassigning(false); }
+                }}
+                style={{
+                  background: reassignReason && !(reassignReason === "Other" && !reassignReasonOther.trim()) ? "#f59e0b" : colors.surface2,
+                  color: reassignReason ? "#0a0a0a" : colors.textMuted,
+                  border: "none", padding: "10px 24px", fontSize: 11,
+                  letterSpacing: "0.15em", textTransform: "uppercase", fontWeight: 700,
+                  cursor: "pointer", fontFamily: "Georgia, serif"
+                }}
+              >{reassigning ? "Reassigning..." : "Confirm Reassign"}</button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* ==================== WALK-IN BOOKING MODAL ==================== */}
       {showWalkIn && (
         <div style={{
@@ -1223,7 +1668,7 @@ function AdminPage() {
                       nights, numRooms: walkIn.numRooms, guests: walkIn.numRooms,
                       addons: [], subtotal: 0, discount: 0, tax: 0, total: 0,
                       gateway: walkIn.paymentMethod, paymentMode: "pay_now",
-                      pendingBalance: 0, amountCharged: 0, status: "confirmed",
+                      status: "confirmed",
                     }});
                     showToast(`Walk-in booking created — ${reference}`);
                     setShowWalkIn(false);
@@ -1331,7 +1776,13 @@ function AdminPage() {
                     )}
                   </div>
                   <button
-                    onClick={handleReassignRoom}
+                    onClick={() => {
+                      if (!selectedRoom) return;
+                      setPendingReassignRoom(selectedRoom);
+                      setReassignReason("");
+                      setReassignReasonOther("");
+                      setShowReassignReason(true);
+                    }}
                     disabled={!selectedRoom || reassigning}
                     style={{
                       background: selectedRoom ? "#f59e0b" : colors.surface2,
@@ -1545,6 +1996,23 @@ function AdminPage() {
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+function RegInput({ label, value, onChange, span }: { label: string; value: string; onChange: (v: string) => void; span?: boolean }) {
+  return (
+    <div style={{ gridColumn: span ? "1 / -1" : undefined, display: "flex", flexDirection: "column", gap: 3 }}>
+      <label style={{ fontSize: 8, textTransform: "uppercase", letterSpacing: "0.15em", color: "#888", fontFamily: "Arial, sans-serif" }}>{label}</label>
+      <input
+        value={value}
+        onChange={e => onChange(e.target.value)}
+        style={{
+          border: "none", borderBottom: "1px solid #999", outline: "none",
+          padding: "3px 0", fontSize: 11, fontFamily: "Arial, sans-serif",
+          background: "transparent", width: "100%", color: "#000"
+        }}
+      />
     </div>
   );
 }
