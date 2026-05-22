@@ -1,7 +1,7 @@
 import { createFileRoute, useRouter } from "@tanstack/react-router";
 import { useEffect, useState, useCallback } from "react";
 import {
-  adminLogin, getDashboardStats, updateRoomStatus,
+  adminLogin, getDashboardStats, getActiveBookingForRoom, updateRoomStatus,
   checkInGuest, checkOutGuest
 } from "@/functions/adminAuth";
 import { saveGuestRegistration, getGuestRegistration } from "@/functions/saveRegistration";
@@ -11,6 +11,7 @@ import {
   CheckCircle, XCircle, Clock, Search, RefreshCw,
   BedDouble, Sparkles, AlertCircle, ChevronDown, X
 } from "lucide-react";
+import logo from "@/assets/logo.png";
 
 // @ts-ignore
 export const Route = createFileRoute("/hotel-admin")({
@@ -31,6 +32,15 @@ const ROOM_STATUSES = [
 
 // Room type display order and labels
 const ROOM_TYPE_ORDER = ["Classic", "Superior", "Executive", "Executive Twin", "Business Suite", "Executive Suite"];
+
+const WALKIN_ROOM_CAP: Record<string, number> = {
+  classic: 23,
+  superior: 38,
+  executive: 18,
+  "executive-twin": 3,
+  "business-suites": 11,
+  "executive-suites": 4,
+};
 
 function getRoomTypeFromName(roomName: string): string {
   if (roomName.includes("Executive Suite")) return "Executive Suite";
@@ -72,6 +82,108 @@ function getBookingStatusColor(status: string) {
   }
 }
 
+function escapeRegPrintHtml(value: unknown): string {
+  return String(value ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
+function regPrintField(label: string, value: unknown): string {
+  return `<div class="field"><div class="label">${escapeRegPrintHtml(label)}</div><div class="value">${escapeRegPrintHtml(value) || "&nbsp;"}</div></div>`;
+}
+
+function regPrintRow(left: string, leftVal: unknown, right: string, rightVal: unknown): string {
+  return `<div class="row">${regPrintField(left, leftVal)}${regPrintField(right, rightVal)}</div>`;
+}
+
+function printRegistrationCard(form: Record<string, unknown>, onPopupBlocked: () => void) {
+  const logoUrl = logo.startsWith("http") ? logo : `${window.location.origin}${logo}`;
+  const html = `<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Guest Registration Card — ${escapeRegPrintHtml(form.roomNumber)}</title>
+<style>
+@page { size: A4; margin: 10mm; }
+* { box-sizing: border-box; }
+body { margin: 0; padding: 0; font-family: Arial, sans-serif; font-size: 11px; color: #000; background: #fff; }
+.header { text-align: center; margin-bottom: 14px; }
+.header img { max-height: 80px; width: auto; display: block; margin: 0 auto 8px; }
+.header h1 { margin: 0 0 6px; font-size: 15px; font-weight: 700; letter-spacing: 0.05em; }
+.header .address { margin: 0 0 10px; font-size: 10px; }
+.header .meta { display: flex; justify-content: space-between; font-size: 11px; font-weight: 700; }
+.title { text-align: center; font-size: 12px; font-weight: 700; letter-spacing: 0.15em; margin: 0 0 14px; text-transform: uppercase; border-top: 1px solid #000; border-bottom: 1px solid #000; padding: 6px 0; }
+.fields { margin-bottom: 16px; }
+.row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 28px; margin-bottom: 10px; }
+.field .label { font-size: 9px; font-weight: 700; text-transform: uppercase; margin-bottom: 2px; }
+.field .value { border-bottom: 1px solid #000; min-height: 20px; padding: 2px 0 4px; font-size: 11px; }
+.terms { font-size: 8px; line-height: 1.55; margin: 16px 0 20px; text-align: justify; }
+.signature { font-size: 11px; margin-top: 24px; }
+</style>
+</head>
+<body>
+  <div class="header">
+    <img src="${logoUrl}" alt="Remeritona Hotel" />
+    <h1>RE MERITONA HOTEL &amp; SUITES</h1>
+    <p class="address">41 Igweliga Street, Abakaliki, Ebonyi State, Nigeria</p>
+    <div class="meta">
+      <span>RC: 1595090</span>
+      <span>R/N: ${escapeRegPrintHtml(form.roomNumber)}</span>
+    </div>
+  </div>
+  <p class="title">Guest Registration Card</p>
+  <div class="fields">
+    ${regPrintRow("Arrival Date", form.arrival, "Departure Date", form.departure)}
+    ${regPrintRow("Surname", form.surname, "Other Names", form.otherNames)}
+    ${regPrintRow("Residential Address", form.residentialAddress, "State", form.state)}
+    ${regPrintRow("Company Address", form.companyAddress, "Occupation", form.occupation)}
+    ${regPrintRow("Email", form.email, "Purpose of Visit", form.purpose)}
+    ${regPrintRow("Tel", form.tel, "Nationality", form.nationality)}
+    ${regPrintRow("Passport No", form.passportNo, "Date Issued", form.dateIssued)}
+    ${regPrintRow("Visa / Permit No", form.visaPermitNo, "Next of Kin", form.nextOfKin)}
+    ${regPrintRow("Next of Kin Phone", form.nextOfKinPhone, "Car Reg No", form.carReg)}
+    ${regPrintRow("Room Type", form.roomType, "Tariff", form.tariff)}
+    ${regPrintRow("Receptionist", form.receptionist, "Billing Instruction", form.billingInstruction)}
+  </div>
+  <p class="terms">Management is not responsible for loss of valuables not deposited at the front desk. Outside food and beverages are not permitted. Guests are jointly liable for all charges incurred during their stay. Personal cheques are not accepted. Visitors are not allowed after 22:00hrs. Checkout is at 12:00 noon. 50% charge applies between 12:00pm and 6:00pm. Smoking is strictly prohibited — violation attracts a ₦150,000 fine.</p>
+  <p class="signature">Guest Signature: _________________________ &nbsp;&nbsp;&nbsp; Date: ____________</p>
+</body>
+</html>`;
+
+  const printWindow = window.open("", "_blank");
+  if (!printWindow) {
+    onPopupBlocked();
+    return;
+  }
+  printWindow.document.open();
+  printWindow.document.write(html);
+  printWindow.document.close();
+  printWindow.focus();
+  const triggerPrint = () => {
+    printWindow.print();
+    printWindow.onafterprint = () => printWindow.close();
+    setTimeout(() => {
+      if (!printWindow.closed) printWindow.close();
+    }, 1000);
+  };
+  const waitForLogoThenPrint = () => {
+    const img = printWindow.document.querySelector("img");
+    if (img && !img.complete) {
+      img.onload = triggerPrint;
+      img.onerror = triggerPrint;
+      return;
+    }
+    triggerPrint();
+  };
+  if (printWindow.document.readyState === "complete") {
+    waitForLogoThenPrint();
+  } else {
+    printWindow.onload = waitForLogoThenPrint;
+  }
+}
+
 function AdminPage() {
   const [theme, setTheme] = useState<"dark" | "light">("dark");
   const [token, setToken] = useState<string | null>(null);
@@ -92,6 +204,9 @@ function AdminPage() {
   const [roomPickerBooking, setRoomPickerBooking] = useState<any>(null);
   const [selectedRoom, setSelectedRoom] = useState<any>(null);
   const [checkingIn, setCheckingIn] = useState(false);
+  const [additionalRooms, setAdditionalRooms] = useState<string[]>([]);
+  const [primaryAssignedRoom, setPrimaryAssignedRoom] = useState<string | null>(null);
+  const [multiRoomLoyaltyAwarded, setMultiRoomLoyaltyAwarded] = useState(false);
 
   // Early checkout confirmation state
   const [earlyCheckoutBooking, setEarlyCheckoutBooking] = useState<any>(null);
@@ -187,6 +302,37 @@ function AdminPage() {
     if (savedTheme) setTheme(savedTheme);
     const savedToken = localStorage.getItem(TOKEN_KEY);
     if (savedToken) setToken(savedToken);
+  }, []);
+
+  // Hide Tidio chat widget (and late-injected nodes) in PMS
+  useEffect(() => {
+    const matchesTidio = (el: Element) => {
+      const id = el.id?.toLowerCase() ?? "";
+      const cls = (el.getAttribute("class") ?? "").toLowerCase();
+      return id.includes("tidio") || cls.includes("tidio");
+    };
+
+    const hideTidioElement = (el: HTMLElement) => {
+      el.style.display = "none";
+    };
+
+    const hideTidioInTree = (root: Node) => {
+      if (root.nodeType !== Node.ELEMENT_NODE) return;
+      const el = root as HTMLElement;
+      if (matchesTidio(el)) hideTidioElement(el);
+      el.querySelectorAll<HTMLElement>('[id*="tidio"], [class*="tidio"]').forEach(hideTidioElement);
+    };
+
+    document.querySelectorAll<HTMLElement>('[id*="tidio"], [class*="tidio"]').forEach(hideTidioElement);
+
+    const observer = new MutationObserver((mutations) => {
+      for (const mutation of mutations) {
+        mutation.addedNodes.forEach(hideTidioInTree);
+      }
+    });
+
+    observer.observe(document.body, { childList: true, subtree: true });
+    return () => observer.disconnect();
   }, []);
 
   const toggleTheme = () => {
@@ -293,16 +439,24 @@ function AdminPage() {
     }
   };
 
-  // Look up active guest for an occupied room
+  // Look up active guest for an occupied room (live D1 query)
   const handleViewOccupiedRoom = async (room: any) => {
-    if (!stats?.allBookings) return;
+    if (!token) return;
     setOccupiedRoomLoading(true);
-    // Find checked_in booking matching this room number
-    const activeBooking = stats.allBookings.find((b: any) =>
-      b.status === "checked_in" && b.room_number === room.room_number
-    );
-    setOccupiedRoomDetail({ room, booking: activeBooking ?? null });
-    setOccupiedRoomLoading(false);
+    try {
+      const result = await getActiveBookingForRoom({
+        data: { token, roomNumber: String(room.room_number) },
+      }) as any;
+      if (!result.success) {
+        showToast(result.error ?? "Failed to load guest", "error");
+        return;
+      }
+      setOccupiedRoomDetail({ room, booking: result.booking ?? null });
+    } catch {
+      showToast("Failed to load guest", "error");
+    } finally {
+      setOccupiedRoomLoading(false);
+    }
   };
 
   // Reassign room for a checked-in guest
@@ -344,9 +498,16 @@ function AdminPage() {
     }
   };
 
+  const resetRoomPickerMultiRoom = () => {
+    setAdditionalRooms([]);
+    setPrimaryAssignedRoom(null);
+    setMultiRoomLoyaltyAwarded(false);
+  };
+
   // Opens room picker modal instead of directly checking in
   const handleCheckIn = (booking: any) => {
     setSelectedRoom(null);
+    resetRoomPickerMultiRoom();
     setRoomPickerBooking(booking);
     // Close booking detail modal if open
     setSelectedBooking(null);
@@ -360,6 +521,10 @@ function AdminPage() {
     const bookingCheckIn = (roomPickerBooking.check_in ?? "").split("T")[0];
     const effectiveCheckIn = today < bookingCheckIn ? today : bookingCheckIn;
     const isReassign = !!reassigningOldRoom;
+    const numRooms = Number(roomPickerBooking.num_rooms) || 1;
+    const assignedRoomNum = String(selectedRoom.room_number);
+    const primaryRoom = primaryAssignedRoom ?? assignedRoomNum;
+    const isMultiRoomContinuation = !isReassign && !!primaryAssignedRoom;
     try {
       // If reassigning, free the old room first
       if (isReassign && reassigningOldRoom) {
@@ -370,26 +535,61 @@ function AdminPage() {
           token,
           reference: roomPickerBooking.reference,
           roomSlug: selectedRoom.room_slug,
-          roomNumber: selectedRoom.room_number,
+          roomNumber: isMultiRoomContinuation ? primaryRoom : assignedRoomNum,
           guestName: roomPickerBooking.guest_name,
           guestEmail: roomPickerBooking.guest_email,
           checkIn: effectiveCheckIn,
           checkOut: roomPickerBooking.check_out,
+          additionalRooms: isMultiRoomContinuation ? [assignedRoomNum] : undefined,
         }
       }) as any;
       if (result.success) {
-        const msg = isReassign
-          ? `${roomPickerBooking.guest_name} moved from Room ${reassigningOldRoom} to Room ${selectedRoom.room_number}`
-          : `${roomPickerBooking.guest_name} checked in to Room ${selectedRoom.room_number}`;
-        showToast(msg);
+        if (result.loyaltyAwarded) setMultiRoomLoyaltyAwarded(true);
+        await loadStats(token);
+
+        if (!isReassign && numRooms > 1) {
+          if (!primaryAssignedRoom) {
+            setPrimaryAssignedRoom(assignedRoomNum);
+            setSelectedRoom(null);
+            showToast(`Room ${assignedRoomNum} assigned. Now assign room 2 of ${numRooms}.`);
+            return;
+          }
+          const nextAdditional = [...additionalRooms, assignedRoomNum];
+          setAdditionalRooms(nextAdditional);
+          setSelectedRoom(null);
+          const totalAssigned = 1 + nextAdditional.length;
+          if (totalAssigned < numRooms) {
+            showToast(`Room ${assignedRoomNum} assigned. Now assign room ${totalAssigned + 1} of ${numRooms}.`);
+            return;
+          }
+        }
+
+        const finalAdditional = isMultiRoomContinuation
+          ? [...additionalRooms, assignedRoomNum]
+          : additionalRooms;
+        const allAssignedRooms = primaryAssignedRoom
+          ? [primaryAssignedRoom, ...finalAdditional]
+          : [assignedRoomNum];
+        if (!isReassign && numRooms > 1) {
+          const loyaltyPart = multiRoomLoyaltyAwarded
+            ? ` Loyalty points awarded to ${roomPickerBooking.guest_name}.`
+            : "";
+          showToast(
+            `Check-in complete. Rooms assigned: ${allAssignedRooms.join(", ")}. Portal access created for each room.${loyaltyPart}`
+          );
+        } else {
+          const msg = isReassign
+            ? `${roomPickerBooking.guest_name} moved from Room ${reassigningOldRoom} to Room ${assignedRoomNum}`
+            : `${roomPickerBooking.guest_name} checked in to Room ${assignedRoomNum}`;
+          showToast(msg);
+        }
         const completedBooking = { ...roomPickerBooking };
-        const assignedRoomNum = selectedRoom?.room_number;
         setRoomPickerBooking(null);
         setSelectedRoom(null);
         setReassigningOldRoom(null);
-        await loadStats(token);
+        resetRoomPickerMultiRoom();
         // Auto-open registration card on new check-in (not reassign)
-        if (!isReassign) openRegCard(completedBooking, assignedRoomNum);
+        if (!isReassign) openRegCard(completedBooking, allAssignedRooms[0]);
       } else {
         showToast(result.error ?? "Operation failed", "error");
       }
@@ -442,7 +642,13 @@ function AdminPage() {
 
   // Vacant clean rooms for the picker — filtered by booked type, grouped by floor
   const vacantRooms = stats?.roomStatuses?.filter((r: any) => r.status === "vacant_clean") ?? [];
+  const pickerFilterType = reassignBooking
+    ? getRoomTypeFromName(reassignBooking.room_name)
+    : roomPickerBooking
+      ? getRoomTypeFromName(roomPickerBooking.room_name)
+      : null;
   const vacantByType = ROOM_TYPE_ORDER.reduce((acc: Record<string, any[]>, type) => {
+    if (pickerFilterType && type !== pickerFilterType) return acc;
     const rooms = vacantRooms.filter((r: any) => getRoomTypeFromName(r.room_name) === type);
     if (rooms.length > 0) acc[type] = rooms;
     return acc;
@@ -1037,7 +1243,7 @@ function AdminPage() {
                   {roomPickerBooking.reference} · Booked: {roomPickerBooking.room_name}
                 </p>
               </div>
-              <button onClick={() => { setRoomPickerBooking(null); setSelectedRoom(null); }} style={{
+              <button onClick={() => { setRoomPickerBooking(null); setSelectedRoom(null); resetRoomPickerMultiRoom(); }} style={{
                 background: "none", border: "none", cursor: "pointer", color: colors.textMuted, padding: 4
               }}>
                 <X size={20} />
@@ -1065,10 +1271,33 @@ function AdminPage() {
               return null;
             })()}
 
+            {(() => {
+              const numRooms = Number(roomPickerBooking.num_rooms) || 1;
+              if (numRooms <= 1 || !primaryAssignedRoom) return null;
+              const nextRoomIndex = 1 + additionalRooms.length + 1;
+              return (
+                <div style={{
+                  background: "#22c55e22", border: "1px solid #22c55e66",
+                  padding: "10px 16px", marginBottom: 12,
+                  fontSize: 12, color: "#22c55e", lineHeight: 1.5
+                }}>
+                  Room {primaryAssignedRoom} assigned.
+                  {additionalRooms.length > 0 && (
+                    <> Additional: {additionalRooms.join(", ")}.</>
+                  )}
+                  {" "}Now assign room {nextRoomIndex} of {numRooms}.
+                </div>
+              );
+            })()}
+
             {/* Room type + count */}
             {(() => {
               const { matchType, byFloor, total } = getPickerRooms(roomPickerBooking);
               const typeColor = getRoomTypeColor(matchType);
+              const assignedRoomNumbers = new Set([
+                ...(primaryAssignedRoom ? [primaryAssignedRoom] : []),
+                ...additionalRooms,
+              ]);
               return (
                 <>
                   <div style={{
@@ -1108,17 +1337,20 @@ function AdminPage() {
                           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(90px, 1fr))", gap: 8 }}>
                             {(rooms as any[]).sort((a, b) => parseInt(a.room_number) - parseInt(b.room_number)).map((room: any) => {
                               const isSelected = selectedRoom?.room_number === room.room_number;
+                              const isAlreadyAssigned = assignedRoomNumbers.has(String(room.room_number));
                               return (
                                 <button
                                   key={room.room_number}
-                                  onClick={() => setSelectedRoom(room)}
+                                  onClick={() => !isAlreadyAssigned && setSelectedRoom(room)}
+                                  disabled={isAlreadyAssigned}
                                   style={{
-                                    background: isSelected ? typeColor : colors.surface2,
+                                    background: isAlreadyAssigned ? colors.surface : isSelected ? typeColor : colors.surface2,
                                     border: `2px solid ${isSelected ? typeColor : colors.border}`,
-                                    color: isSelected ? "#fff" : colors.text,
-                                    padding: "14px 8px", cursor: "pointer", textAlign: "center",
+                                    color: isAlreadyAssigned ? colors.textMuted : isSelected ? "#fff" : colors.text,
+                                    padding: "14px 8px", cursor: isAlreadyAssigned ? "not-allowed" : "pointer", textAlign: "center",
                                     transition: "all 0.15s ease",
-                                    boxShadow: isSelected ? `0 0 0 3px ${typeColor}33` : "none"
+                                    boxShadow: isSelected ? `0 0 0 3px ${typeColor}33` : "none",
+                                    opacity: isAlreadyAssigned ? 0.45 : 1
                                   }}
                                 >
                                   <div style={{ fontSize: 20, fontWeight: 400, marginBottom: 2 }}>
@@ -1144,13 +1376,21 @@ function AdminPage() {
                             <>
                               <p style={{ margin: 0, fontSize: 13, color: colors.text }}>
                                 Assigning <span style={{ color: colors.gold }}>Room {selectedRoom.room_number}</span> to {roomPickerBooking.guest_name}
+                                {(Number(roomPickerBooking.num_rooms) || 1) > 1 && primaryAssignedRoom && (
+                                  <> (room {1 + additionalRooms.length + 1} of {roomPickerBooking.num_rooms})</>
+                                )}
                               </p>
                               <p style={{ margin: "2px 0 0", fontSize: 11, color: colors.textMuted }}>
-                                {selectedRoom.room_name} · Welcome email will be sent
+                                {selectedRoom.room_name}
+                                {!primaryAssignedRoom ? " · Welcome email will be sent" : ""}
                               </p>
                             </>
                           ) : (
-                            <p style={{ margin: 0, fontSize: 13, color: colors.textMuted }}>Select a room above to proceed</p>
+                            <p style={{ margin: 0, fontSize: 13, color: colors.textMuted }}>
+                              {primaryAssignedRoom
+                                ? `Select room ${1 + additionalRooms.length + 1} of ${roomPickerBooking.num_rooms}`
+                                : "Select a room above to proceed"}
+                            </p>
                           )}
                         </div>
                         <button
@@ -1166,7 +1406,11 @@ function AdminPage() {
                             opacity: checkingIn ? 0.7 : 1
                           }}
                         >
-                          {checkingIn ? "Checking In..." : "Confirm Check In"}
+                          {checkingIn
+                            ? "Checking In..."
+                            : primaryAssignedRoom
+                              ? `Assign Room ${1 + additionalRooms.length + 1}`
+                              : "Confirm Check In"}
                         </button>
                       </div>
                     </>
@@ -1376,13 +1620,9 @@ function AdminPage() {
                 letterSpacing: "0.1em", textTransform: "uppercase"
               }}>{regSaving ? "Saving..." : "Save"}</button>
               <button onClick={() => {
-                // Inject print styles and trigger print
-                const style = document.createElement("style");
-                style.id = "reg-print-style";
-                style.innerHTML = `@media print { body > *:not(#reg-card-print-wrapper) { display: none !important; } #reg-card-print-wrapper { position: fixed; inset: 0; z-index: 9999; } .no-print { display: none !important; } }`;
-                document.head.appendChild(style);
-                window.print();
-                setTimeout(() => document.getElementById("reg-print-style")?.remove(), 1000);
+                printRegistrationCard(regForm, () => {
+                  showToast("Pop-up blocked — allow pop-ups to print", "error");
+                });
               }} style={{
                 background: "#c9a96e", color: "#0a0a0a", border: "none",
                 padding: "8px 20px", fontSize: 11, cursor: "pointer",
@@ -1491,8 +1731,9 @@ function AdminPage() {
                   setShowReassignReason(false);
                   setReassigning(true);
                   const finalReason = reassignReason === "Other" ? reassignReasonOther : reassignReason;
+                  const oldRoomStatus = finalReason.toLowerCase().includes("maintenance") ? "maintenance" : "vacant_dirty";
                   try {
-                    await updateRoomStatus({ data: { token, roomNumber: reassignOldRoom, status: "vacant_dirty", updatedBy: `${staffName} — Reassign: ${finalReason}` } });
+                    await updateRoomStatus({ data: { token, roomNumber: reassignOldRoom, status: oldRoomStatus, updatedBy: `${staffName} — Reassign: ${finalReason}`, force: true } });
                     const result = await checkInGuest({
                       data: {
                         token, reference: reassignBooking.reference,
@@ -1594,7 +1835,10 @@ function AdminPage() {
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10, marginBottom: 10 }}>
               <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
                 <label style={{ fontSize: 10, color: colors.textMuted, letterSpacing: "0.15em", textTransform: "uppercase" }}>Room Type *</label>
-                <select value={walkIn.roomType} onChange={e => setWalkIn(w => ({ ...w, roomType: e.target.value }))}
+                <select value={walkIn.roomType} onChange={e => {
+                    const cap = WALKIN_ROOM_CAP[e.target.value] ?? 10;
+                    setWalkIn(w => ({ ...w, roomType: e.target.value, numRooms: Math.min(w.numRooms, cap) }));
+                  }}
                   style={{ background: colors.surface2, border: `1px solid ${colors.border}`, padding: "9px 12px", color: colors.text, fontSize: 12, fontFamily: "Georgia, serif", outline: "none", cursor: "pointer" }}>
                   {[
                     { value: "classic", label: "Classic" },
@@ -1610,7 +1854,9 @@ function AdminPage() {
                 <label style={{ fontSize: 10, color: colors.textMuted, letterSpacing: "0.15em", textTransform: "uppercase" }}>No. of Rooms</label>
                 <select value={walkIn.numRooms} onChange={e => setWalkIn(w => ({ ...w, numRooms: Number(e.target.value) }))}
                   style={{ background: colors.surface2, border: `1px solid ${colors.border}`, padding: "9px 12px", color: colors.text, fontSize: 13, fontFamily: "Georgia, serif", outline: "none", cursor: "pointer" }}>
-                  {[1,2,3,4,5,6,7,8,9,10].map(n => <option key={n} value={n}>{n}</option>)}
+                  {Array.from({ length: WALKIN_ROOM_CAP[walkIn.roomType] ?? 10 }, (_, i) => i + 1).map(n => (
+                    <option key={n} value={n}>{n}</option>
+                  ))}
                 </select>
               </div>
               <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>

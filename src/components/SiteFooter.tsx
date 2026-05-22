@@ -63,7 +63,7 @@ export function SiteFooter() {
               rel="noopener noreferrer"
               className="underline hover:text-gold-soft"
             >
-              Lex TX
+              LexGold
             </a>
           </p>
         </div>

@@ -29,6 +29,14 @@ const ADD_ONS = [
   { id: "cake", label: "Cake & Decoration", price: 30000 },
   { id: "champagne", label: "Champagne on Arrival", price: 250000 },
 ] as const;
+
+const ROOM_HARD_CAP: Record<string, number> = {
+  classic: 23,
+  superior: 38,
+  executive: 18,
+  "business-suites": 11,
+  "executive-suites": 4,
+};
 // ===============================================================
 
 declare global {
@@ -703,21 +711,31 @@ const sendBookingEmails = async (reference: string) => {
                 {bookingType !== "self" && (
                   <div className="mt-6 flex flex-col gap-1.5 max-w-xs">
                     <label className="text-xs uppercase tracking-widest text-gold">Number of rooms</label>
-                    <select
-                      value={numRooms}
-                      onChange={(e) => setNumRooms(Number(e.target.value))}
-                      className="bg-onyx border border-border px-3 py-3 text-foreground focus:border-gold focus:outline-none"
-                    >
-                      {(() => {
-                        const avail = availability[selectedSlug]?.available ?? 10;
-                        const max = Math.min(10, Math.max(1, avail));
-                        return Array.from({ length: max }, (_, i) => i + 1).map((n) => (
-                          <option key={n} value={n} className="bg-charcoal">
-                            {n} {n === 1 ? "Room" : "Rooms"}
-                          </option>
-                        ));
-                      })()}
-                    </select>
+                    {(() => {
+                      const hardCap = ROOM_HARD_CAP[selectedSlug] ?? 10;
+                      const availCount = availability[selectedSlug]?.available ?? hardCap;
+                      const max = Math.min(hardCap, availCount);
+                      if (max === 0) {
+                        return (
+                          <p className="text-sm text-red-400 border border-red-800/50 bg-red-900/20 px-3 py-3">
+                            Fully Booked
+                          </p>
+                        );
+                      }
+                      return (
+                        <select
+                          value={Math.min(numRooms, max)}
+                          onChange={(e) => setNumRooms(Number(e.target.value))}
+                          className="bg-onyx border border-border px-3 py-3 text-foreground focus:border-gold focus:outline-none"
+                        >
+                          {Array.from({ length: max }, (_, i) => i + 1).map((n) => (
+                            <option key={n} value={n} className="bg-charcoal">
+                              {n} {n === 1 ? "Room" : "Rooms"}
+                            </option>
+                          ))}
+                        </select>
+                      );
+                    })()}
                   </div>
                 )}
 

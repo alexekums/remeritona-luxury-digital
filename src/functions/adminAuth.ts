@@ -7,6 +7,78 @@ const cfEnv = () => env as unknown as {
   MAILERSEND_API_KEY: string;
 };
 
+const LOYALTY_TIER_MULTIPLIER: Record<number, number> = { 1: 1, 2: 1.5, 3: 2, 4: 2.5, 5: 3 };
+
+async function ensureGuestPortalAccessTable(db: D1Database) {
+  await db.prepare(`
+    CREATE TABLE IF NOT EXISTS guest_portal_access (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      hotel_id TEXT NOT NULL DEFAULT 'remeritona',
+      booking_ref TEXT NOT NULL,
+      room_number TEXT NOT NULL,
+      token TEXT NOT NULL UNIQUE,
+      created_at TEXT DEFAULT (datetime('now'))
+    )
+  `).run();
+}
+
+async function ensureGuestsBookingRoomIndex(db: D1Database) {
+  await db.prepare(
+    `CREATE UNIQUE INDEX IF NOT EXISTS idx_guests_booking_room ON guests(booking_ref, room_number)`
+  ).run();
+}
+
+async function replaceGuestRow(
+  db: D1Database,
+  row: {
+    bookingRef: string;
+    roomNumber: string;
+    fullName: string;
+    roomType: string;
+    tier: number;
+    checkIn: string;
+    checkOut: string;
+    loyaltyPoints?: number;
+  }
+) {
+  await db.prepare(`
+    INSERT OR REPLACE INTO guests (
+      hotel_id, room_number, booking_ref, full_name, room_type, tier,
+      loyalty_points, check_in, check_out, pin
+    ) VALUES ('remeritona', ?, ?, ?, ?, ?, ?, ?, ?, NULL)
+  `).bind(
+    row.roomNumber,
+    row.bookingRef,
+    row.fullName,
+    row.roomType,
+    row.tier,
+    row.loyaltyPoints ?? 0,
+    row.checkIn,
+    row.checkOut
+  ).run();
+}
+
+async function upsertGuestPortalAccess(
+  db: D1Database,
+  bookingRef: string,
+  roomNumber: string,
+  token: string
+) {
+  const existing = await db.prepare(
+    `SELECT id FROM guest_portal_access WHERE booking_ref = ? AND room_number = ? LIMIT 1`
+  ).bind(bookingRef, roomNumber).first() as any;
+
+  if (existing) {
+    await db.prepare(
+      `UPDATE guest_portal_access SET token = ? WHERE booking_ref = ? AND room_number = ?`
+    ).bind(token, bookingRef, roomNumber).run();
+  } else {
+    await db.prepare(
+      `INSERT INTO guest_portal_access (hotel_id, booking_ref, room_number, token) VALUES ('remeritona', ?, ?, ?)`
+    ).bind(bookingRef, roomNumber, token).run();
+  }
+}
+
 export const adminLogin = createServerFn({ method: "POST" })
   .inputValidator((data: { pin: string; hotelId: string }) => data)
   .handler(async ({ data }): Promise<any> => {
@@ -64,8 +136,24 @@ export const getDashboardStats = createServerFn({ method: "POST" })
     };
   });
 
+export const getActiveBookingForRoom = createServerFn({ method: "POST" })
+  .inputValidator((data: { token: string; roomNumber: string }) => data)
+  .handler(async ({ data }): Promise<any> => {
+    const db = cfEnv().remeritona_bookings;
+    const session = await db.prepare(
+      `SELECT * FROM admin_sessions WHERE token = ? AND expires_at > datetime('now') LIMIT 1`
+    ).bind(data.token).first() as any;
+    if (!session) return { success: false, error: "Unauthorized" };
+
+    const booking = await db.prepare(
+      `SELECT * FROM bookings WHERE room_number = ? AND status = 'checked_in' LIMIT 1`
+    ).bind(data.roomNumber).first() as any;
+
+    return { success: true, booking: booking ?? null };
+  });
+
 export const updateRoomStatus = createServerFn({ method: "POST" })
-  .inputValidator((data: { token: string; roomNumber: string; status: string; updatedBy: string }) => data)
+  .inputValidator((data: { token: string; roomNumber: string; status: string; updatedBy: string; force?: boolean }) => data)
   .handler(async ({ data }): Promise<any> => {
     const db = cfEnv().remeritona_bookings;
     const session = await db.prepare(
@@ -74,7 +162,7 @@ export const updateRoomStatus = createServerFn({ method: "POST" })
     if (!session) return { success: false, error: "Unauthorized" };
 
     // Block changing occupied room to vacant/dirty without going through checkout
-    if (data.status === 'vacant_clean' || data.status === 'vacant_dirty') {
+    if (!data.force && (data.status === 'vacant_clean' || data.status === 'vacant_dirty')) {
       const current = await db.prepare(
         `SELECT status FROM room_status WHERE room_number = ? AND hotel_id = 'remeritona' LIMIT 1`
       ).bind(data.roomNumber).first() as any;
@@ -99,6 +187,7 @@ export const checkInGuest = createServerFn({ method: "POST" })
     guestEmail: string;
     checkIn: string;
     checkOut: string;
+    additionalRooms?: string[];
   }) => data)
   .handler(async ({ data }): Promise<any> => {
     const db = cfEnv().remeritona_bookings;
@@ -107,10 +196,14 @@ export const checkInGuest = createServerFn({ method: "POST" })
     ).bind(data.token).first() as any;
     if (!session) return { success: false, error: "Unauthorized" };
 
-    // 1. Get original check_in to detect early check-in
+    await ensureGuestPortalAccessTable(db);
+    await ensureGuestsBookingRoomIndex(db);
+
+    // 1. Get original booking to detect early check-in and continuation check-ins
     const originalBooking = await db.prepare(
-      `SELECT check_in FROM bookings WHERE reference = ? LIMIT 1`
+      `SELECT * FROM bookings WHERE reference = ? LIMIT 1`
     ).bind(data.reference).first() as any;
+    const wasAlreadyCheckedIn = originalBooking?.status === "checked_in";
 
     const isEarlyCheckIn = originalBooking && data.checkIn < (originalBooking.check_in ?? "").split("T")[0];
 
@@ -187,25 +280,100 @@ export const checkInGuest = createServerFn({ method: "POST" })
     const tierInfo = ROOM_TIER_MAP[data.roomNumber] ?? { tier: 1, roomType: 'classic' };
     const tier = tierInfo.tier;
     const roomType = tierInfo.roomType;
+    const fullName = originalBooking?.guest_name ?? data.guestName ?? "";
+    const effectiveCheckInDate = (data.checkIn ?? "").split("T")[0];
+    const checkOutDate = (data.checkOut ?? originalBooking?.check_out ?? "").split("T")[0];
 
-    // 5. Create or update guest portal access
-    const existing = await db.prepare(
-      `SELECT id FROM guests WHERE booking_ref = ? LIMIT 1`
-    ).bind(data.reference).first() as any;
+    // 5. Primary guest row + portal access (room number + booking ref login)
+    await replaceGuestRow(db, {
+      bookingRef: data.reference,
+      roomNumber: data.roomNumber,
+      fullName,
+      roomType,
+      tier,
+      checkIn: effectiveCheckInDate,
+      checkOut: checkOutDate,
+      loyaltyPoints: 0,
+    });
 
-    if (!existing) {
-      await db.prepare(
-        `INSERT INTO guests (booking_ref, room_number, room_type, full_name, guest_email, check_in, check_out, tier, hotel_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'remeritona')`
-      ).bind(data.reference, data.roomNumber, roomType, data.guestName, data.guestEmail, data.checkIn, data.checkOut, tier).run();
-    } else {
-      await db.prepare(
-        `UPDATE guests SET room_number = ?, room_type = ?, tier = ? WHERE booking_ref = ?`
-      ).bind(data.roomNumber, roomType, tier, data.reference).run();
+    const primaryPortalToken = `${data.reference}:${data.roomNumber}`;
+    await upsertGuestPortalAccess(db, data.reference, data.roomNumber, primaryPortalToken);
+
+    // Loyalty points — once per booking on first check-in call only
+    let loyaltyAwarded = false;
+    let loyaltyPoints = 0;
+    const shouldAwardLoyalty = !wasAlreadyCheckedIn && !data.additionalRooms?.length;
+    if (shouldAwardLoyalty) {
+      const primaryGuest = await db.prepare(
+        `SELECT id, tier FROM guests WHERE booking_ref = ? AND room_number = ? LIMIT 1`
+      ).bind(data.reference, data.roomNumber).first() as any;
+      const bookingTotal = Number(originalBooking?.total ?? 0);
+      const mult = LOYALTY_TIER_MULTIPLIER[primaryGuest?.tier ?? tier] ?? 1;
+      loyaltyPoints = Math.floor((bookingTotal / 1000) * mult);
+      if (primaryGuest && loyaltyPoints > 0) {
+        await db.prepare(
+          `UPDATE guests SET loyalty_points = COALESCE(loyalty_points, 0) + ? WHERE id = ?`
+        ).bind(loyaltyPoints, primaryGuest.id).run();
+        loyaltyAwarded = true;
+      }
     }
 
-    // 6. Send welcome email
+    // 6. Additional rooms for multi-room bookings
+    if (data.additionalRooms?.length) {
+      const nameParts = fullName.trim().split(" ");
+      const surname = nameParts[nameParts.length - 1] ?? "";
+      const otherNames = nameParts.slice(0, -1).join(" ");
+      const tariff = originalBooking?.total
+        ? `₦${Number(originalBooking.total).toLocaleString()}`
+        : "";
+      const guestEmail = data.guestEmail || (originalBooking?.guest_email ?? "");
+      const guestPhone = originalBooking?.guest_phone ?? "";
+
+      for (const roomNum of data.additionalRooms) {
+        await db.prepare(
+          `UPDATE room_status SET status = 'occupied', updated_at = datetime('now') WHERE room_number = ? AND hotel_id = 'remeritona'`
+        ).bind(roomNum).run();
+
+        const extraTier = ROOM_TIER_MAP[roomNum] ?? { tier: 1, roomType: "classic" };
+        await replaceGuestRow(db, {
+          bookingRef: data.reference,
+          roomNumber: roomNum,
+          fullName,
+          roomType: extraTier.roomType,
+          tier: extraTier.tier,
+          checkIn: effectiveCheckInDate,
+          checkOut: checkOutDate,
+          loyaltyPoints: 0,
+        });
+
+        await upsertGuestPortalAccess(db, data.reference, roomNum, crypto.randomUUID());
+
+        const existingReg = await db.prepare(
+          `SELECT id FROM guest_registrations WHERE booking_ref = ? AND room_number = ? LIMIT 1`
+        ).bind(data.reference, roomNum).first() as any;
+
+        if (!existingReg) {
+          await db.prepare(`
+            INSERT INTO guest_registrations (
+              hotel_id, booking_ref, room_number, room_type, tariff, arrival, departure,
+              surname, other_names, residential_address, state, company_address, occupation,
+              email, address, purpose, tel, nationality, passport_no, date_issued,
+              visa_permit_no, next_of_kin, next_of_kin_phone, car_reg, receptionist,
+              billing_instruction, signature_obtained
+            ) VALUES ('remeritona',?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,0)
+          `).bind(
+            data.reference, roomNum, extraTier.roomType, tariff, effectiveCheckInDate, checkOutDate,
+            surname, otherNames, "", "", "", "", guestEmail, "", "Leisure", guestPhone,
+            "Nigerian", "", "", "", "", "", "", "",
+            "Room Only"
+          ).run();
+        }
+      }
+    }
+
+    // 7. Send welcome email (first check-in only)
     const apiKey = cfEnv().MAILERSEND_API_KEY;
-    if (apiKey && data.guestEmail) {
+    if (!wasAlreadyCheckedIn && apiKey && data.guestEmail) {
       const portalUrl = "https://remeritona-guest-portal.remeritona.workers.dev";
       const roomTypeLabel = roomType.replace(/-/g, " ").replace(/\b\w/g, (l: string) => l.toUpperCase());
       const earlyNote = isEarlyCheckIn ? '<p style="color:#f59e0b;font-size:12px;text-align:center;margin:0;">Early check-in — original date adjusted</p>' : '';
@@ -248,7 +416,7 @@ export const checkInGuest = createServerFn({ method: "POST" })
       }
     }
 
-    return { success: true, tier, roomType };
+    return { success: true, tier, roomType, loyaltyAwarded, loyaltyPoints };
   });
 
 export const checkOutGuest = createServerFn({ method: "POST" })
