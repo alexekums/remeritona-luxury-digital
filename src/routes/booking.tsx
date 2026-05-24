@@ -10,6 +10,7 @@ import { saveBooking, type StoredBooking } from "@/data/bookings-store";
 import { sendBookingEmail } from "@/functions/sendBookingEmail";
 import { saveBookingToDb } from "@/functions/saveBookingToDb";
 import { checkRoomAvailability } from "@/functions/adminAuth";
+import logoUrl from "@/assets/logo.png";
 
 const TOKENIZATION_FEE = 100; // NGN — small Save-card-now charge to capture authorization
 const SAVE_CARD_MIN_HOURS = 72;
@@ -30,12 +31,11 @@ const ADD_ONS = [
   { id: "champagne", label: "Champagne on Arrival", price: 250000 },
 ] as const;
 
-const ROOM_HARD_CAP: Record<string, number> = {
-  classic: 23,
-  superior: 38,
-  executive: 18,
-  "business-suites": 11,
-  "executive-suites": 4,
+type RoomAvailability = {
+  total: number;
+  booked: number;
+  available: number;
+  fullyBooked: boolean;
 };
 // ===============================================================
 
@@ -78,26 +78,44 @@ function BookingPage() {
   const [bookingType, setBookingType] = useState<"self" | "family" | "corporate">("self");
   const [numRooms, setNumRooms] = useState<number>(1);
 
-  // Availability per room type — fetched when dates change
-  const [availability, setAvailability] = useState<Record<string, { available: number; fullyBooked: boolean }>>({});
+  // Live inventory per room type — refetched when dates change
+  const [availability, setAvailability] = useState<Record<string, RoomAvailability>>({});
+  const [availabilityLoaded, setAvailabilityLoaded] = useState(false);
 
   useEffect(() => {
-    if (!checkIn || !checkOut) return;
-    const fetchAll = async () => {
+    if (!checkIn || !checkOut || checkOut <= checkIn) {
+      setAvailability({});
+      setAvailabilityLoaded(false);
+      return;
+    }
+
+    let cancelled = false;
+    setAvailabilityLoaded(false);
+
+    const fetchAvailability = async () => {
       try {
-        const results = await Promise.all(
-          rooms.map(r => checkRoomAvailability({ data: { roomType: r.slug, checkIn, checkOut } }))
-        );
-        const map: Record<string, { available: number; fullyBooked: boolean }> = {};
-        results.forEach((r: any) => {
-          if (r.success) map[r.typeKey] = { available: r.available, fullyBooked: r.fullyBooked };
-        });
-        setAvailability(map);
+        const result = await checkRoomAvailability({ data: { checkIn, checkOut } }) as {
+          success?: boolean;
+          availability?: Record<string, RoomAvailability>;
+        };
+        if (cancelled) return;
+        if (result.success && result.availability) {
+          setAvailability(result.availability);
+        } else {
+          setAvailability({});
+        }
       } catch (e) {
-        console.error("Availability check failed:", e);
+        if (!cancelled) {
+          console.error("Availability check failed:", e);
+          setAvailability({});
+        }
+      } finally {
+        if (!cancelled) setAvailabilityLoaded(true);
       }
     };
-    fetchAll();
+
+    fetchAvailability();
+    return () => { cancelled = true; };
   }, [checkIn, checkOut]);
 
   // Auto-capitalize: first letter of each word
@@ -141,6 +159,13 @@ function BookingPage() {
   useEffect(() => {
     setSelectedSlug(initialSlug);
   }, [initialSlug]);
+
+  useEffect(() => {
+    if (!availabilityLoaded) return;
+    const max = availability[selectedSlug]?.available ?? 0;
+    if (max > 0 && numRooms > max) setNumRooms(max);
+  }, [availability, availabilityLoaded, selectedSlug, numRooms]);
+
   const [step, setStep] = useState<1 | 2 | 3>(1);
   useEffect(() => { setSummaryRevealed(false); }, [step]);
   const [guest, setGuest] = useState({ name: "", email: "", phone: "", notes: "" });
@@ -476,7 +501,7 @@ const sendBookingEmails = async (reference: string) => {
       customizations: {
         title: "Re Meritona Hotel & Suites",
         description: `${room.name} · ${nights} night${nights > 1 ? "s" : ""}`,
-        logo: "/src/assets/logo.png",
+        logo: logoUrl,
       },
       callback: async (response: { status: string }) => {
         setProcessing(false);
@@ -557,7 +582,7 @@ const sendBookingEmails = async (reference: string) => {
       customizations: {
         title: "Save Card — Remeritona",
         description: `Tokenization for ${room.name}`,
-        logo: "/src/assets/logo.png",
+        logo: logoUrl,
       },
       callback: async (response: { status: string; transaction_id?: string | number }) => {
         setProcessing(false);
@@ -712,23 +737,28 @@ const sendBookingEmails = async (reference: string) => {
                   <div className="mt-6 flex flex-col gap-1.5 max-w-xs">
                     <label className="text-xs uppercase tracking-widest text-gold">Number of rooms</label>
                     {(() => {
-                      const hardCap = ROOM_HARD_CAP[selectedSlug] ?? 10;
-                      const availCount = availability[selectedSlug]?.available ?? hardCap;
-                      const max = Math.min(hardCap, availCount);
-                      if (max === 0) {
+                      if (!availabilityLoaded) {
                         return (
-                          <p className="text-sm text-red-400 border border-red-800/50 bg-red-900/20 px-3 py-3">
-                            Fully Booked
+                          <p className="text-sm text-muted-foreground border border-border px-3 py-3">
+                            Checking availability for selected dates…
+                          </p>
+                        );
+                      }
+                      const availCount = availability[selectedSlug]?.available ?? 0;
+                      if (availCount === 0) {
+                        return (
+                          <p className="text-sm text-amber-400 border border-amber-700/50 bg-amber-900/20 px-3 py-3">
+                            Fully Booked for Selected Dates
                           </p>
                         );
                       }
                       return (
                         <select
-                          value={Math.min(numRooms, max)}
+                          value={Math.min(numRooms, availCount)}
                           onChange={(e) => setNumRooms(Number(e.target.value))}
                           className="bg-onyx border border-border px-3 py-3 text-foreground focus:border-gold focus:outline-none"
                         >
-                          {Array.from({ length: max }, (_, i) => i + 1).map((n) => (
+                          {Array.from({ length: availCount }, (_, i) => i + 1).map((n) => (
                             <option key={n} value={n} className="bg-charcoal">
                               {n} {n === 1 ? "Room" : "Rooms"}
                             </option>
@@ -781,17 +811,19 @@ const sendBookingEmails = async (reference: string) => {
                 <h3 className="font-serif text-2xl mt-8 mb-4">Select a room</h3>
                 <div className="space-y-3">
                   {rooms.map((r) => {
-                    const avail = availability[r.slug];
+                    const avail = availabilityLoaded ? availability[r.slug] : undefined;
                     const isFullyBooked = avail?.fullyBooked ?? false;
                     const availCount = avail?.available ?? null;
                     return (
                       <button
                         key={r.slug}
                         type="button"
-                        onClick={() => { if (!isFullyBooked) setSelectedSlug(r.slug); }}
-                        disabled={isFullyBooked}
+                        onClick={() => { if (!isFullyBooked && availabilityLoaded) setSelectedSlug(r.slug); }}
+                        disabled={!availabilityLoaded || isFullyBooked}
                         className={`w-full text-left flex gap-4 p-3 border transition-colors ${
-                          isFullyBooked
+                          !availabilityLoaded
+                            ? "border-border opacity-70 cursor-wait"
+                            : isFullyBooked
                             ? "border-border opacity-50 cursor-not-allowed"
                             : selectedSlug === r.slug ? "border-gold bg-onyx" : "border-border hover:border-gold/40"
                         }`}
@@ -801,12 +833,12 @@ const sendBookingEmails = async (reference: string) => {
                           <div>
                             <div className="flex items-center gap-2 flex-wrap">
                               <p className="font-serif text-lg">{r.name}</p>
-                              {isFullyBooked && (
-                                <span className="text-[10px] uppercase tracking-widest bg-red-900/40 text-red-400 border border-red-800 px-2 py-0.5">
-                                  Fully Booked
+                              {availabilityLoaded && isFullyBooked && (
+                                <span className="text-[10px] uppercase tracking-widest bg-amber-900/30 text-amber-400 border border-amber-700 px-2 py-0.5">
+                                  Fully Booked for Selected Dates
                                 </span>
                               )}
-                              {!isFullyBooked && availCount !== null && availCount <= 3 && (
+                              {availabilityLoaded && !isFullyBooked && availCount !== null && availCount <= 3 && (
                                 <span className="text-[10px] uppercase tracking-widest bg-amber-900/30 text-amber-400 border border-amber-700 px-2 py-0.5">
                                   Only {availCount} left
                                 </span>

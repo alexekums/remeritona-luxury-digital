@@ -4,6 +4,7 @@ import appCss from "../styles.css?url";
 import { WhatsAppButton } from "@/components/WhatsAppButton";
 import { IntroAnimation } from "@/components/IntroAnimation";
 import "@/i18n";
+import logoUrl from "@/assets/logo.png";
 
 function NotFoundComponent() {
   return (
@@ -44,6 +45,8 @@ export const Route = createRootRoute({
       { rel: "preconnect", href: "https://fonts.gstatic.com", crossOrigin: "anonymous" },
       { rel: "stylesheet", href: "https://fonts.googleapis.com/css2?family=Merriweather:wght@400;700;900&family=Montserrat:wght@300;400;500;600;700&display=swap" },
       { rel: "stylesheet", href: appCss },
+      { rel: "icon", type: "image/png", href: logoUrl },
+      { rel: "apple-touch-icon", href: logoUrl },
     ],
     scripts: [
       { src: "https://js.paystack.co/v1/inline.js" },

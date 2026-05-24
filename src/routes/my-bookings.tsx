@@ -2,10 +2,10 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useState } from "react";
 import { SiteHeader } from "@/components/SiteHeader";
 import { SiteFooter } from "@/components/SiteFooter";
-import { findBooking, refundPolicy, saveBooking, type StoredBooking } from "@/data/bookings-store";
+import { refundPolicy, saveBooking, type StoredBooking } from "@/data/bookings-store";
 import { formatNaira } from "@/data/rooms";
 import { Search, ShieldCheck, AlertTriangle, Check } from "lucide-react";
-import { cancelBooking } from "@/functions/cancelBooking";
+import { cancelBooking, lookupBooking } from "@/functions/cancelBooking";
 
 export const Route = createFileRoute("/my-bookings")({
   head: () => ({
@@ -26,17 +26,47 @@ function MyBookingsPage() {
   const [cancelMessage, setCancelMessage] = useState<string | null>(null);
   const [processing, setProcessing] = useState(false);
 
-  const handleLookup = (e: React.FormEvent) => {
+  const handleLookup = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
     setCancelMessage(null);
-    const b = findBooking(reference, email);
-    if (!b) {
+    try {
+      const result = await lookupBooking({ data: { reference, email } });
+      if (!result) {
+        setBooking(null);
+        setError("We couldn't find a booking with that reference and email. Please double-check both.");
+        return;
+      }
+      // Map D1 row to StoredBooking shape
+      const storedBooking: StoredBooking = {
+        reference: result.reference,
+        roomName: result.room_name,
+        checkIn: result.check_in,
+        checkOut: result.check_out,
+        nights: result.nights || Math.ceil((new Date(result.check_out).getTime() - new Date(result.check_in).getTime()) / (1000 * 60 * 60 * 24)),
+        numRooms: result.num_rooms || 1,
+        guests: result.guests || 1,
+        gateway: result.gateway,
+        total: result.total,
+        amountCharged: result.total,
+        paymentMode: result.payment_mode || "pay_now",
+        pendingBalance: result.pending_balance || 0,
+        guest: {
+          name: result.guest_name,
+          email: result.guest_email,
+        },
+        status: result.status,
+        cancellation: result.cancelled_at ? {
+          cancelledAt: result.cancelled_at,
+          refundPercent: result.refund_percent || 0,
+          refundAmount: result.refund_amount || 0,
+        } : undefined,
+      };
+      setBooking(storedBooking);
+    } catch (err) {
       setBooking(null);
-      setError("We couldn't find a booking with that reference and email. Please double-check both.");
-      return;
+      setError("Failed to lookup booking. Please try again.");
     }
-    setBooking(b);
   };
 
   const policy = booking ? refundPolicy(booking.checkIn) : null;
@@ -184,19 +214,25 @@ function MyBookingsPage() {
                   Cancelled on {new Date(booking.cancellation.cancelledAt).toLocaleString()} —
                   refund {formatNaira(booking.cancellation.refundAmount)} ({booking.cancellation.refundPercent}%).
                 </p>
-              ) : (
-                policy && (
-                  <div className="mt-6 border-t border-border pt-4">
-                    <p className="text-sm text-muted-foreground mb-3">{policy.label}</p>
-                    <button
-                      onClick={() => setShowConfirm(true)}
-                      className="px-6 py-3 bg-destructive text-destructive-foreground font-semibold uppercase tracking-widest text-sm hover:opacity-90"
-                    >
-                      Cancel Booking
-                    </button>
-                  </div>
-                )
-              )}
+              ) : booking.status === "checked_in" ? (
+                <p className="mt-6 text-sm text-muted-foreground">
+                  This booking is currently checked in and cannot be cancelled online. Please contact reception.
+                </p>
+              ) : booking.status === "checked_out" ? (
+                <p className="mt-6 text-sm text-muted-foreground">
+                  This stay has already been completed and cannot be cancelled.
+                </p>
+              ) : policy && (booking.status === "confirmed" || booking.status === "scheduled") ? (
+                <div className="mt-6 border-t border-border pt-4">
+                  <p className="text-sm text-muted-foreground mb-3">{policy.label}</p>
+                  <button
+                    onClick={() => setShowConfirm(true)}
+                    className="px-6 py-3 bg-destructive text-destructive-foreground font-semibold uppercase tracking-widest text-sm hover:opacity-90"
+                  >
+                    Cancel Booking
+                  </button>
+                </div>
+              ) : null}
             </div>
           )}
         </div>

@@ -38,7 +38,7 @@ export const saveGuestRegistration = createServerFn({ method: "POST" })
   .handler(async ({ data }): Promise<any> => {
     const db = cfEnv().remeritona_bookings;
 
-    // Verify session
+    // Verify session using direct query
     const session = await db.prepare(
       `SELECT * FROM admin_sessions WHERE token = ? AND expires_at > datetime('now') LIMIT 1`
     ).bind(data.token).first() as any;

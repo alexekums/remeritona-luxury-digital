@@ -2,10 +2,10 @@ import { createFileRoute, useRouter } from "@tanstack/react-router";
 import { useEffect, useState, useCallback } from "react";
 import {
   adminLogin, getDashboardStats, getActiveBookingForRoom, updateRoomStatus,
-  checkInGuest, checkOutGuest
+  checkInGuest, checkOutGuest, registerStaff, loginStaff, resetAdminPassword, getStaffList, getStaffActivity, getRevenueReport
 } from "@/functions/adminAuth";
 import { saveGuestRegistration, getGuestRegistration } from "@/functions/saveRegistration";
-import { formatNaira } from "@/data/rooms";
+import { formatNaira, rooms } from "@/data/rooms";
 import {
   LogOut, Moon, Sun, Users, Hotel, TrendingUp,
   CheckCircle, XCircle, Clock, Search, RefreshCw,
@@ -193,12 +193,36 @@ function AdminPage() {
   const [loginLoading, setLoginLoading] = useState(false);
   const [stats, setStats] = useState<any>(null);
   const [loading, setLoading] = useState(false);
-  const [activeTab, setActiveTab] = useState<"dashboard" | "bookings" | "rooms">("dashboard");
+  const [activeTab, setActiveTab] = useState<"dashboard" | "bookings" | "rooms" | "reports">("dashboard");
   const [search, setSearch] = useState("");
-  const [statusFilter, setStatusFilter] = useState("all");
+  const [statusFilter, setStatusFilter] = useState("today");
   const [selectedBooking, setSelectedBooking] = useState<any>(null);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [toast, setToast] = useState<{ message: string; type: "success" | "error" } | null>(null);
+
+  // New staff authentication state
+  const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
+  const [staffRole, setStaffRole] = useState<string>("");
+
+  // Staff Management state (admin/manager only)
+  const [showStaffManagement, setShowStaffManagement] = useState(false);
+  const [newStaffFullName, setNewStaffFullName] = useState("");
+  const [newStaffUsername, setNewStaffUsername] = useState("");
+  const [newStaffPassword, setNewStaffPassword] = useState("");
+  const [newStaffRole, setNewStaffRole] = useState<"front-desk" | "accountant" | "manager" | "admin">("front-desk");
+  const [newStaffLoading, setNewStaffLoading] = useState(false);
+  const [staffList, setStaffList] = useState<any[]>([]);
+  const [staffListLoading, setStaffListLoading] = useState(false);
+  const [activityModal, setActivityModal] = useState<{ staff: any; date: string } | null>(null);
+  const [activityData, setActivityData] = useState<any>(null);
+  const [activityLoading, setActivityLoading] = useState(false);
+
+  // Reports tab state (admin/manager/accountant only)
+  const [reportDateFrom, setReportDateFrom] = useState("");
+  const [reportDateTo, setReportDateTo] = useState("");
+  const [reportData, setReportData] = useState<any>(null);
+  const [reportLoading, setReportLoading] = useState(false);
 
   // Room picker modal state
   const [roomPickerBooking, setRoomPickerBooking] = useState<any>(null);
@@ -302,6 +326,16 @@ function AdminPage() {
     if (savedTheme) setTheme(savedTheme);
     const savedToken = localStorage.getItem(TOKEN_KEY);
     if (savedToken) setToken(savedToken);
+    const savedSession = localStorage.getItem("remeritona_staff_session");
+    if (savedSession) {
+      try {
+        const session = JSON.parse(savedSession);
+        setStaffName(session.fullName ?? "");
+        setStaffRole(session.role ?? "");
+      } catch {
+        // Invalid session data, ignore
+      }
+    }
   }, []);
 
   // Hide Tidio chat widget (and late-injected nodes) in PMS
@@ -346,7 +380,7 @@ function AdminPage() {
     try {
       const result = await getDashboardStats({ data: { token: t } }) as any;
       if (result.success) setStats(result);
-      else { localStorage.removeItem(TOKEN_KEY); setToken(null); }
+      else { showToast("Failed to load dashboard data", "error"); }
     } finally {
       setLoading(false);
     }
@@ -355,6 +389,20 @@ function AdminPage() {
   useEffect(() => {
     if (token) loadStats(token);
   }, [token, loadStats]);
+
+  useEffect(() => {
+    if (token && showStaffManagement && (staffRole === "admin" || staffRole === "manager")) {
+      loadStaffList(token);
+    }
+  }, [token, showStaffManagement, staffRole]);
+
+  useEffect(() => {
+    const now = new Date();
+    const firstDay = new Date(now.getFullYear(), now.getMonth(), 1);
+    const lastDay = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+    setReportDateFrom(firstDay.toISOString().split("T")[0]);
+    setReportDateTo(lastDay.toISOString().split("T")[0]);
+  }, []);
 
   // ── Idle timer: 10min warning → 60sec countdown → auto logout ──
   useEffect(() => {
@@ -418,10 +466,262 @@ function AdminPage() {
     }
   };
 
+  const handleStaffLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoginError("");
+    setLoginLoading(true);
+    try {
+      const result = await loginStaff({ data: { username, password } });
+      if (result.success && result.token) {
+        localStorage.setItem(TOKEN_KEY, result.token);
+        localStorage.setItem("remeritona_staff_session", JSON.stringify(result.session));
+        setToken(result.token);
+        setStaffName(result.session?.fullName ?? "");
+        setStaffRole(result.session?.role ?? "");
+        setUsername("");
+        setPassword("");
+      } else {
+        setLoginError(result.error ?? "Invalid credentials");
+      }
+    } finally {
+      setLoginLoading(false);
+    }
+  };
+
+  const handleResetPassword = async () => {
+    try {
+      const result = await resetAdminPassword({ data: { username: "Devi", newPassword: "2468" } });
+      alert(`Password reset. Hash: ${result.hash}`);
+    } catch (error) {
+      alert("Password reset failed");
+    }
+  };
+
+  const handleOnboardStaff = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoginError("");
+    setNewStaffLoading(true);
+    try {
+      const result = await registerStaff({ data: { username: newStaffUsername, password: newStaffPassword, fullName: newStaffFullName, role: newStaffRole } });
+      if (result.success) {
+        showToast("Staff onboarded successfully", "success");
+        setNewStaffFullName("");
+        setNewStaffUsername("");
+        setNewStaffPassword("");
+        setNewStaffRole("front-desk");
+        if (token) await loadStaffList(token);
+      } else {
+        setLoginError(result.error ?? "Onboarding failed");
+      }
+    } finally {
+      setNewStaffLoading(false);
+    }
+  };
+
+  const loadStaffList = async (t: string) => {
+    setStaffListLoading(true);
+    try {
+      const result = await getStaffList({ data: { token: t } }) as any;
+      if (result.success) setStaffList(result.staff ?? []);
+    } finally {
+      setStaffListLoading(false);
+    }
+  };
+
+  const handleViewActivity = async (staff: any) => {
+    const today = new Date().toISOString().split("T")[0];
+    setActivityModal({ staff, date: today });
+    setActivityLoading(true);
+    try {
+      const result = await getStaffActivity({ data: { token: token!, staffName: staff.full_name, date: today } }) as any;
+      if (result.success) setActivityData(result);
+    } finally {
+      setActivityLoading(false);
+    }
+  };
+
+  const handleLoadActivityForDate = async (date: string) => {
+    if (!activityModal) return;
+    setActivityLoading(true);
+    try {
+      const result = await getStaffActivity({ data: { token: token!, staffName: activityModal.staff.full_name, date } }) as any;
+      if (result.success) {
+        setActivityData(result);
+        setActivityModal({ ...activityModal, date });
+      }
+    } finally {
+      setActivityLoading(false);
+    }
+  };
+
+  const handleGenerateReport = async () => {
+    if (!token || !reportDateFrom || !reportDateTo) return;
+    setReportLoading(true);
+    try {
+      const result = await getRevenueReport({ data: { token, dateFrom: reportDateFrom, dateTo: reportDateTo } });
+      if (result.success) {
+        setReportData(result);
+      } else {
+        showToast("Failed to generate report", "error");
+      }
+    } catch {
+      showToast("Failed to generate report", "error");
+    } finally {
+      setReportLoading(false);
+    }
+  };
+
+  const handlePrintReport = () => {
+    if (!reportData) return;
+    const printWindow = window.open('', '_blank');
+    if (!printWindow) return;
+
+    const now = new Date().toLocaleString();
+    const staffName = localStorage.getItem("remeritona_staff_session") ? JSON.parse(localStorage.getItem("remeritona_staff_session")!).fullName : "Admin";
+
+    const html = `
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Revenue Statement - Re Meritona Hotel</title>
+  <style>
+    @page { size: A4; margin: 15mm; }
+    body { font-family: Arial, sans-serif; font-size: 11px; color: #333; }
+    .header { text-align: center; margin-bottom: 30px; border-bottom: 2px solid #c9a96e; padding-bottom: 20px; }
+    .logo { max-width: 150px; margin-bottom: 10px; }
+    h1 { font-size: 18px; margin: 5px 0; color: #c9a96e; text-transform: uppercase; letter-spacing: 2px; }
+    h2 { font-size: 14px; margin: 5px 0; color: #333; }
+    .meta { font-size: 10px; color: #666; margin-top: 10px; }
+    .summary { display: flex; gap: 20px; margin-bottom: 30px; }
+    .summary-card { flex: 1; border: 1px solid #ddd; padding: 15px; text-align: center; }
+    .summary-card h3 { font-size: 12px; margin: 0 0 10px 0; color: #666; text-transform: uppercase; }
+    .summary-card .value { font-size: 20px; font-weight: bold; color: #c9a96e; }
+    table { width: 100%; border-collapse: collapse; margin-bottom: 30px; }
+    th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+    th { background-color: #f5f5f5; font-weight: bold; text-transform: uppercase; font-size: 10px; }
+    .footer { text-align: center; margin-top: 40px; padding-top: 20px; border-top: 1px solid #ddd; font-size: 10px; color: #666; }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <img src="/assets/logo.png" class="logo" alt="Re Meritona Hotel" />
+    <h1>RE MERITONA HOTEL & SUITES</h1>
+    <h2>REVENUE STATEMENT</h2>
+    <div class="meta">
+      <p>Period: ${reportDateFrom} to ${reportDateTo}</p>
+      <p>Generated on: ${now}</p>
+      <p>Generated by: ${staffName}</p>
+    </div>
+  </div>
+
+  <div class="summary">
+    <div class="summary-card">
+      <h3>Total Revenue</h3>
+      <div class="value">${formatNaira(reportData.totalRevenue)}</div>
+    </div>
+    <div class="summary-card">
+      <h3>Total Bookings</h3>
+      <div class="value">${reportData.totalBookings}</div>
+    </div>
+    <div class="summary-card">
+      <h3>Avg per Booking</h3>
+      <div class="value">${formatNaira(reportData.avgPerBooking)}</div>
+    </div>
+  </div>
+
+  <h3>By Room Type</h3>
+  <table>
+    <thead>
+      <tr>
+        <th>Room Type</th>
+        <th>Bookings</th>
+        <th>Revenue</th>
+        <th>% of Total</th>
+      </tr>
+    </thead>
+    <tbody>
+      ${reportData.byRoomType.map((item: any) => `
+        <tr>
+          <td>${item.roomType}</td>
+          <td>${item.count}</td>
+          <td>${formatNaira(item.revenue)}</td>
+          <td>${item.percentage}%</td>
+        </tr>
+      `).join('')}
+    </tbody>
+  </table>
+
+  <h3>By Payment Method</h3>
+  <table>
+    <thead>
+      <tr>
+        <th>Method</th>
+        <th>Bookings</th>
+        <th>Revenue</th>
+      </tr>
+    </thead>
+    <tbody>
+      ${reportData.byPaymentMethod.map((item: any) => `
+        <tr>
+          <td>${item.method}</td>
+          <td>${item.count}</td>
+          <td>${formatNaira(item.revenue)}</td>
+        </tr>
+      `).join('')}
+    </tbody>
+  </table>
+
+  <h3>Individual Bookings</h3>
+  <table>
+    <thead>
+      <tr>
+        <th>Ref</th>
+        <th>Guest</th>
+        <th>Room</th>
+        <th>Check-in</th>
+        <th>Check-out</th>
+        <th>Nights</th>
+        <th>Amount</th>
+        <th>Payment</th>
+        <th>Status</th>
+      </tr>
+    </thead>
+    <tbody>
+      ${reportData.bookings.map((b: any) => `
+        <tr>
+          <td>${b.reference}</td>
+          <td>${b.guest_name}</td>
+          <td>${b.room_name}</td>
+          <td>${new Date(b.check_in).toLocaleDateString()}</td>
+          <td>${new Date(b.check_out).toLocaleDateString()}</td>
+          <td>${b.nights}</td>
+          <td>${formatNaira(b.total)}</td>
+          <td>${b.gateway}</td>
+          <td>${b.status}</td>
+        </tr>
+      `).join('')}
+    </tbody>
+  </table>
+
+  <div class="footer">
+    <p>This is a computer generated statement — Re Meritona Hotel & Suites</p>
+  </div>
+</body>
+</html>
+    `;
+
+    printWindow.document.write(html);
+    printWindow.document.close();
+    printWindow.print();
+  };
+
   const handleLogout = () => {
     localStorage.removeItem(TOKEN_KEY);
+    localStorage.removeItem("remeritona_staff_session");
     setToken(null);
     setStats(null);
+    setStaffName("");
+    setStaffRole("");
     setPin("");
   };
 
@@ -541,6 +841,7 @@ function AdminPage() {
           checkIn: effectiveCheckIn,
           checkOut: roomPickerBooking.check_out,
           additionalRooms: isMultiRoomContinuation ? [assignedRoomNum] : undefined,
+          checkedInBy: staffName,
         }
       }) as any;
       if (result.success) {
@@ -616,10 +917,102 @@ function AdminPage() {
     setEarlyCheckoutBooking(null);
     setActionLoading(booking.reference);
     try {
-      await checkOutGuest({ data: { token, reference: booking.reference, roomSlug: booking.room_slug, roomNumber: booking.room_number } });
+      await checkOutGuest({ data: { token, reference: booking.reference, roomSlug: booking.room_slug, roomNumber: booking.room_number, checkedOutBy: staffName } });
       showToast(`${booking.guest_name} checked out successfully`);
       setSelectedBooking(null);
       await loadStats(token);
+
+      // Open printable checkout receipt
+      const printWindow = window.open('', '_blank');
+      if (printWindow) {
+        const now = new Date().toLocaleString();
+        const checkIn = new Date(booking.check_in).toLocaleDateString();
+        const checkOut = new Date(booking.check_out).toLocaleDateString();
+        const nights = Math.ceil((new Date(booking.check_out).getTime() - new Date(booking.check_in).getTime()) / (1000 * 60 * 60 * 24));
+
+        const html = `
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Checkout Receipt - Re Meritona Hotel</title>
+  <style>
+    @page { size: A4; margin: 15mm; }
+    body { font-family: Arial, sans-serif; font-size: 12px; color: #000; background: #fff; }
+    .header { text-align: center; margin-bottom: 30px; border-bottom: 2px solid #000; padding-bottom: 20px; }
+    h1 { font-size: 18px; margin: 5px 0; color: #000; text-transform: uppercase; letter-spacing: 2px; }
+    h2 { font-size: 14px; margin: 5px 0; color: #000; }
+    .meta { font-size: 11px; color: #333; margin-top: 10px; }
+    .receipt { margin: 30px 0; }
+    .row { display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid #ddd; }
+    .label { font-weight: bold; color: #333; }
+    .value { color: #000; }
+    .footer { text-align: center; margin-top: 40px; padding-top: 20px; border-top: 1px solid #000; font-size: 11px; color: #333; }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <h1>RE MERITONA HOTEL & SUITES</h1>
+    <h2>CHECKOUT RECEIPT</h2>
+  </div>
+
+  <div class="receipt">
+    <div class="row">
+      <span class="label">Guest Name:</span>
+      <span class="value">${booking.guest_name}</span>
+    </div>
+    <div class="row">
+      <span class="label">Room Number:</span>
+      <span class="value">${booking.room_number}</span>
+    </div>
+    <div class="row">
+      <span class="label">Room Type:</span>
+      <span class="value">${booking.room_name}</span>
+    </div>
+    <div class="row">
+      <span class="label">Check-in Date:</span>
+      <span class="value">${checkIn}</span>
+    </div>
+    <div class="row">
+      <span class="label">Check-out Date:</span>
+      <span class="value">${checkOut}</span>
+    </div>
+    <div class="row">
+      <span class="label">Number of Nights:</span>
+      <span class="value">${nights}</span>
+    </div>
+    <div class="row">
+      <span class="label">Total Amount Paid:</span>
+      <span class="value">${formatNaira(booking.total)}</span>
+    </div>
+    <div class="row">
+      <span class="label">Payment Method:</span>
+      <span class="value">${booking.gateway}</span>
+    </div>
+    <div class="row">
+      <span class="label">Booking Reference:</span>
+      <span class="value">${booking.reference}</span>
+    </div>
+    <div class="row">
+      <span class="label">Checked Out By:</span>
+      <span class="value">${staffName}</span>
+    </div>
+    <div class="row">
+      <span class="label">Date & Time:</span>
+      <span class="value">${now}</span>
+    </div>
+  </div>
+
+  <div class="footer">
+    <p>Thank you for staying at Remeritona Hotel</p>
+  </div>
+</body>
+</html>
+        `;
+
+        printWindow.document.write(html);
+        printWindow.document.close();
+        printWindow.print();
+      }
     } catch {
       showToast("Check-out failed", "error");
     } finally {
@@ -632,7 +1025,18 @@ function AdminPage() {
       b.guest_name?.toLowerCase().includes(search.toLowerCase()) ||
       b.reference?.toLowerCase().includes(search.toLowerCase()) ||
       b.guest_email?.toLowerCase().includes(search.toLowerCase());
-    const matchStatus = statusFilter === "all" || b.status === statusFilter;
+    let matchStatus = true;
+    if (statusFilter === "all") {
+      matchStatus = true;
+    } else if (statusFilter === "today") {
+      const today = new Date().toISOString().split("T")[0];
+      const checkInDate = (b.check_in ?? "").split("T")[0];
+      const checkOutDate = (b.check_out ?? "").split("T")[0];
+      const createdDate = (b.created_at ?? "").split("T")[0];
+      matchStatus = checkInDate === today || checkOutDate === today || createdDate === today;
+    } else {
+      matchStatus = b.status === statusFilter;
+    }
     return matchSearch && matchStatus;
   }) ?? [];
 
@@ -705,22 +1109,38 @@ function AdminPage() {
             <h1 style={{ color: colors.text, fontSize: 28, fontWeight: 400, margin: 0 }}>Remeritona</h1>
             <p style={{ color: colors.textMuted, fontSize: 13, marginTop: 8 }}>Hotel Management System</p>
           </div>
-          <form onSubmit={handleLogin}>
+
+          <form onSubmit={handleStaffLogin}>
             <div style={{ marginBottom: 20 }}>
               <label style={{ display: "block", color: colors.gold, fontSize: 11, letterSpacing: "0.2em", textTransform: "uppercase", marginBottom: 8 }}>
-                Staff PIN
+                Username
               </label>
               <input
-                type="password"
-                value={pin}
-                onChange={e => setPin(e.target.value)}
-                placeholder="Enter your PIN"
-                maxLength={10}
+                type="text"
+                value={username}
+                onChange={e => setUsername(e.target.value)}
+                placeholder="Enter your username"
                 style={{
                   width: "100%", background: colors.surface2, border: `1px solid ${colors.border}`,
                   padding: "12px 16px", color: colors.text, fontSize: 16,
-                  fontFamily: "Georgia, serif", outline: "none", boxSizing: "border-box",
-                  letterSpacing: "0.3em"
+                  fontFamily: "Georgia, serif", outline: "none", boxSizing: "border-box"
+                }}
+                required
+              />
+            </div>
+            <div style={{ marginBottom: 20 }}>
+              <label style={{ display: "block", color: colors.gold, fontSize: 11, letterSpacing: "0.2em", textTransform: "uppercase", marginBottom: 8 }}>
+                Password
+              </label>
+              <input
+                type="password"
+                value={password}
+                onChange={e => setPassword(e.target.value)}
+                placeholder="Enter your password"
+                style={{
+                  width: "100%", background: colors.surface2, border: `1px solid ${colors.border}`,
+                  padding: "12px 16px", color: colors.text, fontSize: 16,
+                  fontFamily: "Georgia, serif", outline: "none", boxSizing: "border-box"
                 }}
                 required
               />
@@ -823,7 +1243,7 @@ function AdminPage() {
       {/* Tabs */}
       <div style={{ background: colors.surface, borderBottom: `1px solid ${colors.border}`, padding: "0 24px", display: "flex", gap: 0 }}>
         {(["dashboard", "bookings", "rooms"] as const).map(tab => (
-          <button key={tab} onClick={() => setActiveTab(tab)} style={{
+          <button key={tab} onClick={() => { setActiveTab(tab); setShowStaffManagement(false); }} style={{
             background: "none", border: "none", borderBottom: activeTab === tab ? `2px solid ${colors.gold}` : "2px solid transparent",
             padding: "16px 20px", color: activeTab === tab ? colors.gold : colors.textMuted,
             cursor: "pointer", fontSize: 12, letterSpacing: "0.15em", textTransform: "uppercase",
@@ -832,6 +1252,26 @@ function AdminPage() {
             {tab === "dashboard" ? "Dashboard" : tab === "bookings" ? "All Bookings" : "Room Status"}
           </button>
         ))}
+        {(staffRole === "admin" || staffRole === "manager" || staffRole === "accountant") && (
+          <button onClick={() => { setActiveTab("reports"); setShowStaffManagement(false); }} style={{
+            background: "none", border: "none", borderBottom: activeTab === "reports" ? `2px solid ${colors.gold}` : "2px solid transparent",
+            padding: "16px 20px", color: activeTab === "reports" ? colors.gold : colors.textMuted,
+            cursor: "pointer", fontSize: 12, letterSpacing: "0.15em", textTransform: "uppercase",
+            fontFamily: "Georgia, serif"
+          }}>
+            Reports
+          </button>
+        )}
+        {(staffRole === "admin" || staffRole === "manager") && (
+          <button onClick={() => setShowStaffManagement(!showStaffManagement)} style={{
+            background: "none", border: "none", borderBottom: showStaffManagement ? `2px solid ${colors.gold}` : "2px solid transparent",
+            padding: "16px 20px", color: showStaffManagement ? colors.gold : colors.textMuted,
+            cursor: "pointer", fontSize: 12, letterSpacing: "0.15em", textTransform: "uppercase",
+            fontFamily: "Georgia, serif"
+          }}>
+            Staff Management
+          </button>
+        )}
       </div>
 
       <main style={{ padding: 24, maxWidth: 1400, margin: "0 auto" }}>
@@ -839,8 +1279,263 @@ function AdminPage() {
           <p style={{ color: colors.textMuted, textAlign: "center", padding: 40 }}>Loading...</p>
         )}
 
+        {/* ===== STAFF MANAGEMENT TAB ===== */}
+        {!loading && showStaffManagement && (staffRole === "admin" || staffRole === "manager") && (
+          <div>
+            {/* Onboard Staff Form */}
+            <div style={{ background: colors.surface, border: `1px solid ${colors.border}`, padding: 24, marginBottom: 32 }}>
+              <h3 style={{ color: colors.gold, fontSize: 12, letterSpacing: "0.2em", textTransform: "uppercase", margin: "0 0 20px", display: "flex", alignItems: "center", gap: 8 }}>
+                <Users size={16} /> Onboard New Staff
+              </h3>
+              <form onSubmit={handleOnboardStaff}>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: 16 }}>
+                  <div>
+                    <label style={{ display: "block", color: colors.gold, fontSize: 11, letterSpacing: "0.2em", textTransform: "uppercase", marginBottom: 8 }}>
+                      Full Name
+                    </label>
+                    <input
+                      type="text"
+                      value={newStaffFullName}
+                      onChange={e => setNewStaffFullName(e.target.value)}
+                      placeholder="Enter full name"
+                      style={{
+                        width: "100%", background: colors.surface2, border: `1px solid ${colors.border}`,
+                        padding: "12px 16px", color: colors.text, fontSize: 14,
+                        fontFamily: "Georgia, serif", outline: "none", boxSizing: "border-box"
+                      }}
+                      required
+                    />
+                  </div>
+                  <div>
+                    <label style={{ display: "block", color: colors.gold, fontSize: 11, letterSpacing: "0.2em", textTransform: "uppercase", marginBottom: 8 }}>
+                      Username
+                    </label>
+                    <input
+                      type="text"
+                      value={newStaffUsername}
+                      onChange={e => setNewStaffUsername(e.target.value)}
+                      placeholder="Choose username"
+                      style={{
+                        width: "100%", background: colors.surface2, border: `1px solid ${colors.border}`,
+                        padding: "12px 16px", color: colors.text, fontSize: 14,
+                        fontFamily: "Georgia, serif", outline: "none", boxSizing: "border-box"
+                      }}
+                      required
+                    />
+                  </div>
+                  <div>
+                    <label style={{ display: "block", color: colors.gold, fontSize: 11, letterSpacing: "0.2em", textTransform: "uppercase", marginBottom: 8 }}>
+                      Password
+                    </label>
+                    <input
+                      type="password"
+                      value={newStaffPassword}
+                      onChange={e => setNewStaffPassword(e.target.value)}
+                      placeholder="Choose password"
+                      style={{
+                        width: "100%", background: colors.surface2, border: `1px solid ${colors.border}`,
+                        padding: "12px 16px", color: colors.text, fontSize: 14,
+                        fontFamily: "Georgia, serif", outline: "none", boxSizing: "border-box"
+                      }}
+                      required
+                    />
+                  </div>
+                  <div>
+                    <label style={{ display: "block", color: colors.gold, fontSize: 11, letterSpacing: "0.2em", textTransform: "uppercase", marginBottom: 8 }}>
+                      Role
+                    </label>
+                    <select
+                      value={newStaffRole}
+                      onChange={e => setNewStaffRole(e.target.value as any)}
+                      style={{
+                        width: "100%", background: colors.surface2, border: `1px solid ${colors.border}`,
+                        padding: "12px 16px", color: colors.text, fontSize: 14,
+                        fontFamily: "Georgia, serif", outline: "none", boxSizing: "border-box"
+                      }}
+                      required
+                    >
+                      <option value="front-desk">Front Desk</option>
+                      <option value="accountant">Accountant</option>
+                      {staffRole === "admin" && <option value="manager">Manager</option>}
+                      {staffRole === "admin" && <option value="admin">Admin</option>}
+                    </select>
+                  </div>
+                </div>
+                {loginError && (
+                  <p style={{ color: "#ef4444", fontSize: 13, marginBottom: 16 }}>{loginError}</p>
+                )}
+                <button type="submit" disabled={newStaffLoading} style={{
+                  background: colors.gold, border: "none", padding: "12px 24px",
+                  color: "#0a0a0a", cursor: "pointer", fontSize: 12, fontWeight: 700,
+                  letterSpacing: "0.1em", textTransform: "uppercase", fontFamily: "Georgia, serif",
+                  opacity: newStaffLoading ? 0.7 : 1
+                }}>
+                  {newStaffLoading ? "Onboarding..." : "Onboard Staff"}
+                </button>
+              </form>
+            </div>
+
+            {/* Staff List */}
+            <div style={{ background: colors.surface, border: `1px solid ${colors.border}`, padding: 24 }}>
+              <h3 style={{ color: colors.gold, fontSize: 12, letterSpacing: "0.2em", textTransform: "uppercase", margin: "0 0 20px", display: "flex", alignItems: "center", gap: 8 }}>
+                <Users size={16} /> Staff List
+              </h3>
+              {staffListLoading ? (
+                <p style={{ color: colors.textMuted, fontSize: 13 }}>Loading...</p>
+              ) : staffList.length === 0 ? (
+                <p style={{ color: colors.textMuted, fontSize: 13 }}>No staff members</p>
+              ) : (
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))", gap: 16 }}>
+                  {staffList.map((staff: any) => {
+                    const roleColors: Record<string, string> = {
+                      "front-desk": "#3b82f6",
+                      "accountant": "#8b5cf6",
+                      "manager": "#f59e0b",
+                      "admin": "#ef4444"
+                    };
+                    return (
+                      <div
+                        key={staff.id}
+                        onClick={() => handleViewActivity(staff)}
+                        style={{
+                          background: colors.surface2, padding: 20,
+                          border: `1px solid ${colors.border}`,
+                          cursor: "pointer",
+                          transition: "all 0.2s"
+                        }}
+                      >
+                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 12 }}>
+                          <h4 style={{ margin: 0, fontSize: 15, color: colors.text, fontWeight: 600 }}>{staff.full_name}</h4>
+                          <span style={{
+                            background: roleColors[staff.role] || "#666",
+                            color: "#fff", padding: "4px 10px",
+                            fontSize: 10, fontWeight: 700, letterSpacing: "0.1em",
+                            textTransform: "uppercase", borderRadius: 4
+                          }}>
+                            {staff.role}
+                          </span>
+                        </div>
+                        <p style={{ margin: "4px 0 0", fontSize: 12, color: colors.textMuted }}>
+                          @{staff.username}
+                        </p>
+                        <p style={{ margin: "4px 0 0", fontSize: 11, color: colors.textMuted }}>
+                          Joined: {new Date(staff.created_at).toLocaleDateString()}
+                        </p>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Activity Modal */}
+        {activityModal && (
+          <div style={{
+            position: "fixed", top: 0, left: 0, right: 0, bottom: 0,
+            background: "rgba(0, 0, 0, 0.7)", display: "flex",
+            alignItems: "center", justifyContent: "center", zIndex: 1000
+          }}>
+            <div style={{
+              background: colors.surface, border: `1px solid ${colors.border}`,
+              padding: 32, maxWidth: 600, width: "90%", maxHeight: "80vh",
+              overflow: "auto", position: "relative"
+            }}>
+              <button
+                onClick={() => setActivityModal(null)}
+                style={{
+                  position: "absolute", top: 16, right: 16,
+                  background: "none", border: "none", color: colors.textMuted,
+                  cursor: "pointer", fontSize: 20
+                }}
+              >
+                <X size={24} />
+              </button>
+              <h3 style={{ color: colors.gold, fontSize: 14, letterSpacing: "0.2em", textTransform: "uppercase", margin: "0 0 8" }}>
+                {activityModal.staff.full_name}
+              </h3>
+              <p style={{ margin: "0 0 20", fontSize: 12, color: colors.textMuted, textTransform: "uppercase", letterSpacing: "0.15em" }}>
+                {activityModal.staff.role}
+              </p>
+
+              <div style={{ marginBottom: 20 }}>
+                <label style={{ display: "block", color: colors.gold, fontSize: 11, letterSpacing: "0.2em", textTransform: "uppercase", marginBottom: 8 }}>
+                  Activity Date
+                </label>
+                <input
+                  type="date"
+                  value={activityModal.date}
+                  onChange={e => handleLoadActivityForDate(e.target.value)}
+                  style={{
+                    background: colors.surface2, border: `1px solid ${colors.border}`,
+                    padding: "10px 14px", color: colors.text, fontSize: 14,
+                    fontFamily: "Georgia, serif", outline: "none", boxSizing: "border-box"
+                  }}
+                />
+              </div>
+
+              {activityLoading ? (
+                <p style={{ color: colors.textMuted, fontSize: 13 }}>Loading activity...</p>
+              ) : activityData ? (
+                <div>
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 12, marginBottom: 20, padding: 16, background: colors.surface2, border: `1px solid ${colors.border}` }}>
+                    <div>
+                      <p style={{ margin: 0, fontSize: 10, color: colors.textMuted, textTransform: "uppercase", letterSpacing: "0.15em" }}>First Action</p>
+                      <p style={{ margin: "4px 0 0", fontSize: 13, color: colors.text }}>
+                        {activityData.firstAction ? new Date(activityData.firstAction).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "N/A"}
+                      </p>
+                    </div>
+                    <div>
+                      <p style={{ margin: 0, fontSize: 10, color: colors.textMuted, textTransform: "uppercase", letterSpacing: "0.15em" }}>Last Action</p>
+                      <p style={{ margin: "4px 0 0", fontSize: 13, color: colors.text }}>
+                        {activityData.lastAction ? new Date(activityData.lastAction).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "N/A"}
+                      </p>
+                    </div>
+                    <div>
+                      <p style={{ margin: 0, fontSize: 10, color: colors.textMuted, textTransform: "uppercase", letterSpacing: "0.15em" }}>Total Actions</p>
+                      <p style={{ margin: "4px 0 0", fontSize: 13, color: colors.text }}>{activityData.totalCount}</p>
+                    </div>
+                  </div>
+
+                  {activityData.activities.length === 0 ? (
+                    <p style={{ color: colors.textMuted, fontSize: 13 }}>No activity for this date</p>
+                  ) : (
+                    <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                      {activityData.activities.map((activity: any, idx: number) => (
+                        <div key={idx} style={{
+                          padding: 12, background: colors.surface2,
+                          border: `1px solid ${colors.border}`,
+                          display: "flex", justifyContent: "space-between", alignItems: "center"
+                        }}>
+                          <div>
+                            <span style={{ fontSize: 12, color: colors.textMuted }}>
+                              {new Date(activity.timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                            </span>
+                            <span style={{
+                              marginLeft: 12, fontSize: 11, fontWeight: 700,
+                              color: activity.type === "check-in" ? "#22c55e" : "#ef4444",
+                              letterSpacing: "0.1em", textTransform: "uppercase"
+                            }}>
+                              {activity.type === "check-in" ? "CHECK-IN" : "CHECK-OUT"}
+                            </span>
+                          </div>
+                          <div style={{ textAlign: "right" }}>
+                            <p style={{ margin: 0, fontSize: 13, color: colors.text }}>{activity.guest_name}</p>
+                            <p style={{ margin: "2px 0 0", fontSize: 11, color: colors.textMuted }}>Room {activity.room_number}</p>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              ) : null}
+            </div>
+          </div>
+        )}
+
         {/* ===== DASHBOARD TAB ===== */}
-        {!loading && activeTab === "dashboard" && stats && (
+        {!loading && activeTab === "dashboard" && !showStaffManagement && stats && (
           <div>
             {/* Stats Cards */}
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 16, marginBottom: 32 }}>
@@ -848,7 +1543,7 @@ function AdminPage() {
                 { label: "Today's Arrivals", value: todayArrivals, icon: <Users size={20} />, color: "#3b82f6" },
                 { label: "Today's Departures", value: todayDepartures, icon: <CheckCircle size={20} />, color: "#22c55e" },
                 { label: "Occupied Rooms", value: `${occupiedRooms} / ${stats.roomStatuses?.length ?? 96}`, icon: <BedDouble size={20} />, color: "#ef4444" },
-                { label: "Monthly Revenue", value: formatNaira(stats.monthlyRevenue ?? 0), icon: <TrendingUp size={20} />, color: colors.gold },
+                ...(staffRole !== "front-desk" ? [{ label: "Monthly Revenue", value: formatNaira(stats.monthlyRevenue ?? 0), icon: <TrendingUp size={20} />, color: colors.gold }] : []),
               ].map(card => (
                 <div key={card.label} style={{
                   background: colors.surface, border: `1px solid ${colors.border}`,
@@ -904,7 +1599,7 @@ function AdminPage() {
                                 }}>Early</span>
                               )}
                             </div>
-                            {b.status === "confirmed" && section.action === "check-in" && (
+                            {staffRole !== "accountant" && b.status === "confirmed" && section.action === "check-in" && (
                               <button onClick={() => handleCheckIn(b)} disabled={actionLoading === b.reference} style={{
                                 background: "#3b82f6", color: "#fff", border: "none",
                                 padding: "4px 12px", fontSize: 11, cursor: "pointer",
@@ -913,13 +1608,22 @@ function AdminPage() {
                                 {actionLoading === b.reference ? "..." : "Check In"}
                               </button>
                             )}
-                            {b.status === "checked_in" && section.action === "check-out" && (
+                            {staffRole !== "accountant" && b.status === "checked_in" && section.action === "check-out" && (
                               <button onClick={() => handleCheckOut(b)} disabled={actionLoading === b.reference} style={{
                                 background: "#22c55e", color: "#fff", border: "none",
                                 padding: "4px 12px", fontSize: 11, cursor: "pointer",
                                 letterSpacing: "0.1em", textTransform: "uppercase"
                               }}>
                                 {actionLoading === b.reference ? "..." : "Check Out"}
+                              </button>
+                            )}
+                            {staffRole === "accountant" && (
+                              <button onClick={() => setSelectedBooking(b)} style={{
+                                background: colors.gold, color: "#0a0a0a", border: "none",
+                                padding: "4px 12px", fontSize: 11, cursor: "pointer",
+                                letterSpacing: "0.1em", textTransform: "uppercase"
+                              }}>
+                                View
                               </button>
                             )}
                           </div>
@@ -934,7 +1638,7 @@ function AdminPage() {
         )}
 
         {/* ===== BOOKINGS TAB ===== */}
-        {!loading && activeTab === "bookings" && stats && (
+        {!loading && activeTab === "bookings" && !showStaffManagement && stats && (
           <div>
             <div style={{ display: "flex", gap: 12, marginBottom: 20, flexWrap: "wrap" }}>
               <div style={{ display: "flex", alignItems: "center", gap: 8, background: colors.surface, border: `1px solid ${colors.border}`, padding: "8px 12px", flex: 1, minWidth: 200 }}>
@@ -946,6 +1650,7 @@ function AdminPage() {
                 background: colors.surface, border: `1px solid ${colors.border}`, padding: "8px 12px",
                 color: colors.text, fontSize: 13, fontFamily: "Georgia, serif", outline: "none", cursor: "pointer"
               }}>
+                <option value="today">Today</option>
                 <option value="all">All Status</option>
                 <option value="confirmed">Confirmed</option>
                 <option value="checked_in">Checked In</option>
@@ -959,14 +1664,18 @@ function AdminPage() {
               <table style={{ width: "100%", borderCollapse: "collapse" }}>
                 <thead>
                   <tr style={{ borderBottom: `1px solid ${colors.border}` }}>
-                    {["Guest", "Room", "Check In", "Check Out", "Total", "Gateway", "Status", "Actions"].map(h => (
+                    {[
+                      "Guest", "Room", "Check In", "Check Out",
+                      ...(staffRole !== "front-desk" ? ["Total", "Gateway"] : []),
+                      "Status", "Actions"
+                    ].map(h => (
                       <th key={h} style={{ padding: "12px 16px", textAlign: "left", fontSize: 11, color: colors.textMuted, letterSpacing: "0.15em", textTransform: "uppercase", fontWeight: 400 }}>{h}</th>
                     ))}
                   </tr>
                 </thead>
                 <tbody>
                   {filteredBookings.length === 0 ? (
-                    <tr><td colSpan={8} style={{ padding: 40, textAlign: "center", color: colors.textMuted }}>No bookings found</td></tr>
+                    <tr><td colSpan={staffRole === "front-desk" ? 6 : 8} style={{ padding: 40, textAlign: "center", color: colors.textMuted }}>No bookings found</td></tr>
                   ) : filteredBookings.map((b: any) => (
                     <tr key={b.reference} style={{ borderBottom: `1px solid ${colors.border}` }}>
                       <td style={{ padding: "12px 16px" }}>
@@ -976,8 +1685,12 @@ function AdminPage() {
                       <td style={{ padding: "12px 16px", fontSize: 13, color: colors.text }}>{b.room_name}</td>
                       <td style={{ padding: "12px 16px", fontSize: 13, color: colors.text }}>{new Date(b.check_in).toLocaleDateString()}</td>
                       <td style={{ padding: "12px 16px", fontSize: 13, color: colors.text }}>{new Date(b.check_out).toLocaleDateString()}</td>
-                      <td style={{ padding: "12px 16px", fontSize: 13, color: colors.gold }}>{formatNaira(b.total)}</td>
-                      <td style={{ padding: "12px 16px", fontSize: 12, color: colors.textMuted, textTransform: "capitalize" }}>{b.gateway}</td>
+                      {staffRole !== "front-desk" && (
+                        <>
+                          <td style={{ padding: "12px 16px", fontSize: 13, color: colors.gold }}>{formatNaira(b.total)}</td>
+                          <td style={{ padding: "12px 16px", fontSize: 12, color: colors.textMuted, textTransform: "capitalize" }}>{b.gateway}</td>
+                        </>
+                      )}
                       <td style={{ padding: "12px 16px" }}>
                         <div style={{ display: "flex", flexDirection: "column", gap: 4, alignItems: "flex-start" }}>
                           <span style={{
@@ -1029,7 +1742,7 @@ function AdminPage() {
         )}
 
         {/* ===== ROOMS TAB ===== */}
-        {!loading && activeTab === "rooms" && stats && (
+        {!loading && activeTab === "rooms" && !showStaffManagement && stats && (
           <div>
             {/* Collapse All / Expand All */}
             <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 8 }}>
@@ -1216,6 +1929,163 @@ function AdminPage() {
                 );
               });
             })()}
+          </div>
+        )}
+
+        {/* ===== REPORTS TAB ===== */}
+        {!loading && activeTab === "reports" && !showStaffManagement && (
+          <div style={{ padding: 24 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 24 }}>
+              <h2 style={{ color: colors.gold, fontSize: 14, letterSpacing: "0.2em", textTransform: "uppercase", margin: 0 }}>
+                Revenue Report
+              </h2>
+              {reportData && (
+                <button onClick={handlePrintReport} style={{
+                  background: colors.gold, color: "#0a0a0a", border: "none",
+                  padding: "8px 16px", fontSize: 11, cursor: "pointer",
+                  letterSpacing: "0.1em", textTransform: "uppercase", fontWeight: 600
+                }}>
+                  Print
+                </button>
+              )}
+            </div>
+
+            {/* Date inputs */}
+            <div style={{ display: "flex", gap: 12, marginBottom: 24, alignItems: "flex-end" }}>
+              <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                <label style={{ fontSize: 11, color: colors.textMuted, letterSpacing: "0.1em", textTransform: "uppercase" }}>From</label>
+                <input type="date" value={reportDateFrom} onChange={e => setReportDateFrom(e.target.value)} style={{
+                  background: colors.surface, border: `1px solid ${colors.border}`, padding: "8px 12px",
+                  color: colors.text, fontSize: 13, fontFamily: "Georgia, serif", outline: "none"
+                }} />
+              </div>
+              <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                <label style={{ fontSize: 11, color: colors.textMuted, letterSpacing: "0.1em", textTransform: "uppercase" }}>To</label>
+                <input type="date" value={reportDateTo} onChange={e => setReportDateTo(e.target.value)} style={{
+                  background: colors.surface, border: `1px solid ${colors.border}`, padding: "8px 12px",
+                  color: colors.text, fontSize: 13, fontFamily: "Georgia, serif", outline: "none"
+                }} />
+              </div>
+              <button onClick={handleGenerateReport} disabled={reportLoading} style={{
+                background: colors.gold, color: "#0a0a0a", border: "none",
+                padding: "8px 20px", fontSize: 11, cursor: "pointer",
+                letterSpacing: "0.1em", textTransform: "uppercase", fontWeight: 600,
+                opacity: reportLoading ? 0.5 : 1
+              }}>
+                {reportLoading ? "..." : "Generate Report"}
+              </button>
+            </div>
+
+            {reportData && (
+              <>
+                {/* Summary cards */}
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 16, marginBottom: 32 }}>
+                  <div style={{ background: colors.surface, border: `1px solid ${colors.border}`, padding: 20, display: "flex", flexDirection: "column", gap: 12 }}>
+                    <span style={{ fontSize: 11, color: colors.textMuted, letterSpacing: "0.15em", textTransform: "uppercase" }}>Total Revenue</span>
+                    <span style={{ fontSize: 28, color: colors.gold, fontWeight: 400 }}>{formatNaira(reportData.totalRevenue)}</span>
+                  </div>
+                  <div style={{ background: colors.surface, border: `1px solid ${colors.border}`, padding: 20, display: "flex", flexDirection: "column", gap: 12 }}>
+                    <span style={{ fontSize: 11, color: colors.textMuted, letterSpacing: "0.15em", textTransform: "uppercase" }}>Total Bookings</span>
+                    <span style={{ fontSize: 28, color: colors.text, fontWeight: 400 }}>{reportData.totalBookings}</span>
+                  </div>
+                  <div style={{ background: colors.surface, border: `1px solid ${colors.border}`, padding: 20, display: "flex", flexDirection: "column", gap: 12 }}>
+                    <span style={{ fontSize: 11, color: colors.textMuted, letterSpacing: "0.15em", textTransform: "uppercase" }}>Avg per Booking</span>
+                    <span style={{ fontSize: 28, color: colors.text, fontWeight: 400 }}>{formatNaira(reportData.avgPerBooking)}</span>
+                  </div>
+                </div>
+
+                {/* By Room Type table */}
+                <div style={{ background: colors.surface, border: `1px solid ${colors.border}`, padding: 20, marginBottom: 24 }}>
+                  <h3 style={{ color: colors.gold, fontSize: 12, letterSpacing: "0.2em", textTransform: "uppercase", margin: "0 0 16px" }}>
+                    By Room Type
+                  </h3>
+                  <table style={{ width: "100%", borderCollapse: "collapse" }}>
+                    <thead>
+                      <tr style={{ borderBottom: `1px solid ${colors.border}` }}>
+                        <th style={{ padding: "12px 16px", textAlign: "left", fontSize: 11, color: colors.textMuted, letterSpacing: "0.15em", textTransform: "uppercase", fontWeight: 400 }}>Room Type</th>
+                        <th style={{ padding: "12px 16px", textAlign: "left", fontSize: 11, color: colors.textMuted, letterSpacing: "0.15em", textTransform: "uppercase", fontWeight: 400 }}>Bookings</th>
+                        <th style={{ padding: "12px 16px", textAlign: "left", fontSize: 11, color: colors.textMuted, letterSpacing: "0.15em", textTransform: "uppercase", fontWeight: 400 }}>Revenue</th>
+                        <th style={{ padding: "12px 16px", textAlign: "left", fontSize: 11, color: colors.textMuted, letterSpacing: "0.15em", textTransform: "uppercase", fontWeight: 400 }}>% of Total</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {reportData.byRoomType.map((item: any) => (
+                        <tr key={item.roomType} style={{ borderBottom: `1px solid ${colors.border}` }}>
+                          <td style={{ padding: "12px 16px", fontSize: 13, color: colors.text }}>{item.roomType}</td>
+                          <td style={{ padding: "12px 16px", fontSize: 13, color: colors.text }}>{item.count}</td>
+                          <td style={{ padding: "12px 16px", fontSize: 13, color: colors.gold }}>{formatNaira(item.revenue)}</td>
+                          <td style={{ padding: "12px 16px", fontSize: 13, color: colors.text }}>{item.percentage}%</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+
+                {/* By Payment Method table */}
+                <div style={{ background: colors.surface, border: `1px solid ${colors.border}`, padding: 20, marginBottom: 24 }}>
+                  <h3 style={{ color: colors.gold, fontSize: 12, letterSpacing: "0.2em", textTransform: "uppercase", margin: "0 0 16px" }}>
+                    By Payment Method
+                  </h3>
+                  <table style={{ width: "100%", borderCollapse: "collapse" }}>
+                    <thead>
+                      <tr style={{ borderBottom: `1px solid ${colors.border}` }}>
+                        <th style={{ padding: "12px 16px", textAlign: "left", fontSize: 11, color: colors.textMuted, letterSpacing: "0.15em", textTransform: "uppercase", fontWeight: 400 }}>Method</th>
+                        <th style={{ padding: "12px 16px", textAlign: "left", fontSize: 11, color: colors.textMuted, letterSpacing: "0.15em", textTransform: "uppercase", fontWeight: 400 }}>Bookings</th>
+                        <th style={{ padding: "12px 16px", textAlign: "left", fontSize: 11, color: colors.textMuted, letterSpacing: "0.15em", textTransform: "uppercase", fontWeight: 400 }}>Revenue</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {reportData.byPaymentMethod.map((item: any) => (
+                        <tr key={item.method} style={{ borderBottom: `1px solid ${colors.border}` }}>
+                          <td style={{ padding: "12px 16px", fontSize: 13, color: colors.text }}>{item.method}</td>
+                          <td style={{ padding: "12px 16px", fontSize: 13, color: colors.text }}>{item.count}</td>
+                          <td style={{ padding: "12px 16px", fontSize: 13, color: colors.gold }}>{formatNaira(item.revenue)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+
+                {/* Individual bookings table */}
+                <div style={{ background: colors.surface, border: `1px solid ${colors.border}`, padding: 20 }}>
+                  <h3 style={{ color: colors.gold, fontSize: 12, letterSpacing: "0.2em", textTransform: "uppercase", margin: "0 0 16px" }}>
+                    Individual Bookings
+                  </h3>
+                  <div style={{ overflowX: "auto" }}>
+                    <table style={{ width: "100%", borderCollapse: "collapse" }}>
+                      <thead>
+                        <tr style={{ borderBottom: `1px solid ${colors.border}` }}>
+                          <th style={{ padding: "12px 16px", textAlign: "left", fontSize: 11, color: colors.textMuted, letterSpacing: "0.15em", textTransform: "uppercase", fontWeight: 400 }}>Ref</th>
+                          <th style={{ padding: "12px 16px", textAlign: "left", fontSize: 11, color: colors.textMuted, letterSpacing: "0.15em", textTransform: "uppercase", fontWeight: 400 }}>Guest</th>
+                          <th style={{ padding: "12px 16px", textAlign: "left", fontSize: 11, color: colors.textMuted, letterSpacing: "0.15em", textTransform: "uppercase", fontWeight: 400 }}>Room</th>
+                          <th style={{ padding: "12px 16px", textAlign: "left", fontSize: 11, color: colors.textMuted, letterSpacing: "0.15em", textTransform: "uppercase", fontWeight: 400 }}>Check-in</th>
+                          <th style={{ padding: "12px 16px", textAlign: "left", fontSize: 11, color: colors.textMuted, letterSpacing: "0.15em", textTransform: "uppercase", fontWeight: 400 }}>Check-out</th>
+                          <th style={{ padding: "12px 16px", textAlign: "left", fontSize: 11, color: colors.textMuted, letterSpacing: "0.15em", textTransform: "uppercase", fontWeight: 400 }}>Nights</th>
+                          <th style={{ padding: "12px 16px", textAlign: "left", fontSize: 11, color: colors.textMuted, letterSpacing: "0.15em", textTransform: "uppercase", fontWeight: 400 }}>Amount</th>
+                          <th style={{ padding: "12px 16px", textAlign: "left", fontSize: 11, color: colors.textMuted, letterSpacing: "0.15em", textTransform: "uppercase", fontWeight: 400 }}>Payment</th>
+                          <th style={{ padding: "12px 16px", textAlign: "left", fontSize: 11, color: colors.textMuted, letterSpacing: "0.15em", textTransform: "uppercase", fontWeight: 400 }}>Status</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {reportData.bookings.map((b: any) => (
+                          <tr key={b.reference} style={{ borderBottom: `1px solid ${colors.border}` }}>
+                            <td style={{ padding: "12px 16px", fontSize: 13, color: colors.text }}>{b.reference}</td>
+                            <td style={{ padding: "12px 16px", fontSize: 13, color: colors.text }}>{b.guest_name}</td>
+                            <td style={{ padding: "12px 16px", fontSize: 13, color: colors.text }}>{b.room_name}</td>
+                            <td style={{ padding: "12px 16px", fontSize: 13, color: colors.text }}>{new Date(b.check_in).toLocaleDateString()}</td>
+                            <td style={{ padding: "12px 16px", fontSize: 13, color: colors.text }}>{new Date(b.check_out).toLocaleDateString()}</td>
+                            <td style={{ padding: "12px 16px", fontSize: 13, color: colors.text }}>{b.nights}</td>
+                            <td style={{ padding: "12px 16px", fontSize: 13, color: colors.gold }}>{formatNaira(b.total)}</td>
+                            <td style={{ padding: "12px 16px", fontSize: 13, color: colors.text }}>{b.gateway}</td>
+                            <td style={{ padding: "12px 16px", fontSize: 13, color: colors.text }}>{b.status}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </>
+            )}
           </div>
         )}
       </main>
@@ -1904,15 +2774,22 @@ function AdminPage() {
                     const reference = `REM${refNum}${codes[walkIn.roomType] ?? "C"}`;
                     const db = (window as any).__D1;
 
+                    // Look up price per night for selected room type
+                    const room = rooms.find(r => r.slug === walkIn.roomType);
+                    const pricePerNight = room?.price || 0;
+                    const roomPrice = pricePerNight;
+                    const subtotal = roomPrice * nights * walkIn.numRooms;
+                    const total = subtotal;
+
                     // Save via saveBookingToDb-compatible structure
                     const { saveBookingToDb } = await import("@/functions/saveBookingToDb");
                     await saveBookingToDb({ data: {
                       reference, createdAt: new Date().toISOString(),
                       guest: { name: walkIn.name, email: walkIn.email || `walkin-${Date.now()}@remeritona.local`, phone: walkIn.phone, notes: walkIn.notes },
                       roomSlug: walkIn.roomType, roomName: walkIn.roomType.replace(/-/g," ").replace(/\b\w/g,(c:string)=>c.toUpperCase()),
-                      roomPrice: 0, checkIn: walkIn.checkIn, checkOut: walkIn.checkOut,
+                      roomPrice, checkIn: walkIn.checkIn, checkOut: walkIn.checkOut,
                       nights, numRooms: walkIn.numRooms, guests: walkIn.numRooms,
-                      addons: [], subtotal: 0, discount: 0, tax: 0, total: 0,
+                      addons: [], subtotal, discount: 0, tax: 0, total,
                       gateway: walkIn.paymentMethod, paymentMode: "pay_now",
                       status: "confirmed",
                     }});

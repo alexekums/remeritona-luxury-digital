@@ -98,15 +98,220 @@ export const adminLogin = createServerFn({ method: "POST" })
     return { success: true, token, name: staff.name, role: staff.role };
   });
 
+async function hashPassword(password: string): Promise<string> {
+  const encoder = new TextEncoder();
+  const data = encoder.encode(password);
+  const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+  const hashArray = Array.from(new Uint8Array(hashBuffer));
+  const hashHex = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+  return hashHex;
+}
+
+export const registerStaff = createServerFn({ method: "POST" })
+  .inputValidator((data: { username: string; password: string; fullName: string; role: 'front-desk' | 'accountant' | 'manager' | 'admin' }) => data)
+  .handler(async ({ data }): Promise<any> => {
+    const db = cfEnv().remeritona_bookings;
+
+    // Check if username already exists
+    const existing = await db.prepare(
+      `SELECT id FROM staff_users WHERE username = ? LIMIT 1`
+    ).bind(data.username).first() as any;
+    if (existing) return { success: false, error: "Username already exists" };
+
+    // Hash the password
+    const passwordHash = await hashPassword(data.password);
+
+    // Insert new staff user with is_approved = 1 (auto-approved)
+    await db.prepare(
+      `INSERT INTO staff_users (username, password_hash, full_name, role, is_approved, created_at) VALUES (?, ?, ?, ?, 1, datetime('now'))`
+    ).bind(data.username, passwordHash, data.fullName, data.role).run();
+
+    return { success: true };
+  });
+
+export const loginStaff = createServerFn({ method: "POST" })
+  .inputValidator((data: { username: string; password: string }) => data)
+  .handler(async ({ data }): Promise<any> => {
+    const db = cfEnv().remeritona_bookings;
+
+    // Find staff user by username
+    const staff = await db.prepare(
+      `SELECT * FROM staff_users WHERE username = ? LIMIT 1`
+    ).bind(data.username).first() as any;
+    if (!staff) return { success: false, error: "Invalid credentials" };
+
+    // Verify password
+    const passwordHash = await hashPassword(data.password);
+    if (passwordHash !== staff.password_hash) {
+      return { success: false, error: "Invalid credentials" };
+    }
+
+    // Check if account is approved
+    if (staff.is_approved !== 1) {
+      return { success: false, error: "Your account is awaiting manager approval" };
+    }
+
+    // Create session token (store in database for validation)
+    const token = crypto.randomUUID();
+    const expiresAt = new Date(Date.now() + 8 * 60 * 60 * 1000).toISOString();
+
+    // Store session in admin_sessions table (same table as adminLogin)
+    // Wrap in try/catch in case of foreign key constraint issues
+    try {
+      await db.prepare(
+        `INSERT INTO admin_sessions (token, hotel_id, staff_id, created_at, expires_at) VALUES (?, ?, ?, datetime('now'), ?)`
+      ).bind(token, 'remeritona', staff.id, expiresAt).run();
+    } catch {
+      // If INSERT fails (e.g., foreign key constraint), store with staff_username instead
+      await db.prepare(
+        `INSERT INTO admin_sessions (token, hotel_id, staff_id, staff_username, created_at, expires_at) VALUES (?, ?, ?, ?, datetime('now'), ?)`
+      ).bind(token, 'remeritona', staff.id, staff.username, expiresAt).run();
+    }
+
+    // Update last login timestamp
+    await db.prepare(
+      `UPDATE staff SET last_login = datetime('now') WHERE id = ?`
+    ).bind(staff.id).run();
+
+    // Return session object directly to frontend
+    return {
+      success: true,
+      token,
+      session: {
+        id: staff.id,
+        username: staff.username,
+        fullName: staff.full_name,
+        role: staff.role,
+        expiresAt
+      }
+    };
+  });
+
+export const getPendingStaff = createServerFn({ method: "POST" })
+  .inputValidator((data: { token: string; userRole: string }) => data)
+  .handler(async ({ data }): Promise<any> => {
+    const db = cfEnv().remeritona_bookings;
+
+    // Get pending staff with hierarchy filtering
+    let query = `SELECT id, username, full_name, role, created_at FROM staff_users WHERE is_approved = 0`;
+    const params: any[] = [];
+
+    // Hierarchy rule: Manager can only see front-desk and accountant, Admin can see all
+    if (data.userRole === "manager") {
+      query += ` AND role IN ('front-desk', 'accountant')`;
+    }
+
+    query += ` ORDER BY created_at DESC`;
+
+    const pending = await db.prepare(query).bind(...params).all();
+
+    return { success: true, pending: pending.results ?? [] };
+  });
+
+export const approveStaff = createServerFn({ method: "POST" })
+  .inputValidator((data: { token: string; staffId: number }) => data)
+  .handler(async ({ data }): Promise<any> => {
+    const db = cfEnv().remeritona_bookings;
+
+    // Approve staff member
+    await db.prepare(
+      `UPDATE staff_users SET is_approved = 1 WHERE id = ?`
+    ).bind(data.staffId).run();
+
+    return { success: true };
+  });
+
+export const resetAdminPassword = createServerFn({ method: "POST" })
+  .inputValidator((d: { username: string; newPassword: string }) => d)
+  .handler(async ({ data }) => {
+    const db = cfEnv().remeritona_bookings;
+    const hashed = await hashPassword(data.newPassword);
+    await db.prepare(
+      `UPDATE staff_users SET password_hash = ? WHERE username = ?`
+    ).bind(hashed, data.username).run();
+    return { ok: true, hash: hashed };
+  });
+
+export const getStaffList = createServerFn({ method: "POST" })
+  .inputValidator((data: { token: string }) => data)
+  .handler(async ({ data }): Promise<any> => {
+    const db = cfEnv().remeritona_bookings;
+    const auth = await validateToken(data.token, db);
+    if (!auth) return { success: false, error: "Unauthorized" };
+    const staff = await db.prepare(
+      `SELECT id, full_name, username, role, created_at FROM staff_users WHERE is_approved = 1 ORDER BY created_at DESC`
+    ).all();
+    return { success: true, staff: staff.results ?? [] };
+  });
+
+export const getStaffActivity = createServerFn({ method: "POST" })
+  .inputValidator((data: { token: string; staffName: string; date: string }) => data)
+  .handler(async ({ data }): Promise<any> => {
+    const db = cfEnv().remeritona_bookings;
+    const auth = await validateToken(data.token, db);
+    if (!auth) return { success: false, error: "Unauthorized" };
+    const activities = await db.prepare(
+      `SELECT reference, guest_name, room_number, checked_in_by, checked_out_by, created_at 
+       FROM bookings 
+       WHERE (checked_in_by = ? OR checked_out_by = ?) AND DATE(created_at) = ?
+       ORDER BY created_at ASC`
+    ).bind(data.staffName, data.staffName, data.date).all();
+
+    const activityList = (activities.results ?? []).map((a: any) => ({
+      type: a.checked_in_by === data.staffName ? "check-in" : "check-out",
+      guest_name: a.guest_name,
+      room_number: a.room_number,
+      reference: a.reference,
+      timestamp: a.created_at,
+    }));
+
+    const firstAction = activityList[0]?.timestamp || null;
+    const lastAction = activityList[activityList.length - 1]?.timestamp || null;
+    const totalCount = activityList.length;
+
+    return {
+      success: true,
+      activities: activityList,
+      firstAction,
+      lastAction,
+      totalCount,
+    };
+  });
+
+async function validateToken(token: string, db: any): Promise<{ type: "admin" | "staff"; staff?: any } | null> {
+  // Try admin_sessions table (both old PIN-based system and new staff login)
+  const session = await db.prepare(
+    `SELECT * FROM admin_sessions WHERE token = ? AND expires_at > datetime('now') LIMIT 1`
+  ).bind(token).first() as any;
+  if (session) {
+    // Fetch staff info from staff_users table using staff_id or staff_username from session
+    let staff = null;
+    if (session.staff_id) {
+      staff = await db.prepare(
+        `SELECT id, username, full_name, role FROM staff_users WHERE id = ? LIMIT 1`
+      ).bind(session.staff_id).first() as any;
+    }
+    // If staff_id lookup fails, try staff_username fallback
+    if (!staff && session.staff_username) {
+      staff = await db.prepare(
+        `SELECT id, username, full_name, role FROM staff_users WHERE username = ? LIMIT 1`
+      ).bind(session.staff_username).first() as any;
+    }
+    if (!staff) return null;
+    return { type: "staff", staff };
+  }
+
+  // If not found in admin_sessions, token is invalid
+  return null;
+}
+
 export const verifySession = createServerFn({ method: "POST" })
   .inputValidator((data: { token: string }) => data)
   .handler(async ({ data }): Promise<any> => {
     const db = cfEnv().remeritona_bookings;
-    const session = await db.prepare(
-      `SELECT * FROM admin_sessions WHERE token = ? AND expires_at > datetime('now') LIMIT 1`
-    ).bind(data.token).first() as any;
-    if (!session) return { valid: false };
-    return { valid: true, hotelId: session.hotel_id };
+    const auth = await validateToken(data.token, db);
+    if (!auth) return { valid: false };
+    return { valid: true, type: auth.type, staff: auth.staff };
   });
 
 export const getDashboardStats = createServerFn({ method: "POST" })
@@ -114,10 +319,8 @@ export const getDashboardStats = createServerFn({ method: "POST" })
   .inputValidator((data: { token: string }) => data)
   .handler(async ({ data }): Promise<any> => {
     const db = cfEnv().remeritona_bookings;
-    const session = await db.prepare(
-      `SELECT * FROM admin_sessions WHERE token = ? AND expires_at > datetime('now') LIMIT 1`
-    ).bind(data.token).first() as any;
-    if (!session) return { success: false, error: "Unauthorized" };
+    const auth = await validateToken(data.token, db);
+    if (!auth) return { success: false, error: "Unauthorized" };
     const today = new Date().toISOString().split("T")[0];
     const [checkIns, checkOuts, allBookings, roomStatuses, revenueResult] = await Promise.all([
       db.prepare(`SELECT * FROM bookings WHERE hotel_id = 'remeritona' AND check_in = ? AND status != 'cancelled' ORDER BY created_at DESC`).bind(today).all(),
@@ -140,10 +343,8 @@ export const getActiveBookingForRoom = createServerFn({ method: "POST" })
   .inputValidator((data: { token: string; roomNumber: string }) => data)
   .handler(async ({ data }): Promise<any> => {
     const db = cfEnv().remeritona_bookings;
-    const session = await db.prepare(
-      `SELECT * FROM admin_sessions WHERE token = ? AND expires_at > datetime('now') LIMIT 1`
-    ).bind(data.token).first() as any;
-    if (!session) return { success: false, error: "Unauthorized" };
+    const auth = await validateToken(data.token, db);
+    if (!auth) return { success: false, error: "Unauthorized" };
 
     const booking = await db.prepare(
       `SELECT * FROM bookings WHERE room_number = ? AND status = 'checked_in' LIMIT 1`
@@ -156,10 +357,8 @@ export const updateRoomStatus = createServerFn({ method: "POST" })
   .inputValidator((data: { token: string; roomNumber: string; status: string; updatedBy: string; force?: boolean }) => data)
   .handler(async ({ data }): Promise<any> => {
     const db = cfEnv().remeritona_bookings;
-    const session = await db.prepare(
-      `SELECT * FROM admin_sessions WHERE token = ? AND expires_at > datetime('now') LIMIT 1`
-    ).bind(data.token).first() as any;
-    if (!session) return { success: false, error: "Unauthorized" };
+    const auth = await validateToken(data.token, db);
+    if (!auth) return { success: false, error: "Unauthorized" };
 
     // Block changing occupied room to vacant/dirty without going through checkout
     if (!data.force && (data.status === 'vacant_clean' || data.status === 'vacant_dirty')) {
@@ -188,13 +387,12 @@ export const checkInGuest = createServerFn({ method: "POST" })
     checkIn: string;
     checkOut: string;
     additionalRooms?: string[];
+    checkedInBy?: string;
   }) => data)
   .handler(async ({ data }): Promise<any> => {
     const db = cfEnv().remeritona_bookings;
-    const session = await db.prepare(
-      `SELECT * FROM admin_sessions WHERE token = ? AND expires_at > datetime('now') LIMIT 1`
-    ).bind(data.token).first() as any;
-    if (!session) return { success: false, error: "Unauthorized" };
+    const auth = await validateToken(data.token, db);
+    if (!auth) return { success: false, error: "Unauthorized" };
 
     await ensureGuestPortalAccessTable(db);
     await ensureGuestsBookingRoomIndex(db);
@@ -207,10 +405,10 @@ export const checkInGuest = createServerFn({ method: "POST" })
 
     const isEarlyCheckIn = originalBooking && data.checkIn < (originalBooking.check_in ?? "").split("T")[0];
 
-    // 2. Update booking: status, check_in (backdated if early), room_number, early_checkin flag
+    // 2. Update booking: status, check_in (backdated if early), room_number, early_checkin flag, checked_in_by
     await db.prepare(
-      `UPDATE bookings SET status = 'checked_in', check_in = ?, room_number = ?, early_checkin = ? WHERE reference = ?`
-    ).bind(data.checkIn, data.roomNumber, isEarlyCheckIn ? 1 : 0, data.reference).run();
+      `UPDATE bookings SET status = 'checked_in', check_in = ?, room_number = ?, early_checkin = ?, checked_in_by = ? WHERE reference = ?`
+    ).bind(data.checkIn, data.roomNumber, isEarlyCheckIn ? 1 : 0, data.checkedInBy ?? "", data.reference).run();
 
     // 3. Update room status to occupied
     await db.prepare(
@@ -420,13 +618,11 @@ export const checkInGuest = createServerFn({ method: "POST" })
   });
 
 export const checkOutGuest = createServerFn({ method: "POST" })
-  .inputValidator((data: { token: string; reference: string; roomSlug: string; roomNumber?: string }) => data)
+  .inputValidator((data: { token: string; reference: string; roomSlug: string; roomNumber?: string; checkedOutBy?: string }) => data)
   .handler(async ({ data }): Promise<any> => {
     const db = cfEnv().remeritona_bookings;
-    const session = await db.prepare(
-      `SELECT * FROM admin_sessions WHERE token = ? AND expires_at > datetime('now') LIMIT 1`
-    ).bind(data.token).first() as any;
-    if (!session) return { success: false, error: "Unauthorized" };
+    const auth = await validateToken(data.token, db);
+    if (!auth) return { success: false, error: "Unauthorized" };
 
     // Look up room_number from bookings first (stored at check-in), then guests table as fallback
     let roomNumber = data.roomNumber;
@@ -443,10 +639,10 @@ export const checkOutGuest = createServerFn({ method: "POST" })
       roomNumber = guest?.room_number;
     }
 
-    // Update booking status
+    // Update booking status and checked_out_by
     await db.prepare(
-      `UPDATE bookings SET status = 'checked_out' WHERE reference = ?`
-    ).bind(data.reference).run();
+      `UPDATE bookings SET status = 'checked_out', checked_out_by = ? WHERE reference = ?`
+    ).bind(data.checkedOutBy ?? "", data.reference).run();
 
     // Free the room — vacant_dirty for housekeeping
     if (roomNumber) {
@@ -458,50 +654,152 @@ export const checkOutGuest = createServerFn({ method: "POST" })
     return { success: true, roomNumber };
   });
 
-// ── Availability check for booking engine ──────────────────────────────────
-// Total rooms per type (from actual hotel layout)
-const ROOM_TYPE_TOTALS: Record<string, number> = {
+// ── Capacity-based availability for guest booking engine ───────────────────
+const ROOM_TYPE_CAPACITIES: Record<string, number> = {
   classic: 23,
   superior: 38,
   executive: 18,        // 15 executive + 3 executive-twin
-  'business-suites': 11,
-  'executive-suites': 4,
+  "business-suites": 11,
+  "executive-suites": 4,
 };
 
+const ROOM_TYPE_KEY_ALIASES: Record<string, string> = {
+  standard: "classic",
+  deluxe: "superior",
+  "executive-suite": "executive",
+  "executive-twin": "executive",
+  "presidential-deluxe": "business-suites",
+  "presidential-executive": "executive-suites",
+  "business-suite": "business-suites",
+};
+
+function normalizeRoomTypeKey(raw: string): string {
+  const key = raw.toLowerCase().trim().replace(/\s+/g, "-");
+  return ROOM_TYPE_KEY_ALIASES[key] ?? key;
+}
+
 export const checkRoomAvailability = createServerFn({ method: "POST" })
-  .inputValidator((data: { roomType: string; checkIn: string; checkOut: string }) => data)
+  .inputValidator((data: { checkIn: string; checkOut: string }) => data)
   .handler(async ({ data }): Promise<any> => {
     const db = cfEnv().remeritona_bookings;
 
-    // Normalise room type key (booking.tsx uses display names)
-    const typeKey = data.roomType.toLowerCase()
-      .replace(/\s+/g, '-')
-      .replace('executive-suite', 'executive-suites')
-      .replace('business-suite', 'business-suites');
+    if (!data.checkIn || !data.checkOut || data.checkOut <= data.checkIn) {
+      return { success: false, error: "Invalid date range" };
+    }
 
-    const total = ROOM_TYPE_TOTALS[typeKey] ?? 0;
-
-    // Count bookings that overlap with requested dates and are active
-    const result = await db.prepare(`
-      SELECT COALESCE(SUM(num_rooms), 0) as booked
+    const bookedRows = await db.prepare(`
+      SELECT COALESCE(NULLIF(room_type_key, ''), room_slug) AS type_key,
+             COALESCE(SUM(num_rooms), 0) AS booked
       FROM bookings
-      WHERE hotel_id = 'remeritona'
-        AND room_type_key = ?
-        AND status IN ('confirmed', 'checked_in')
-        AND check_in < ?
-        AND check_out > ?
-    `).bind(typeKey, data.checkOut, data.checkIn).first() as any;
+      WHERE status IN ('confirmed', 'checked_in')
+        AND NOT (date(check_out) <= date(?) OR date(check_in) >= date(?))
+      GROUP BY type_key
+    `).bind(data.checkIn, data.checkOut).all();
 
-    const booked = result?.booked ?? 0;
-    const available = Math.max(0, total - booked);
+    const bookedByType: Record<string, number> = {};
+    for (const row of bookedRows.results as Array<{ type_key: string; booked: number }>) {
+      const key = normalizeRoomTypeKey(row.type_key ?? "");
+      if (!key) continue;
+      bookedByType[key] = (bookedByType[key] ?? 0) + Number(row.booked ?? 0);
+    }
+
+    const availability: Record<string, {
+      total: number;
+      booked: number;
+      available: number;
+      fullyBooked: boolean;
+    }> = {};
+
+    for (const [typeKey, total] of Object.entries(ROOM_TYPE_CAPACITIES)) {
+      const booked = bookedByType[typeKey] ?? 0;
+      const available = Math.max(0, total - booked);
+      availability[typeKey] = {
+        total,
+        booked,
+        available,
+        fullyBooked: available === 0,
+      };
+    }
 
     return {
       success: true,
-      roomType: data.roomType,
-      typeKey,
-      total,
-      booked,
-      available,
-      fullyBooked: available === 0,
+      checkIn: data.checkIn,
+      availability,
+    };
+  });
+
+export const getRevenueReport = createServerFn({ method: "POST" })
+  .inputValidator((data: { token: string; dateFrom: string; dateTo: string }) => data)
+  .handler(async ({ data }): Promise<any> => {
+    const db = cfEnv().remeritona_bookings;
+    const auth = await validateToken(data.token, db);
+    if (!auth) return { success: false, error: "Unauthorized" };
+
+    const bookings = await db.prepare(
+      `SELECT reference, guest_name, room_name, check_in, check_out, total, gateway, status, created_at
+       FROM bookings
+       WHERE DATE(created_at) BETWEEN ? AND ? AND status != 'cancelled'
+       ORDER BY created_at DESC`
+    ).bind(data.dateFrom, data.dateTo).all();
+
+    const bookingList = bookings.results ?? [];
+
+    const totalRevenue = bookingList.reduce((sum: number, b: any) => sum + (b.total || 0), 0);
+    const totalBookings = bookingList.length;
+
+    // Group by room type
+    const byRoomType: Record<string, { count: number; revenue: number }> = {};
+    bookingList.forEach((b: any) => {
+      const roomType = b.room_name || "Unknown";
+      if (!byRoomType[roomType]) {
+        byRoomType[roomType] = { count: 0, revenue: 0 };
+      }
+      byRoomType[roomType].count++;
+      byRoomType[roomType].revenue += b.total || 0;
+    });
+
+    const byRoomTypeArray = Object.entries(byRoomType).map(([roomType, data]) => ({
+      roomType,
+      count: data.count,
+      revenue: data.revenue,
+      percentage: totalRevenue > 0 ? (data.revenue / totalRevenue * 100).toFixed(1) : "0.0",
+    }));
+
+    // Group by payment method
+    const byPaymentMethod: Record<string, { count: number; revenue: number }> = {};
+    bookingList.forEach((b: any) => {
+      const method = b.gateway || "Unknown";
+      if (!byPaymentMethod[method]) {
+        byPaymentMethod[method] = { count: 0, revenue: 0 };
+      }
+      byPaymentMethod[method].count++;
+      byPaymentMethod[method].revenue += b.total || 0;
+    });
+
+    const byPaymentMethodArray = Object.entries(byPaymentMethod).map(([method, data]) => ({
+      method,
+      count: data.count,
+      revenue: data.revenue,
+    }));
+
+    // Calculate nights for each booking
+    const bookingsWithNights = bookingList.map((b: any) => {
+      const checkIn = new Date(b.check_in);
+      const checkOut = new Date(b.check_out);
+      const nights = Math.ceil((checkOut.getTime() - checkIn.getTime()) / (1000 * 60 * 60 * 24));
+      return {
+        ...b,
+        nights,
+      };
+    });
+
+    return {
+      success: true,
+      totalRevenue,
+      totalBookings,
+      avgPerBooking: totalBookings > 0 ? totalRevenue / totalBookings : 0,
+      byRoomType: byRoomTypeArray,
+      byPaymentMethod: byPaymentMethodArray,
+      bookings: bookingsWithNights,
     };
   });

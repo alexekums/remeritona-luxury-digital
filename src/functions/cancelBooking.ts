@@ -13,6 +13,19 @@ export interface CancelData {
   total: number;
 }
 
+export const lookupBooking = createServerFn({ method: "POST" })
+  .inputValidator((data: { reference: string; email: string }) => data)
+  .handler(async ({ data }) => {
+    const cfEnv = env as unknown as {
+      remeritona_bookings: D1Database;
+    };
+    const db = cfEnv.remeritona_bookings;
+    const booking = await db.prepare(
+      `SELECT * FROM bookings WHERE (reference = ? OR UPPER(reference) = UPPER(?)) AND LOWER(guest_email) = LOWER(?) LIMIT 1`
+    ).bind(data.reference, data.reference, data.email).first() as any;
+    return booking || null;
+  });
+
 export const cancelBooking = createServerFn({ method: "POST" })
   .inputValidator((data: CancelData) => data)
   .handler(async ({ data }) => {
@@ -24,6 +37,18 @@ export const cancelBooking = createServerFn({ method: "POST" })
     };
 
     try {
+      // Server-side guard: check booking status before processing
+      const db = cfEnv.remeritona_bookings;
+      const booking = await db.prepare(
+        `SELECT status FROM bookings WHERE reference = ? LIMIT 1`
+      ).bind(data.reference).first() as any;
+      if (!booking) {
+        return { success: false, error: "Booking not found" };
+      }
+      if (booking.status === "checked_in" || booking.status === "checked_out" || booking.status === "cancelled") {
+        return { success: false, error: "This booking cannot be cancelled." };
+      }
+
       // Process refund if applicable
       if (data.refundAmount > 0) {
         if (data.gateway === "paystack") {
@@ -59,7 +84,6 @@ export const cancelBooking = createServerFn({ method: "POST" })
       }
 
       // Update D1 database
-      const db = cfEnv.remeritona_bookings;
       if (db) {
         await db.prepare(
           `UPDATE bookings SET status = 'cancelled', refund_amount = ?, cancelled_at = ? WHERE reference = ?`
