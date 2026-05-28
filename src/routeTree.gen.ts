@@ -11,6 +11,7 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as RoomsRouteImport } from './routes/rooms'
 import { Route as PoliciesRouteImport } from './routes/policies'
+import { Route as OrdersRequestsRouteImport } from './routes/orders-requests'
 import { Route as OffersRouteImport } from './routes/offers'
 import { Route as MyBookingsRouteImport } from './routes/my-bookings'
 import { Route as HotelAdminRouteImport } from './routes/hotel-admin'
@@ -30,6 +31,11 @@ const RoomsRoute = RoomsRouteImport.update({
 const PoliciesRoute = PoliciesRouteImport.update({
   id: '/policies',
   path: '/policies',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const OrdersRequestsRoute = OrdersRequestsRouteImport.update({
+  id: '/orders-requests',
+  path: '/orders-requests',
   getParentRoute: () => rootRouteImport,
 } as any)
 const OffersRoute = OffersRouteImport.update({
@@ -93,6 +99,7 @@ export interface FileRoutesByFullPath {
   '/hotel-admin': typeof HotelAdminRoute
   '/my-bookings': typeof MyBookingsRoute
   '/offers': typeof OffersRoute
+  '/orders-requests': typeof OrdersRequestsRoute
   '/policies': typeof PoliciesRoute
   '/rooms': typeof RoomsRouteWithChildren
   '/rooms/$slug': typeof RoomsSlugRoute
@@ -107,6 +114,7 @@ export interface FileRoutesByTo {
   '/hotel-admin': typeof HotelAdminRoute
   '/my-bookings': typeof MyBookingsRoute
   '/offers': typeof OffersRoute
+  '/orders-requests': typeof OrdersRequestsRoute
   '/policies': typeof PoliciesRoute
   '/rooms': typeof RoomsRouteWithChildren
   '/rooms/$slug': typeof RoomsSlugRoute
@@ -122,6 +130,7 @@ export interface FileRoutesById {
   '/hotel-admin': typeof HotelAdminRoute
   '/my-bookings': typeof MyBookingsRoute
   '/offers': typeof OffersRoute
+  '/orders-requests': typeof OrdersRequestsRoute
   '/policies': typeof PoliciesRoute
   '/rooms': typeof RoomsRouteWithChildren
   '/rooms/$slug': typeof RoomsSlugRoute
@@ -138,6 +147,7 @@ export interface FileRouteTypes {
     | '/hotel-admin'
     | '/my-bookings'
     | '/offers'
+    | '/orders-requests'
     | '/policies'
     | '/rooms'
     | '/rooms/$slug'
@@ -152,6 +162,7 @@ export interface FileRouteTypes {
     | '/hotel-admin'
     | '/my-bookings'
     | '/offers'
+    | '/orders-requests'
     | '/policies'
     | '/rooms'
     | '/rooms/$slug'
@@ -166,6 +177,7 @@ export interface FileRouteTypes {
     | '/hotel-admin'
     | '/my-bookings'
     | '/offers'
+    | '/orders-requests'
     | '/policies'
     | '/rooms'
     | '/rooms/$slug'
@@ -181,6 +193,7 @@ export interface RootRouteChildren {
   HotelAdminRoute: typeof HotelAdminRoute
   MyBookingsRoute: typeof MyBookingsRoute
   OffersRoute: typeof OffersRoute
+  OrdersRequestsRoute: typeof OrdersRequestsRoute
   PoliciesRoute: typeof PoliciesRoute
   RoomsRoute: typeof RoomsRouteWithChildren
 }
@@ -199,6 +212,13 @@ declare module '@tanstack/react-router' {
       path: '/policies'
       fullPath: '/policies'
       preLoaderRoute: typeof PoliciesRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/orders-requests': {
+      id: '/orders-requests'
+      path: '/orders-requests'
+      fullPath: '/orders-requests'
+      preLoaderRoute: typeof OrdersRequestsRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/offers': {
@@ -294,6 +314,7 @@ const rootRouteChildren: RootRouteChildren = {
   HotelAdminRoute: HotelAdminRoute,
   MyBookingsRoute: MyBookingsRoute,
   OffersRoute: OffersRoute,
+  OrdersRequestsRoute: OrdersRequestsRoute,
   PoliciesRoute: PoliciesRoute,
   RoomsRoute: RoomsRouteWithChildren,
 }

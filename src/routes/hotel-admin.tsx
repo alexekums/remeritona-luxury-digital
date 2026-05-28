@@ -1,15 +1,25 @@
-import { createFileRoute, useRouter } from "@tanstack/react-router";
-import { useEffect, useState, useCallback } from "react";
+import { createFileRoute, Link, useRouter, useRouterState } from "@tanstack/react-router";
+import { useEffect, useState, useCallback, useRef } from "react";
 import {
   adminLogin, getDashboardStats, getActiveBookingForRoom, updateRoomStatus,
-  checkInGuest, checkOutGuest, registerStaff, loginStaff, resetAdminPassword, getStaffList, getStaffActivity, getRevenueReport
+  checkInGuest, checkOutGuest, registerStaff, loginStaff, resetAdminPassword, getStaffList, getStaffActivity, getRevenueReport,
+  getRoomRates, updateRoomRate, getOccupancyForecast,
 } from "@/functions/adminAuth";
+import { OrdersRequestsView } from "@/components/OrdersRequestsView";
+import { fetchOrdersAndRequests, patchItemStatus, playNotificationPing } from "@/lib/orders-api-client";
+import {
+  formatOrderItemsSummary,
+  getRequestSummary,
+  getStatusBadgeColor,
+  timeAgo,
+} from "@/lib/orders-helpers";
 import { saveGuestRegistration, getGuestRegistration } from "@/functions/saveRegistration";
 import { formatNaira, rooms } from "@/data/rooms";
 import {
   LogOut, Moon, Sun, Users, Hotel, TrendingUp,
   CheckCircle, XCircle, Clock, Search, RefreshCw,
-  BedDouble, Sparkles, AlertCircle, ChevronDown, X
+  BedDouble, Sparkles, AlertCircle, ChevronDown, ChevronRight, X,
+  LayoutDashboard, Calendar, Plus, Menu, Bell, DollarSign, History, BarChart3
 } from "lucide-react";
 import logo from "@/assets/logo.png";
 
@@ -184,7 +194,10 @@ body { margin: 0; padding: 0; font-family: Arial, sans-serif; font-size: 11px; c
   }
 }
 
-function AdminPage() {
+type AdminTab = "dashboard" | "bookings" | "rooms" | "reports" | "room-rates" | "guest-history" | "occupancy-forecast" | "orders-requests";
+
+export function AdminPage({ initialTab }: { initialTab?: AdminTab } = {}) {
+  const router = useRouter();
   const [theme, setTheme] = useState<"dark" | "light">("dark");
   const [token, setToken] = useState<string | null>(null);
   const [staffName, setStaffName] = useState("");
@@ -193,7 +206,20 @@ function AdminPage() {
   const [loginLoading, setLoginLoading] = useState(false);
   const [stats, setStats] = useState<any>(null);
   const [loading, setLoading] = useState(false);
-  const [activeTab, setActiveTab] = useState<"dashboard" | "bookings" | "rooms" | "reports">("dashboard");
+  const [activeTab, setActiveTab] = useState<AdminTab>(initialTab ?? "dashboard");
+  const pathname = useRouterState({ select: (s) => s.location.pathname });
+  const isOrdersPage = pathname === "/orders-requests" || activeTab === "orders-requests";
+
+  const navigateToTab = (tab: AdminTab) => {
+    setActiveTab(tab);
+    setShowStaffManagement(false);
+    if (window.innerWidth < 768) setMobileSidebarOpen(false);
+    if (tab === "orders-requests" && pathname !== "/orders-requests") {
+      router.navigate({ to: "/orders-requests" });
+    } else if (tab !== "orders-requests" && pathname === "/orders-requests") {
+      router.navigate({ to: "/hotel-admin" });
+    }
+  };
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("today");
   const [selectedBooking, setSelectedBooking] = useState<any>(null);
@@ -216,7 +242,14 @@ function AdminPage() {
   const [staffListLoading, setStaffListLoading] = useState(false);
   const [activityModal, setActivityModal] = useState<{ staff: any; date: string } | null>(null);
   const [activityData, setActivityData] = useState<any>(null);
+
+  // Sidebar state
+  const [sidebarExpanded, setSidebarExpanded] = useState(true);
+  const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
+  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set(["front-desk", "rooms", "finance", "staff"]));
   const [activityLoading, setActivityLoading] = useState(false);
+  const [deleteConfirm, setDeleteConfirm] = useState<any>(null);
+  const [deleteLoading, setDeleteLoading] = useState(false);
 
   // Reports tab state (admin/manager/accountant only)
   const [reportDateFrom, setReportDateFrom] = useState("");
@@ -302,6 +335,26 @@ function AdminPage() {
 
   // Room status tab filter
   const [roomStatusFilter, setRoomStatusFilter] = useState<string | null>(null);
+
+  // Room Rates state
+  const [roomRates, setRoomRates] = useState<any[]>([]);
+  const [roomRatesLoading, setRoomRatesLoading] = useState(false);
+  const [editingRate, setEditingRate] = useState<{ roomType: string; currentPrice: number } | null>(null);
+  const [newRatePrice, setNewRatePrice] = useState("");
+
+  // Occupancy Forecast state
+  const [occupancyForecast, setOccupancyForecast] = useState<any[]>([]);
+  const [forecastLoading, setForecastLoading] = useState(false);
+  const [forecastDays, setForecastDays] = useState(7);
+
+  // Notifications panel state
+  const [notificationsOpen, setNotificationsOpen] = useState(false);
+  const [notificationItems, setNotificationItems] = useState<any[]>([]);
+  const [notificationPendingCount, setNotificationPendingCount] = useState(0);
+  const lastPendingCountRef = useRef<number | null>(null);
+  const [alertToast, setAlertToast] = useState<{ message: string } | null>(null);
+  const [hoveredNotifId, setHoveredNotifId] = useState<string | null>(null);
+  const [notifActionLoading, setNotifActionLoading] = useState<string | null>(null);
 
   const isDark = theme === "dark";
 
@@ -389,6 +442,53 @@ function AdminPage() {
   useEffect(() => {
     if (token) loadStats(token);
   }, [token, loadStats]);
+
+  // Real-time notification polling (4s)
+  useEffect(() => {
+    if (!token) return;
+    const pollNotifications = async () => {
+      try {
+        const result = await fetchOrdersAndRequests(token);
+        if (!result.success) return;
+        const items = result.items ?? [];
+        const pendingCount = items.filter((i: any) => i.status === "pending").length;
+        setNotificationItems(items);
+        setNotificationPendingCount(pendingCount);
+
+        const prev = lastPendingCountRef.current;
+        if (prev !== null && pendingCount > prev) {
+          const newestPending = items
+            .filter((i: any) => i.status === "pending")
+            .sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())[0];
+          if (newestPending) {
+            const msg =
+              newestPending.type === "dining"
+                ? `New order from Room ${newestPending.room_number}`
+                : `New request from Room ${newestPending.room_number}`;
+            setAlertToast({ message: msg });
+            playNotificationPing();
+            setTimeout(() => setAlertToast(null), 5000);
+          }
+        }
+        lastPendingCountRef.current = pendingCount;
+      } catch {
+        // Polling failure — silent retry on next interval
+      }
+    };
+    pollNotifications();
+    const interval = setInterval(pollNotifications, 4000);
+    return () => clearInterval(interval);
+  }, [token]);
+
+  // Load room rates when tab changes to room-rates
+  useEffect(() => {
+    if (token && activeTab === "room-rates") loadRoomRates();
+  }, [token, activeTab]);
+
+  // Load occupancy forecast when tab changes to occupancy-forecast
+  useEffect(() => {
+    if (token && activeTab === "occupancy-forecast") loadOccupancyForecast(forecastDays);
+  }, [token, activeTab, forecastDays]);
 
   useEffect(() => {
     if (token && showStaffManagement && (staffRole === "admin" || staffRole === "manager")) {
@@ -554,6 +654,26 @@ function AdminPage() {
     }
   };
 
+  const handleDeleteStaff = async () => {
+    if (!token || !deleteConfirm) return;
+    setDeleteLoading(true);
+    try {
+      const { deleteStaff } = await import("@/functions/adminAuth");
+      const result = await deleteStaff({ data: { token, staffId: deleteConfirm.id } });
+      if (result.success) {
+        showToast(`${deleteConfirm.full_name} removed from staff`);
+        setDeleteConfirm(null);
+        await loadStaffList(token);
+      } else {
+        showToast(result.error || "Failed to delete staff", "error");
+      }
+    } catch {
+      showToast("Failed to delete staff", "error");
+    } finally {
+      setDeleteLoading(false);
+    }
+  };
+
   const handleGenerateReport = async () => {
     if (!token || !reportDateFrom || !reportDateTo) return;
     setReportLoading(true);
@@ -714,6 +834,81 @@ function AdminPage() {
     printWindow.document.close();
     printWindow.print();
   };
+
+  // Room Rates handlers
+  const loadRoomRates = async () => {
+    if (!token) return;
+    setRoomRatesLoading(true);
+    try {
+      const result = await getRoomRates({ data: { token } }) as any;
+      if (result.success) setRoomRates(result.rates);
+    } finally {
+      setRoomRatesLoading(false);
+    }
+  };
+
+  const handleSaveRate = async () => {
+    if (!token || !editingRate) return;
+    const price = parseFloat(newRatePrice);
+    if (isNaN(price) || price <= 0) {
+      showToast("Invalid price", "error");
+      return;
+    }
+    try {
+      const result = await updateRoomRate({ data: { token, roomType: editingRate.roomType, price } }) as any;
+      if (result.success) {
+        showToast("Rate updated successfully");
+        setEditingRate(null);
+        setNewRatePrice("");
+        await loadRoomRates();
+      } else {
+        showToast(result.error || "Failed to update rate", "error");
+      }
+    } catch {
+      showToast("Failed to update rate", "error");
+    }
+  };
+
+  // Occupancy Forecast handlers
+  const loadOccupancyForecast = async (days: number) => {
+    if (!token) return;
+    setForecastLoading(true);
+    try {
+      const result = await getOccupancyForecast({ data: { token, days } }) as any;
+      if (result.success) setOccupancyForecast(result.forecast);
+    } finally {
+      setForecastLoading(false);
+    }
+  };
+
+  const handleNotifStatusUpdate = async (item: any, status: string) => {
+    if (!token) return;
+    const key = `${item.type}-${item.id}`;
+    setNotifActionLoading(key);
+    try {
+      const result = await patchItemStatus(token, item.id, item.type, status);
+      if (result.success) {
+        showToast("Status updated");
+        const refreshed = await fetchOrdersAndRequests(token);
+        if (refreshed.success) {
+          const items = refreshed.items ?? [];
+          setNotificationItems(items);
+          const pendingCount = items.filter((i: any) => i.status === "pending").length;
+          setNotificationPendingCount(pendingCount);
+          lastPendingCountRef.current = pendingCount;
+        }
+        await loadStats(token);
+      } else {
+        showToast(result.error ?? "Failed to update", "error");
+      }
+    } catch {
+      showToast("Failed to update status", "error");
+    } finally {
+      setNotifActionLoading(null);
+    }
+  };
+
+  const bellPanelItems = notificationItems.slice(0, 8);
 
   const handleLogout = () => {
     localStorage.removeItem(TOKEN_KEY);
@@ -1032,8 +1227,7 @@ function AdminPage() {
       const today = new Date().toISOString().split("T")[0];
       const checkInDate = (b.check_in ?? "").split("T")[0];
       const checkOutDate = (b.check_out ?? "").split("T")[0];
-      const createdDate = (b.created_at ?? "").split("T")[0];
-      matchStatus = checkInDate === today || checkOutDate === today || createdDate === today;
+      matchStatus = checkInDate === today || checkOutDate === today;
     } else {
       matchStatus = b.status === statusFilter;
     }
@@ -1179,6 +1373,124 @@ function AdminPage() {
         </div>
       )}
 
+      {/* New-item alert toast */}
+      {alertToast && (
+        <div style={{
+          position: "fixed", top: 20, right: 20, zIndex: 10000,
+          background: "#141414", color: "#e8e0d0", padding: "14px 20px", fontSize: 13,
+          boxShadow: "0 4px 20px rgba(0,0,0,0.4)", borderRadius: 4,
+          borderLeft: `4px solid ${colors.gold}`, maxWidth: 320,
+        }}>
+          {alertToast.message}
+        </div>
+      )}
+
+      {/* Notifications Panel */}
+      {notificationsOpen && (
+        <div style={{
+          position: "fixed", top: 80, right: 20, zIndex: 1000,
+          background: colors.surface, border: `1px solid ${colors.border}`,
+          padding: 20, maxWidth: 420, width: "90%", maxHeight: "80vh",
+          overflowY: "auto", boxShadow: "0 4px 20px rgba(0,0,0,0.3)"
+        }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+            <h3 style={{ color: colors.gold, fontSize: 12, letterSpacing: "0.2em", textTransform: "uppercase", margin: 0 }}>
+              Notifications
+            </h3>
+            <button onClick={() => setNotificationsOpen(false)} style={{ background: "none", border: "none", cursor: "pointer", color: colors.textMuted }}>
+              <X size={16} />
+            </button>
+          </div>
+
+          {bellPanelItems.length === 0 && (
+            <p style={{ color: colors.textMuted, fontSize: 13, textAlign: "center" }}>No recent orders or requests</p>
+          )}
+
+          {bellPanelItems.map((item: any) => {
+            const itemKey = `${item.type}-${item.id}`;
+            const summary =
+              item.type === "dining"
+                ? formatOrderItemsSummary(item.items)
+                : getRequestSummary(item);
+            const isHovered = hoveredNotifId === itemKey;
+            return (
+              <div
+                key={itemKey}
+                onMouseEnter={() => setHoveredNotifId(itemKey)}
+                onMouseLeave={() => setHoveredNotifId(null)}
+                style={{
+                  background: colors.surface2, padding: 12,
+                  marginBottom: 8, border: `1px solid ${colors.border}`,
+                  position: "relative",
+                }}
+              >
+                <div style={{ display: "flex", gap: 8, alignItems: "flex-start" }}>
+                  <span style={{ fontSize: 16, lineHeight: 1 }}>{item.type === "dining" ? "🍽️" : "🛎️"}</span>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <p style={{ margin: "0 0 4px", fontSize: 13, color: colors.text, fontWeight: 600 }}>
+                      Room {item.room_number} — {summary.length > 48 ? `${summary.slice(0, 48)}…` : summary}
+                    </p>
+                    <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                      <span style={{ fontSize: 10, color: colors.textMuted }}>{timeAgo(item.created_at)}</span>
+                      <span style={{
+                        fontSize: 9, padding: "2px 6px",
+                        background: getStatusBadgeColor(item.status),
+                        color: "#fff", textTransform: "uppercase", letterSpacing: "0.08em",
+                      }}>
+                        {item.status}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+                {isHovered && (item.status === "pending" || item.status === "accepted") && (
+                  <div style={{ display: "flex", gap: 6, marginTop: 8, justifyContent: "flex-end" }}>
+                    {item.status === "pending" && (
+                      <button
+                        onClick={() => handleNotifStatusUpdate(item, "accepted")}
+                        disabled={notifActionLoading === itemKey}
+                        style={{
+                          background: "#3b82f6", color: "#fff", border: "none",
+                          padding: "4px 10px", fontSize: 10, cursor: "pointer",
+                          letterSpacing: "0.08em", opacity: notifActionLoading === itemKey ? 0.6 : 1,
+                        }}
+                      >
+                        Accept
+                      </button>
+                    )}
+                    {item.status === "accepted" && (
+                      <button
+                        onClick={() => handleNotifStatusUpdate(item, item.type === "dining" ? "delivered" : "completed")}
+                        disabled={notifActionLoading === itemKey}
+                        style={{
+                          background: "#22c55e", color: "#fff", border: "none",
+                          padding: "4px 10px", fontSize: 10, cursor: "pointer",
+                          letterSpacing: "0.08em", opacity: notifActionLoading === itemKey ? 0.6 : 1,
+                        }}
+                      >
+                        Mark Done
+                      </button>
+                    )}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+
+          <Link
+            to="/orders-requests"
+            onClick={() => setNotificationsOpen(false)}
+            style={{
+              display: "block", textAlign: "center", marginTop: 12,
+              color: colors.gold, fontSize: 12, letterSpacing: "0.1em",
+              textDecoration: "none", padding: "8px 0",
+              borderTop: `1px solid ${colors.border}`,
+            }}
+          >
+            View All Orders →
+          </Link>
+        </div>
+      )}
+
       {/* Suppress external chat widget in PMS */}
       <style>{`
         #tidio-chat, #tidio-chat-iframe, .tidio-1, [id*="tidio"], [class*="tidio"],
@@ -1186,101 +1498,349 @@ function AdminPage() {
         [class*="chat-widget"], [id*="chat-widget"] { display: none !important; }
       `}</style>
 
-      {/* Header */}
-      <header style={{
-        background: colors.surface, borderBottom: `1px solid ${colors.border}`,
-        padding: "0 24px", height: 64, display: "flex", alignItems: "center",
-        justifyContent: "space-between", position: "sticky", top: 0, zIndex: 100
+      {/* Mobile sidebar backdrop */}
+      {mobileSidebarOpen && (
+        <div onClick={() => setMobileSidebarOpen(false)} style={{
+          position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", zIndex: 200,
+          display: window.innerWidth < 768 ? "block" : "none"
+        }} />
+      )}
+
+      {/* Sidebar */}
+      <aside style={{
+        position: "fixed", left: 0, top: 0, height: "100vh",
+        background: colors.surface, borderRight: `1px solid ${colors.border}`,
+        width: sidebarExpanded ? 220 : 56,
+        transition: "width 0.25s ease",
+        zIndex: 300,
+        display: "flex", flexDirection: "column"
       }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
-          <h1 style={{ color: colors.gold, fontSize: 18, fontWeight: 400, margin: 0, letterSpacing: "0.1em" }}>
-            REMERITONA
-          </h1>
-          <span style={{ color: colors.textMuted, fontSize: 12 }}>Hotel Management</span>
-        </div>
-        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-          <button onClick={() => token && loadStats(token)} style={{
-            background: "none", border: `1px solid ${colors.border}`, padding: "6px 12px",
-            color: colors.textMuted, cursor: "pointer", fontSize: 12, display: "flex",
-            alignItems: "center", gap: 6
-          }}>
-            <RefreshCw size={12} /> Refresh
-          </button>
-          <button onClick={() => {
-            const t = new Date().toISOString().split("T")[0];
-            const t2 = new Date(Date.now()+86400000).toISOString().split("T")[0];
-            setWalkIn({ name: "", email: "", phone: "", roomType: "classic", numRooms: 1, checkIn: t, checkOut: t2, paymentMethod: "cash", notes: "" });
-            setShowWalkIn(true);
-          }} style={{
-            background: colors.gold, border: "none", padding: "6px 14px",
-            color: "#0a0a0a", cursor: "pointer", fontSize: 11, display: "flex",
-            alignItems: "center", gap: 6, fontWeight: 700, letterSpacing: "0.1em",
-            textTransform: "uppercase", fontFamily: "Georgia, serif"
-          }}>
-            + Walk-in
-          </button>
-          <button onClick={toggleTheme} style={{
-            background: "none", border: `1px solid ${colors.border}`,
-            borderRadius: "50%", width: 36, height: 36, cursor: "pointer",
-            display: "flex", alignItems: "center", justifyContent: "center",
-            color: colors.gold
-          }}>
-            {isDark ? <Sun size={14} /> : <Moon size={14} />}
-          </button>
+        {/* Sidebar Header */}
+        <div style={{
+          padding: "16px", borderBottom: `1px solid ${colors.border}`,
+          display: "flex", alignItems: "center", justifyContent: "space-between",
+          height: 64
+        }}>
+          {sidebarExpanded && (
+            <span style={{ color: colors.gold, fontSize: 12, fontWeight: 700, letterSpacing: "0.2em" }}>
+              REMERITONA
+            </span>
+          )}
           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            <span style={{ fontSize: 12, color: colors.textMuted }}>{staffName}</span>
-            <button onClick={handleLogout} style={{
-              background: "none", border: `1px solid ${colors.border}`, padding: "6px 12px",
-              color: colors.textMuted, cursor: "pointer", fontSize: 12,
-              display: "flex", alignItems: "center", gap: 6
+            <button onClick={() => setNotificationsOpen(!notificationsOpen)} style={{
+              background: "none", border: "none", cursor: "pointer",
+              color: colors.textMuted, padding: 4, position: "relative"
             }}>
-              <LogOut size={12} /> Logout
+              <Bell size={18} />
+              {notificationPendingCount > 0 && (
+                <span style={{
+                  position: "absolute", top: 0, right: 0,
+                  background: "#ef4444", color: "#fff",
+                  fontSize: 9, padding: "2px 5px", borderRadius: "10px",
+                  fontWeight: 700
+                }}>
+                  {notificationPendingCount}
+                </span>
+              )}
+            </button>
+            <button onClick={() => {
+              setSidebarExpanded(!sidebarExpanded);
+              if (window.innerWidth < 768) setMobileSidebarOpen(false);
+            }} style={{
+              background: "none", border: "none", cursor: "pointer",
+              color: colors.textMuted, padding: 4
+            }}>
+              {sidebarExpanded ? <Menu size={18} /> : <Menu size={18} />}
             </button>
           </div>
         </div>
-      </header>
 
-      {/* Tabs */}
-      <div style={{ background: colors.surface, borderBottom: `1px solid ${colors.border}`, padding: "0 24px", display: "flex", gap: 0 }}>
-        {(["dashboard", "bookings", "rooms"] as const).map(tab => (
-          <button key={tab} onClick={() => { setActiveTab(tab); setShowStaffManagement(false); }} style={{
-            background: "none", border: "none", borderBottom: activeTab === tab ? `2px solid ${colors.gold}` : "2px solid transparent",
-            padding: "16px 20px", color: activeTab === tab ? colors.gold : colors.textMuted,
-            cursor: "pointer", fontSize: 12, letterSpacing: "0.15em", textTransform: "uppercase",
-            fontFamily: "Georgia, serif"
-          }}>
-            {tab === "dashboard" ? "Dashboard" : tab === "bookings" ? "All Bookings" : "Room Status"}
-          </button>
-        ))}
-        {(staffRole === "admin" || staffRole === "manager" || staffRole === "accountant") && (
-          <button onClick={() => { setActiveTab("reports"); setShowStaffManagement(false); }} style={{
-            background: "none", border: "none", borderBottom: activeTab === "reports" ? `2px solid ${colors.gold}` : "2px solid transparent",
-            padding: "16px 20px", color: activeTab === "reports" ? colors.gold : colors.textMuted,
-            cursor: "pointer", fontSize: 12, letterSpacing: "0.15em", textTransform: "uppercase",
-            fontFamily: "Georgia, serif"
-          }}>
-            Reports
-          </button>
-        )}
-        {(staffRole === "admin" || staffRole === "manager") && (
-          <button onClick={() => setShowStaffManagement(!showStaffManagement)} style={{
-            background: "none", border: "none", borderBottom: showStaffManagement ? `2px solid ${colors.gold}` : "2px solid transparent",
-            padding: "16px 20px", color: showStaffManagement ? colors.gold : colors.textMuted,
-            cursor: "pointer", fontSize: 12, letterSpacing: "0.15em", textTransform: "uppercase",
-            fontFamily: "Georgia, serif"
-          }}>
-            Staff Management
-          </button>
-        )}
-      </div>
+        {/* Navigation Groups */}
+        <div style={{ flex: 1, overflowY: "auto", padding: "8px 0" }}>
+          {/* FRONT DESK Group */}
+          <div>
+            <button onClick={() => {
+              const newGroups = new Set(expandedGroups);
+              if (newGroups.has("front-desk")) newGroups.delete("front-desk");
+              else newGroups.add("front-desk");
+              setExpandedGroups(newGroups);
+            }} style={{
+              background: "none", border: "none", cursor: "pointer",
+              padding: "8px 12px", width: "100%",
+              display: "flex", alignItems: "center", justifyContent: "space-between",
+              color: colors.textMuted, fontSize: 10, letterSpacing: "0.15em",
+              textTransform: "uppercase"
+            }}>
+              <span style={{ display: sidebarExpanded ? "inline" : "none" }}>Front Desk</span>
+              {expandedGroups.has("front-desk") ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+            </button>
+            {expandedGroups.has("front-desk") && (
+              <div style={{ marginLeft: 8 }}>
+                {/* Dashboard */}
+                <button onClick={() => navigateToTab("dashboard")} style={{
+                  background: "none", border: "none", cursor: "pointer",
+                  padding: "8px 12px", width: "100%",
+                  display: "flex", alignItems: "center", gap: 8,
+                  color: activeTab === "dashboard" ? colors.gold : colors.textMuted,
+                  fontSize: 12, borderLeft: activeTab === "dashboard" ? `3px solid ${colors.gold}` : "3px solid transparent",
+                  paddingLeft: activeTab === "dashboard" ? 9 : 12
+                }}>
+                  <LayoutDashboard size={16} />
+                  {sidebarExpanded && <span>Dashboard</span>}
+                </button>
+                {/* All Bookings */}
+                <button onClick={() => navigateToTab("bookings")} style={{
+                  background: "none", border: "none", cursor: "pointer",
+                  padding: "8px 12px", width: "100%",
+                  display: "flex", alignItems: "center", gap: 8,
+                  color: activeTab === "bookings" ? colors.gold : colors.textMuted,
+                  fontSize: 12, borderLeft: activeTab === "bookings" ? `3px solid ${colors.gold}` : "3px solid transparent",
+                  paddingLeft: activeTab === "bookings" ? 9 : 12
+                }}>
+                  <Calendar size={16} />
+                  {sidebarExpanded && <span>All Bookings</span>}
+                </button>
+                {/* Guest History */}
+                <button onClick={() => navigateToTab("guest-history")} style={{
+                  background: "none", border: "none", cursor: "pointer",
+                  padding: "8px 12px", width: "100%",
+                  display: "flex", alignItems: "center", gap: 8,
+                  color: activeTab === "guest-history" ? colors.gold : colors.textMuted,
+                  fontSize: 12, borderLeft: activeTab === "guest-history" ? `3px solid ${colors.gold}` : "3px solid transparent",
+                  paddingLeft: activeTab === "guest-history" ? 9 : 12
+                }}>
+                  <History size={16} />
+                  {sidebarExpanded && <span>Guest History</span>}
+                </button>
+                {/* Walk-in (not for accountant) */}
+                {staffRole !== "accountant" && (
+                  <button onClick={() => {
+                    const t = new Date().toISOString().split("T")[0];
+                    const t2 = new Date(Date.now()+86400000).toISOString().split("T")[0];
+                    setWalkIn({ name: "", email: "", phone: "", roomType: "classic", numRooms: 1, checkIn: t, checkOut: t2, paymentMethod: "cash", notes: "" });
+                    setShowWalkIn(true);
+                    if (window.innerWidth < 768) setMobileSidebarOpen(false);
+                  }} style={{
+                    background: "none", border: "none", cursor: "pointer",
+                    padding: "8px 12px", width: "100%",
+                    display: "flex", alignItems: "center", gap: 8,
+                    color: colors.textMuted, fontSize: 12
+                  }}>
+                    <Plus size={16} />
+                    {sidebarExpanded && <span>Walk-in</span>}
+                  </button>
+                )}
+                {/* Orders & Requests (not for accountant) */}
+                {staffRole !== "accountant" && (
+                  <Link
+                    to="/orders-requests"
+                    onClick={() => navigateToTab("orders-requests")}
+                    style={{
+                      display: "flex", alignItems: "center", gap: 8,
+                      padding: "8px 12px", width: "100%",
+                      textDecoration: "none",
+                      color: isOrdersPage ? colors.gold : colors.textMuted,
+                      fontSize: 12,
+                      borderLeft: isOrdersPage ? `3px solid ${colors.gold}` : "3px solid transparent",
+                      paddingLeft: isOrdersPage ? 9 : 12,
+                      boxSizing: "border-box",
+                    }}
+                  >
+                    <span style={{ fontSize: 16, lineHeight: 1 }}>📋</span>
+                    {sidebarExpanded && <span>Orders & Requests</span>}
+                  </Link>
+                )}
+              </div>
+            )}
+          </div>
 
-      <main style={{ padding: 24, maxWidth: 1400, margin: "0 auto" }}>
-        {loading && (
+          {/* ROOMS Group (hidden from accountant) */}
+          {staffRole !== "accountant" && (
+            <div>
+              <button onClick={() => {
+                const newGroups = new Set(expandedGroups);
+                if (newGroups.has("rooms")) newGroups.delete("rooms");
+                else newGroups.add("rooms");
+                setExpandedGroups(newGroups);
+              }} style={{
+                background: "none", border: "none", cursor: "pointer",
+                padding: "8px 12px", width: "100%",
+                display: "flex", alignItems: "center", justifyContent: "space-between",
+                color: colors.textMuted, fontSize: 10, letterSpacing: "0.15em",
+                textTransform: "uppercase"
+              }}>
+                <span style={{ display: sidebarExpanded ? "inline" : "none" }}>Rooms</span>
+                {expandedGroups.has("rooms") ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+              </button>
+              {expandedGroups.has("rooms") && (
+                <div style={{ marginLeft: 8 }}>
+                  <button onClick={() => navigateToTab("rooms")} style={{
+                    background: "none", border: "none", cursor: "pointer",
+                    padding: "8px 12px", width: "100%",
+                    display: "flex", alignItems: "center", gap: 8,
+                    color: activeTab === "rooms" ? colors.gold : colors.textMuted,
+                    fontSize: 12, borderLeft: activeTab === "rooms" ? `3px solid ${colors.gold}` : "3px solid transparent",
+                    paddingLeft: activeTab === "rooms" ? 9 : 12
+                  }}>
+                    <BedDouble size={16} />
+                    {sidebarExpanded && <span>Room Status</span>}
+                  </button>
+                  <button onClick={() => navigateToTab("occupancy-forecast")} style={{
+                    background: "none", border: "none", cursor: "pointer",
+                    padding: "8px 12px", width: "100%",
+                    display: "flex", alignItems: "center", gap: 8,
+                    color: activeTab === "occupancy-forecast" ? colors.gold : colors.textMuted,
+                    fontSize: 12, borderLeft: activeTab === "occupancy-forecast" ? `3px solid ${colors.gold}` : "3px solid transparent",
+                    paddingLeft: activeTab === "occupancy-forecast" ? 9 : 12
+                  }}>
+                    <BarChart3 size={16} />
+                    {sidebarExpanded && <span>Occupancy Forecast</span>}
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* FINANCE Group (admin, manager, accountant) */}
+          {(staffRole === "admin" || staffRole === "manager" || staffRole === "accountant") && (
+            <div>
+              <button onClick={() => {
+                const newGroups = new Set(expandedGroups);
+                if (newGroups.has("finance")) newGroups.delete("finance");
+                else newGroups.add("finance");
+                setExpandedGroups(newGroups);
+              }} style={{
+                background: "none", border: "none", cursor: "pointer",
+                padding: "8px 12px", width: "100%",
+                display: "flex", alignItems: "center", justifyContent: "space-between",
+                color: colors.textMuted, fontSize: 10, letterSpacing: "0.15em",
+                textTransform: "uppercase"
+              }}>
+                <span style={{ display: sidebarExpanded ? "inline" : "none" }}>Finance</span>
+                {expandedGroups.has("finance") ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+              </button>
+              {expandedGroups.has("finance") && (
+                <div style={{ marginLeft: 8 }}>
+                  <button onClick={() => navigateToTab("reports")} style={{
+                    background: "none", border: "none", cursor: "pointer",
+                    padding: "8px 12px", width: "100%",
+                    display: "flex", alignItems: "center", gap: 8,
+                    color: activeTab === "reports" ? colors.gold : colors.textMuted,
+                    fontSize: 12, borderLeft: activeTab === "reports" ? `3px solid ${colors.gold}` : "3px solid transparent",
+                    paddingLeft: activeTab === "reports" ? 9 : 12
+                  }}>
+                    <TrendingUp size={16} />
+                    {sidebarExpanded && <span>Reports</span>}
+                  </button>
+                  <button onClick={() => navigateToTab("room-rates")} style={{
+                    background: "none", border: "none", cursor: "pointer",
+                    padding: "8px 12px", width: "100%",
+                    display: "flex", alignItems: "center", gap: 8,
+                    color: activeTab === "room-rates" ? colors.gold : colors.textMuted,
+                    fontSize: 12, borderLeft: activeTab === "room-rates" ? `3px solid ${colors.gold}` : "3px solid transparent",
+                    paddingLeft: activeTab === "room-rates" ? 9 : 12
+                  }}>
+                    <DollarSign size={16} />
+                    {sidebarExpanded && <span>Room Rates</span>}
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* STAFF Group (admin, manager only) */}
+          {(staffRole === "admin" || staffRole === "manager") && (
+            <div>
+              <button onClick={() => {
+                const newGroups = new Set(expandedGroups);
+                if (newGroups.has("staff")) newGroups.delete("staff");
+                else newGroups.add("staff");
+                setExpandedGroups(newGroups);
+              }} style={{
+                background: "none", border: "none", cursor: "pointer",
+                padding: "8px 12px", width: "100%",
+                display: "flex", alignItems: "center", justifyContent: "space-between",
+                color: colors.textMuted, fontSize: 10, letterSpacing: "0.15em",
+                textTransform: "uppercase"
+              }}>
+                <span style={{ display: sidebarExpanded ? "inline" : "none" }}>Staff</span>
+                {expandedGroups.has("staff") ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+              </button>
+              {expandedGroups.has("staff") && (
+                <div style={{ marginLeft: 8 }}>
+                  <button onClick={() => { setShowStaffManagement(!showStaffManagement); if (window.innerWidth < 768) setMobileSidebarOpen(false); }} style={{
+                    background: "none", border: "none", cursor: "pointer",
+                    padding: "8px 12px", width: "100%",
+                    display: "flex", alignItems: "center", gap: 8,
+                    color: showStaffManagement ? colors.gold : colors.textMuted,
+                    fontSize: 12, borderLeft: showStaffManagement ? `3px solid ${colors.gold}` : "3px solid transparent",
+                    paddingLeft: showStaffManagement ? 9 : 12
+                  }}>
+                    <Users size={16} />
+                    {sidebarExpanded && <span>Staff Management</span>}
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* Sidebar Footer */}
+        <div style={{ padding: "12px", borderTop: `1px solid ${colors.border}` }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
+            <button onClick={() => token && loadStats(token)} style={{
+              background: "none", border: `1px solid ${colors.border}`, padding: "6px",
+              color: colors.textMuted, cursor: "pointer", fontSize: 12,
+              display: "flex", alignItems: "center", justifyContent: "center"
+            }}>
+              <RefreshCw size={14} />
+            </button>
+            <button onClick={toggleTheme} style={{
+              background: "none", border: `1px solid ${colors.border}`,
+              borderRadius: "50%", width: 28, height: 28, cursor: "pointer",
+              display: "flex", alignItems: "center", justifyContent: "center",
+              color: colors.gold
+            }}>
+              {isDark ? <Sun size={12} /> : <Moon size={12} />}
+            </button>
+          </div>
+          {sidebarExpanded && (
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: 8 }}>
+              <span style={{ fontSize: 11, color: colors.textMuted }}>{staffName}</span>
+              <button onClick={handleLogout} style={{
+                background: "none", border: "none", cursor: "pointer",
+                color: colors.textMuted, padding: 4
+              }}>
+                <LogOut size={14} />
+              </button>
+            </div>
+          )}
+        </div>
+      </aside>
+
+      {/* Main Content */}
+      <main style={{
+        padding: 24, maxWidth: 1400, margin: "0 auto",
+        marginLeft: window.innerWidth < 768 ? 0 : (sidebarExpanded ? 220 : 56),
+        transition: "margin-left 0.25s ease"
+      }}>
+        {loading && !isOrdersPage && (
           <p style={{ color: colors.textMuted, textAlign: "center", padding: 40 }}>Loading...</p>
         )}
 
+        {/* ===== ORDERS & REQUESTS ===== */}
+        {isOrdersPage && staffRole !== "accountant" && token && (
+          <OrdersRequestsView token={token} colors={colors} onToast={showToast} />
+        )}
+
+        {isOrdersPage && staffRole === "accountant" && (
+          <p style={{ color: colors.textMuted, textAlign: "center", padding: 40 }}>
+            You do not have access to Orders & Requests.
+          </p>
+        )}
+
         {/* ===== STAFF MANAGEMENT TAB ===== */}
-        {!loading && showStaffManagement && (staffRole === "admin" || staffRole === "manager") && (
+        {!loading && !isOrdersPage && showStaffManagement && (staffRole === "admin" || staffRole === "manager") && (
           <div>
             {/* Onboard Staff Form */}
             <div style={{ background: colors.surface, border: `1px solid ${colors.border}`, padding: 24, marginBottom: 32 }}>
@@ -1396,11 +1956,9 @@ function AdminPage() {
                     return (
                       <div
                         key={staff.id}
-                        onClick={() => handleViewActivity(staff)}
                         style={{
                           background: colors.surface2, padding: 20,
                           border: `1px solid ${colors.border}`,
-                          cursor: "pointer",
                           transition: "all 0.2s"
                         }}
                       >
@@ -1421,6 +1979,30 @@ function AdminPage() {
                         <p style={{ margin: "4px 0 0", fontSize: 11, color: colors.textMuted }}>
                           Joined: {new Date(staff.created_at).toLocaleDateString()}
                         </p>
+                        <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
+                          <button
+                            onClick={() => handleViewActivity(staff)}
+                            style={{
+                              flex: 1, background: "none", border: `1px solid ${colors.border}`,
+                              padding: "6px 12px", color: colors.text, cursor: "pointer",
+                              fontSize: 11, letterSpacing: "0.1em", textTransform: "uppercase",
+                              fontFamily: "Georgia, serif"
+                            }}
+                          >
+                            View Activity
+                          </button>
+                          <button
+                            onClick={(e) => { e.stopPropagation(); setDeleteConfirm(staff); }}
+                            style={{
+                              background: "#ef4444", border: "none",
+                              padding: "6px 12px", color: "#fff", cursor: "pointer",
+                              fontSize: 11, letterSpacing: "0.1em", textTransform: "uppercase",
+                              fontFamily: "Georgia, serif"
+                            }}
+                          >
+                            Delete
+                          </button>
+                        </div>
                       </div>
                     );
                   })}
@@ -1534,8 +2116,54 @@ function AdminPage() {
           </div>
         )}
 
+        {/* Delete Confirmation Modal */}
+        {deleteConfirm && (
+          <div style={{
+            position: "fixed", top: 0, left: 0, right: 0, bottom: 0,
+            background: "rgba(0, 0, 0, 0.7)", display: "flex",
+            alignItems: "center", justifyContent: "center", zIndex: 1001
+          }}>
+            <div style={{
+              background: colors.surface, border: `1px solid ${colors.border}`,
+              padding: 32, maxWidth: 400, width: "90%", position: "relative"
+            }}>
+              <h3 style={{ color: colors.gold, fontSize: 14, letterSpacing: "0.2em", textTransform: "uppercase", margin: "0 0 16" }}>
+                Confirm Deletion
+              </h3>
+              <p style={{ margin: "0 0 24", fontSize: 13, color: colors.text }}>
+                Remove {deleteConfirm.full_name} from staff? This cannot be undone.
+              </p>
+              <div style={{ display: "flex", gap: 12, justifyContent: "flex-end" }}>
+                <button
+                  onClick={() => setDeleteConfirm(null)}
+                  style={{
+                    background: "none", border: `1px solid ${colors.border}`,
+                    padding: "10px 20px", color: colors.text, cursor: "pointer",
+                    fontSize: 12, letterSpacing: "0.1em", textTransform: "uppercase",
+                    fontFamily: "Georgia, serif"
+                  }}
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleDeleteStaff}
+                  disabled={deleteLoading}
+                  style={{
+                    background: "#ef4444", border: "none",
+                    padding: "10px 20px", color: "#fff", cursor: "pointer",
+                    fontSize: 12, letterSpacing: "0.1em", textTransform: "uppercase",
+                    fontFamily: "Georgia, serif", opacity: deleteLoading ? 0.7 : 1
+                  }}
+                >
+                  {deleteLoading ? "Deleting..." : "Delete"}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* ===== DASHBOARD TAB ===== */}
-        {!loading && activeTab === "dashboard" && !showStaffManagement && stats && (
+        {!loading && !isOrdersPage && activeTab === "dashboard" && !showStaffManagement && stats && (
           <div>
             {/* Stats Cards */}
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 16, marginBottom: 32 }}>
@@ -1617,15 +2245,6 @@ function AdminPage() {
                                 {actionLoading === b.reference ? "..." : "Check Out"}
                               </button>
                             )}
-                            {staffRole === "accountant" && (
-                              <button onClick={() => setSelectedBooking(b)} style={{
-                                background: colors.gold, color: "#0a0a0a", border: "none",
-                                padding: "4px 12px", fontSize: 11, cursor: "pointer",
-                                letterSpacing: "0.1em", textTransform: "uppercase"
-                              }}>
-                                View
-                              </button>
-                            )}
                           </div>
                         </div>
                       ))}
@@ -1638,7 +2257,7 @@ function AdminPage() {
         )}
 
         {/* ===== BOOKINGS TAB ===== */}
-        {!loading && activeTab === "bookings" && !showStaffManagement && stats && (
+        {!loading && !isOrdersPage && activeTab === "bookings" && !showStaffManagement && stats && (
           <div>
             <div style={{ display: "flex", gap: 12, marginBottom: 20, flexWrap: "wrap" }}>
               <div style={{ display: "flex", alignItems: "center", gap: 8, background: colors.surface, border: `1px solid ${colors.border}`, padding: "8px 12px", flex: 1, minWidth: 200 }}>
@@ -1676,11 +2295,26 @@ function AdminPage() {
                 <tbody>
                   {filteredBookings.length === 0 ? (
                     <tr><td colSpan={staffRole === "front-desk" ? 6 : 8} style={{ padding: 40, textAlign: "center", color: colors.textMuted }}>No bookings found</td></tr>
-                  ) : filteredBookings.map((b: any) => (
+                  ) : filteredBookings.map((b: any) => {
+                    const isReturningGuest = stats?.returningGuests?.some((g: any) => g.guest_email === b.guest_email);
+                    return (
                     <tr key={b.reference} style={{ borderBottom: `1px solid ${colors.border}` }}>
                       <td style={{ padding: "12px 16px" }}>
-                        <p style={{ margin: 0, fontSize: 13, color: colors.text }}>{b.guest_name}</p>
-                        <p style={{ margin: "2px 0 0", fontSize: 11, color: colors.textMuted }}>{b.guest_email}</p>
+                        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                          <div>
+                            <p style={{ margin: 0, fontSize: 13, color: colors.text }}>{b.guest_name}</p>
+                            <p style={{ margin: "2px 0 0", fontSize: 11, color: colors.textMuted }}>{b.guest_email}</p>
+                          </div>
+                          {isReturningGuest && (
+                            <span style={{
+                              background: colors.gold, color: "#0a0a0a",
+                              fontSize: 9, padding: "2px 6px", fontWeight: 700,
+                              letterSpacing: "0.05em", textTransform: "uppercase", borderRadius: 4
+                            }}>
+                              Returning Guest
+                            </span>
+                          )}
+                        </div>
                       </td>
                       <td style={{ padding: "12px 16px", fontSize: 13, color: colors.text }}>{b.room_name}</td>
                       <td style={{ padding: "12px 16px", fontSize: 13, color: colors.text }}>{new Date(b.check_in).toLocaleDateString()}</td>
@@ -1712,29 +2346,32 @@ function AdminPage() {
                       </td>
                       <td style={{ padding: "12px 16px" }}>
                         <div style={{ display: "flex", gap: 6 }}>
-                          {b.status === "confirmed" && (
+                          {staffRole !== "accountant" && b.status === "confirmed" && (
                             <button onClick={() => handleCheckIn(b)} style={{
                               background: "#3b82f6", color: "#fff", border: "none",
                               padding: "4px 10px", fontSize: 10, cursor: "pointer",
                               letterSpacing: "0.1em", textTransform: "uppercase"
                             }}>Check In</button>
                           )}
-                          {b.status === "checked_in" && (
+                          {staffRole !== "accountant" && b.status === "checked_in" && (
                             <button onClick={() => handleCheckOut(b)} style={{
                               background: "#22c55e", color: "#fff", border: "none",
                               padding: "4px 10px", fontSize: 10, cursor: "pointer",
                               letterSpacing: "0.1em", textTransform: "uppercase"
                             }}>Check Out</button>
                           )}
-                          <button onClick={() => setSelectedBooking(b)} style={{
-                            background: "none", border: `1px solid ${colors.border}`,
-                            padding: "4px 10px", fontSize: 10, cursor: "pointer",
-                            color: colors.textMuted, letterSpacing: "0.1em", textTransform: "uppercase"
-                          }}>View</button>
+                          {staffRole !== "accountant" && (
+                            <button onClick={() => setSelectedBooking(b)} style={{
+                              background: "none", border: `1px solid ${colors.border}`,
+                              padding: "4px 10px", fontSize: 10, cursor: "pointer",
+                              color: colors.textMuted, letterSpacing: "0.1em", textTransform: "uppercase"
+                            }}>View</button>
+                          )}
                         </div>
                       </td>
                     </tr>
-                  ))}
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
@@ -1742,7 +2379,7 @@ function AdminPage() {
         )}
 
         {/* ===== ROOMS TAB ===== */}
-        {!loading && activeTab === "rooms" && !showStaffManagement && stats && (
+        {!loading && !isOrdersPage && activeTab === "rooms" && !showStaffManagement && stats && (
           <div>
             {/* Collapse All / Expand All */}
             <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 8 }}>
@@ -1861,6 +2498,15 @@ function AdminPage() {
                                 <span style={{ fontSize: 9, padding: "2px 5px", border: `1px solid ${typeColor}`, color: typeColor, letterSpacing: "0.08em", textTransform: "uppercase" }}>
                                   {roomType}
                                 </span>
+                                {room.status === "occupied" && room.dnd_active === 1 && (
+                                  <span style={{
+                                    fontSize: 9, padding: "2px 6px", background: "#ef4444",
+                                    color: "#fff", fontWeight: 700, letterSpacing: "0.05em",
+                                    textTransform: "uppercase", borderRadius: 4
+                                  }}>
+                                    🔴 DND
+                                  </span>
+                                )}
                               </div>
                               <p style={{ margin: 0, fontSize: 9, color: colors.textMuted }}>
                                 {new Date(room.updated_at).toLocaleString()}
@@ -1933,7 +2579,7 @@ function AdminPage() {
         )}
 
         {/* ===== REPORTS TAB ===== */}
-        {!loading && activeTab === "reports" && !showStaffManagement && (
+        {!loading && !isOrdersPage && activeTab === "reports" && !showStaffManagement && (
           <div style={{ padding: 24 }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 24 }}>
               <h2 style={{ color: colors.gold, fontSize: 14, letterSpacing: "0.2em", textTransform: "uppercase", margin: 0 }}>
@@ -2085,6 +2731,193 @@ function AdminPage() {
                   </div>
                 </div>
               </>
+            )}
+          </div>
+        )}
+
+        {/* ===== ROOM RATES TAB ===== */}
+        {!loading && !isOrdersPage && activeTab === "room-rates" && !showStaffManagement && (
+          <div style={{ padding: 24 }}>
+            <h2 style={{ color: colors.gold, fontSize: 14, letterSpacing: "0.2em", textTransform: "uppercase", margin: "0 0 24px" }}>
+              Room Rates
+            </h2>
+            {roomRatesLoading ? (
+              <p style={{ color: colors.textMuted }}>Loading...</p>
+            ) : (
+              <div style={{ background: colors.surface, border: `1px solid ${colors.border}`, overflowX: "auto" }}>
+                <table style={{ width: "100%", borderCollapse: "collapse" }}>
+                  <thead>
+                    <tr style={{ borderBottom: `1px solid ${colors.border}` }}>
+                      <th style={{ padding: "12px 16px", textAlign: "left", fontSize: 11, color: colors.textMuted, letterSpacing: "0.15em", textTransform: "uppercase", fontWeight: 400 }}>Room Type</th>
+                      <th style={{ padding: "12px 16px", textAlign: "left", fontSize: 11, color: colors.textMuted, letterSpacing: "0.15em", textTransform: "uppercase", fontWeight: 400 }}>Price per Night</th>
+                      <th style={{ padding: "12px 16px", textAlign: "left", fontSize: 11, color: colors.textMuted, letterSpacing: "0.15em", textTransform: "uppercase", fontWeight: 400 }}>Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {roomRates.map((rate: any) => (
+                      <tr key={rate.room_type} style={{ borderBottom: `1px solid ${colors.border}` }}>
+                        <td style={{ padding: "12px 16px", fontSize: 13, color: colors.text }}>{rate.room_type}</td>
+                        <td style={{ padding: "12px 16px", fontSize: 13, color: colors.gold }}>
+                          {editingRate?.roomType === rate.room_type ? (
+                            <input
+                              type="number"
+                              value={newRatePrice}
+                              onChange={e => setNewRatePrice(e.target.value)}
+                              style={{
+                                background: colors.surface2, border: `1px solid ${colors.border}`,
+                                padding: "6px 10px", color: colors.text, fontSize: 13, width: 120,
+                                fontFamily: "Georgia, serif", outline: "none"
+                              }}
+                            />
+                          ) : (
+                            formatNaira(rate.price_per_night)
+                          )}
+                        </td>
+                        <td style={{ padding: "12px 16px" }}>
+                          {editingRate?.roomType === rate.room_type ? (
+                            <div style={{ display: "flex", gap: 8 }}>
+                              <button onClick={handleSaveRate} style={{
+                                background: "#22c55e", color: "#fff", border: "none",
+                                padding: "4px 10px", fontSize: 10, cursor: "pointer",
+                                letterSpacing: "0.1em", textTransform: "uppercase"
+                              }}>
+                                Save
+                              </button>
+                              <button onClick={() => { setEditingRate(null); setNewRatePrice(""); }} style={{
+                                background: "none", border: `1px solid ${colors.border}`,
+                                padding: "4px 10px", fontSize: 10, cursor: "pointer",
+                                color: colors.textMuted, letterSpacing: "0.1em", textTransform: "uppercase"
+                              }}>
+                                Cancel
+                              </button>
+                            </div>
+                          ) : (
+                            <button
+                              onClick={() => {
+                                if (staffRole === "accountant") {
+                                  showToast("Only admins and managers can edit rates", "error");
+                                  return;
+                                }
+                                setEditingRate({ roomType: rate.room_type, currentPrice: rate.price_per_night });
+                                setNewRatePrice(String(rate.price_per_night));
+                              }}
+                              disabled={staffRole === "accountant"}
+                              style={{
+                                background: staffRole === "accountant" ? "none" : colors.gold,
+                                color: staffRole === "accountant" ? colors.textMuted : "#0a0a0a",
+                                border: staffRole === "accountant" ? `1px solid ${colors.border}` : "none",
+                                padding: "4px 10px", fontSize: 10, cursor: staffRole === "accountant" ? "not-allowed" : "pointer",
+                                letterSpacing: "0.1em", textTransform: "uppercase",
+                                opacity: staffRole === "accountant" ? 0.5 : 1
+                              }}
+                            >
+                              Edit
+                            </button>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ===== GUEST HISTORY TAB ===== */}
+        {!loading && !isOrdersPage && activeTab === "guest-history" && !showStaffManagement && stats && (
+          <div style={{ padding: 24 }}>
+            <h2 style={{ color: colors.gold, fontSize: 14, letterSpacing: "0.2em", textTransform: "uppercase", margin: "0 0 24px" }}>
+              Guest History
+            </h2>
+            {stats.returningGuests?.length === 0 ? (
+              <p style={{ color: colors.textMuted }}>No returning guests found</p>
+            ) : (
+              <div style={{ background: colors.surface, border: `1px solid ${colors.border}`, overflowX: "auto" }}>
+                <table style={{ width: "100%", borderCollapse: "collapse" }}>
+                  <thead>
+                    <tr style={{ borderBottom: `1px solid ${colors.border}` }}>
+                      <th style={{ padding: "12px 16px", textAlign: "left", fontSize: 11, color: colors.textMuted, letterSpacing: "0.15em", textTransform: "uppercase", fontWeight: 400 }}>Name</th>
+                      <th style={{ padding: "12px 16px", textAlign: "left", fontSize: 11, color: colors.textMuted, letterSpacing: "0.15em", textTransform: "uppercase", fontWeight: 400 }}>Email</th>
+                      <th style={{ padding: "12px 16px", textAlign: "left", fontSize: 11, color: colors.textMuted, letterSpacing: "0.15em", textTransform: "uppercase", fontWeight: 400 }}>Total Visits</th>
+                      <th style={{ padding: "12px 16px", textAlign: "left", fontSize: 11, color: colors.textMuted, letterSpacing: "0.15em", textTransform: "uppercase", fontWeight: 400 }}>Total Spent</th>
+                      <th style={{ padding: "12px 16px", textAlign: "left", fontSize: 11, color: colors.textMuted, letterSpacing: "0.15em", textTransform: "uppercase", fontWeight: 400 }}>Last Visit</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {stats.returningGuests.map((guest: any) => (
+                      <tr key={guest.guest_email} style={{ borderBottom: `1px solid ${colors.border}` }}>
+                        <td style={{ padding: "12px 16px", fontSize: 13, color: colors.text }}>{guest.guest_name}</td>
+                        <td style={{ padding: "12px 16px", fontSize: 13, color: colors.text }}>{guest.guest_email}</td>
+                        <td style={{ padding: "12px 16px", fontSize: 13, color: colors.text }}>{guest.visit_count}</td>
+                        <td style={{ padding: "12px 16px", fontSize: 13, color: colors.gold }}>{formatNaira(guest.total_spent)}</td>
+                        <td style={{ padding: "12px 16px", fontSize: 13, color: colors.text }}>{new Date(guest.last_visit).toLocaleDateString()}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ===== OCCUPANCY FORECAST TAB ===== */}
+        {!loading && !isOrdersPage && activeTab === "occupancy-forecast" && !showStaffManagement && (
+          <div style={{ padding: 24 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 24 }}>
+              <h2 style={{ color: colors.gold, fontSize: 14, letterSpacing: "0.2em", textTransform: "uppercase", margin: 0 }}>
+                Occupancy Forecast
+              </h2>
+              <div style={{ display: "flex", gap: 8 }}>
+                {[7, 14, 30].map(days => (
+                  <button
+                    key={days}
+                    onClick={() => setForecastDays(days)}
+                    style={{
+                      background: forecastDays === days ? colors.gold : "none",
+                      color: forecastDays === days ? "#0a0a0a" : colors.textMuted,
+                      border: forecastDays === days ? "none" : `1px solid ${colors.border}`,
+                      padding: "6px 12px", fontSize: 11, cursor: "pointer",
+                      letterSpacing: "0.1em", textTransform: "uppercase"
+                    }}
+                  >
+                    {days} Days
+                  </button>
+                ))}
+              </div>
+            </div>
+            {forecastLoading ? (
+              <p style={{ color: colors.textMuted }}>Loading...</p>
+            ) : (
+              <div style={{ display: "flex", gap: 12, overflowX: "auto", paddingBottom: 16 }}>
+                {occupancyForecast.map((day: any) => {
+                  const barColor = day.occupancyPercent < 50 ? "#22c55e" : day.occupancyPercent < 80 ? "#f59e0b" : "#ef4444";
+                  return (
+                    <div key={day.date} style={{ minWidth: 60, textAlign: "center" }}>
+                      <div style={{
+                        background: colors.surface2, border: `1px solid ${colors.border}`,
+                        padding: 12, borderRadius: 8, height: 200, display: "flex",
+                        flexDirection: "column", justifyContent: "flex-end", alignItems: "center"
+                      }}>
+                        <div style={{
+                          width: 40, background: barColor,
+                          height: `${Math.min(day.occupancyPercent, 100)}%`,
+                          borderRadius: 4, transition: "height 0.3s ease"
+                        }} />
+                      </div>
+                      <p style={{ margin: "8px 0 4px", fontSize: 10, color: colors.textMuted }}>
+                        {new Date(day.date).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+                      </p>
+                      <p style={{ margin: 0, fontSize: 12, fontWeight: 600, color: barColor }}>
+                        {day.occupancyPercent}%
+                      </p>
+                      <p style={{ margin: "2px 0 0", fontSize: 9, color: colors.textMuted }}>
+                        {day.bookedRooms}/{day.totalRooms}
+                      </p>
+                    </div>
+                  );
+                })}
+              </div>
             )}
           </div>
         )}
@@ -2293,7 +3126,7 @@ function AdminPage() {
       )}
 
       {/* ==================== GUEST REGISTRATION CARD ==================== */}
-      {regCard && (
+      {staffRole !== "accountant" && regCard && (
         <div style={{
           position: "fixed", inset: 0, background: "rgba(0,0,0,0.85)",
           zIndex: 500, display: "flex", alignItems: "flex-start", justifyContent: "center",
@@ -3060,7 +3893,7 @@ function AdminPage() {
       )}
 
       {/* ==================== BOOKING DETAIL MODAL ==================== */}
-      {selectedBooking && (
+      {staffRole !== "accountant" && selectedBooking && (
         <div style={{
           position: "fixed", inset: 0, background: "rgba(0,0,0,0.7)",
           zIndex: 200, display: "flex", alignItems: "center", justifyContent: "center", padding: 20
