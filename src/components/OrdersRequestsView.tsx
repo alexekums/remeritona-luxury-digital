@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { formatNaira } from "@/data/rooms";
 import { fetchOrdersAndRequests, patchItemStatus } from "@/lib/orders-api-client";
 import {
-  formatOrderItemsSummary,
+  parseOrderItemsForDisplay,
   getCardBorderColor,
   getGuestRequestActionLabel,
   getNextGuestRequestStatus,
@@ -191,6 +191,8 @@ export function OrdersRequestsView({ token, colors, onToast }: Props) {
           displayItems.map((order: any) => {
             const actionLabel = getRoomOrderActionLabel(order.status);
             const isDone = order.status === "delivered" || order.status === "done";
+            const { lines: orderLines, rawFallback } = parseOrderItemsForDisplay(order.items);
+            const orderTotal = Number(order.total_amount ?? order.total ?? 0);
             return (
               <div
                 key={`order-${order.id}`}
@@ -226,18 +228,25 @@ export function OrdersRequestsView({ token, colors, onToast }: Props) {
                   </span>
                 </div>
                 <div style={{ marginBottom: 12 }}>
-                  {formatOrderItemsSummary(order.items)
-                    .split(", ")
-                    .map((line: string, idx: number) => (
-                      <p key={idx} style={{ margin: "4px 0", fontSize: 13, color: colors.text }}>
-                        {line}
-                      </p>
-                    ))}
+                  {rawFallback && (
+                    <p style={{ margin: "4px 0", fontSize: 13, color: colors.text }}>{rawFallback}</p>
+                  )}
+                  {!rawFallback && orderLines.length === 0 && (
+                    <p style={{ margin: "4px 0", fontSize: 13, color: colors.textMuted }}>No items listed</p>
+                  )}
+                  {orderLines.map((line, idx) => (
+                    <p key={idx} style={{ margin: "4px 0", fontSize: 13, color: colors.text }}>
+                      {line.name} x{line.quantity}
+                      {line.price != null && !Number.isNaN(line.price) ? (
+                        <span style={{ color: colors.textMuted }}> — {formatNaira(line.price)}</span>
+                      ) : null}
+                    </p>
+                  ))}
                 </div>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 12 }}>
                   <div>
                     <span style={{ fontSize: 15, color: colors.gold, fontWeight: 600 }}>
-                      {formatNaira(order.total ?? order.total_amount ?? 0)}
+                      {formatNaira(orderTotal)}
                     </span>
                     <span style={{ fontSize: 11, color: colors.textMuted, marginLeft: 16 }}>
                       {timeAgo(order.created_at)}

@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { SiteHeader } from "@/components/SiteHeader";
 import { SiteFooter } from "@/components/SiteFooter";
 import { refundPolicy, saveBooking, type StoredBooking } from "@/data/bookings-store";
@@ -26,6 +26,69 @@ function MyBookingsPage() {
   const [cancelMessage, setCancelMessage] = useState<string | null>(null);
   const [processing, setProcessing] = useState(false);
 
+  // Auto-fill form from URL params and trigger lookup
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const ref = params.get("ref");
+    const emailParam = params.get("email");
+    if (ref && emailParam) {
+      setReference(ref);
+      setEmail(emailParam);
+      // Trigger lookup automatically
+      const doLookup = async () => {
+        setError(null);
+        setCancelMessage(null);
+        try {
+          const result = await lookupBooking({ data: { reference: ref, email: emailParam } });
+          if (!result) {
+            setBooking(null);
+            setError("We couldn't find a booking with that reference and email. Please double-check both.");
+            return;
+          }
+          // Map D1 row to StoredBooking shape
+          const storedBooking: StoredBooking = {
+            reference: result.reference,
+            createdAt: result.created_at || new Date().toISOString(),
+            roomSlug: result.room_slug || "",
+            roomName: result.room_name,
+            roomPrice: result.room_price || 0,
+            checkIn: result.check_in,
+            checkOut: result.check_out,
+            nights: result.nights || Math.ceil((new Date(result.check_out).getTime() - new Date(result.check_in).getTime()) / (1000 * 60 * 60 * 24)),
+            numRooms: result.num_rooms || 1,
+            guests: result.guests || 1,
+            addons: result.addons || [],
+            subtotal: result.subtotal || result.total,
+            discount: result.discount || 0,
+            tax: result.tax || 0,
+            gateway: result.gateway,
+            total: result.total,
+            amountCharged: result.total,
+            paymentMode: result.payment_mode || "pay_now",
+            pendingBalance: result.pending_balance || 0,
+            guest: {
+              name: result.guest_name,
+              email: result.guest_email,
+              phone: result.guest_phone || "",
+              notes: result.guest_notes || "",
+            },
+            status: result.status,
+            cancellation: result.cancelled_at ? {
+              cancelledAt: result.cancelled_at,
+              refundPercent: result.refund_percent || 0,
+              refundAmount: result.refund_amount || 0,
+            } : undefined,
+          };
+          setBooking(storedBooking);
+        } catch (err) {
+          setBooking(null);
+          setError("Failed to lookup booking. Please try again.");
+        }
+      };
+      doLookup();
+    }
+  }, []);
+
   const handleLookup = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
@@ -40,12 +103,19 @@ function MyBookingsPage() {
       // Map D1 row to StoredBooking shape
       const storedBooking: StoredBooking = {
         reference: result.reference,
+        createdAt: result.created_at || new Date().toISOString(),
+        roomSlug: result.room_slug || "",
         roomName: result.room_name,
+        roomPrice: result.room_price || 0,
         checkIn: result.check_in,
         checkOut: result.check_out,
         nights: result.nights || Math.ceil((new Date(result.check_out).getTime() - new Date(result.check_in).getTime()) / (1000 * 60 * 60 * 24)),
         numRooms: result.num_rooms || 1,
         guests: result.guests || 1,
+        addons: result.addons || [],
+        subtotal: result.subtotal || result.total,
+        discount: result.discount || 0,
+        tax: result.tax || 0,
         gateway: result.gateway,
         total: result.total,
         amountCharged: result.total,
@@ -54,6 +124,8 @@ function MyBookingsPage() {
         guest: {
           name: result.guest_name,
           email: result.guest_email,
+          phone: result.guest_phone || "",
+          notes: result.guest_notes || "",
         },
         status: result.status,
         cancellation: result.cancelled_at ? {
@@ -215,8 +287,8 @@ function MyBookingsPage() {
                   refund {formatNaira(booking.cancellation.refundAmount)} ({booking.cancellation.refundPercent}%).
                 </p>
               ) : booking.status === "checked_in" ? (
-                <p className="mt-6 text-sm text-muted-foreground">
-                  This booking is currently checked in and cannot be cancelled online. Please contact reception.
+                <p className="mt-6 text-gold border border-gold/40 bg-onyx px-4 py-3 text-sm">
+                  You are currently checked in. To cancel your stay early, please visit the front desk — our staff will assist you with an early checkout.
                 </p>
               ) : booking.status === "checked_out" ? (
                 <p className="mt-6 text-sm text-muted-foreground">

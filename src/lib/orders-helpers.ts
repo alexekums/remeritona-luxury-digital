@@ -9,6 +9,36 @@ export function timeAgo(dateStr: string): string {
   return `${days} day${days > 1 ? "s" : ""} ago`;
 }
 
+export type ParsedOrderLine = { name: string; quantity: number; price?: number };
+
+/** Parse room_orders.items JSON for list display; falls back to raw string. */
+export function parseOrderItemsForDisplay(items: unknown): { lines: ParsedOrderLine[]; rawFallback?: string } {
+  if (items == null || items === "") {
+    return { lines: [] };
+  }
+
+  let parsed: unknown = items;
+  if (typeof items === "string") {
+    try {
+      parsed = JSON.parse(items);
+    } catch {
+      return { lines: [], rawFallback: items };
+    }
+  }
+
+  if (!Array.isArray(parsed)) {
+    return { lines: [], rawFallback: String(items) };
+  }
+
+  const lines = parsed.map((entry: Record<string, unknown>) => ({
+    name: String(entry.name ?? entry.item ?? "Item"),
+    quantity: Number(entry.qty ?? entry.quantity ?? 1) || 1,
+    price: entry.price != null ? Number(entry.price) : undefined,
+  }));
+
+  return { lines };
+}
+
 export function formatOrderItemsSummary(items: unknown): string {
   if (!items) return "Room service order";
   let parsed = items;

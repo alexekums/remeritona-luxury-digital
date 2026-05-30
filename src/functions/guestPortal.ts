@@ -1,5 +1,6 @@
 import { createServerFn } from "@tanstack/react-start";
 import { env } from "cloudflare:workers";
+import { ensureMenuSeeded } from "@/lib/menu-seed";
 
 const db = () => (env as any).remeritona_bookings as D1Database;
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -87,12 +88,32 @@ export const updateFoodOrder = createServerFn({ method: "POST" })
 export const getMenu = createServerFn({ method: "POST" })
   .inputValidator((d: { category?: string }) => d)
     .handler(async ({ data }): AnyPromise => {
-    const query = data.category
-      ? `SELECT * FROM menu_items WHERE available = 1 AND category = ? AND hotel_id = 'remeritona' ORDER BY name`
-      : `SELECT * FROM menu_items WHERE available = 1 AND hotel_id = 'remeritona' ORDER BY category, name`;
-    const result = data.category
-      ? await db().prepare(query).bind(data.category).all()
-      : await db().prepare(query).all();
+    await ensureMenuSeeded(db());
+    if (data.category) {
+      const result = await db().prepare(
+        `SELECT * FROM menu_items
+         WHERE hotel_id = 'remeritona' AND category != 'Spa' AND available = 1 AND category = ?
+         ORDER BY name ASC`
+      ).bind(data.category).all();
+      return result.results ?? [];
+    }
+    const result = await db().prepare(
+      `SELECT * FROM menu_items
+       WHERE hotel_id = 'remeritona' AND category != 'Spa' AND available = 1
+       ORDER BY category ASC, name ASC`
+    ).all();
+    return result.results ?? [];
+  });
+
+export const getSpaServices = createServerFn({ method: "POST" })
+  .inputValidator(() => ({}))
+    .handler(async (): AnyPromise => {
+    await ensureMenuSeeded(db());
+    const result = await db().prepare(
+      `SELECT * FROM menu_items
+       WHERE hotel_id = 'remeritona' AND category = 'Spa' AND available = 1
+       ORDER BY name ASC`
+    ).all();
     return result.results ?? [];
   });
 

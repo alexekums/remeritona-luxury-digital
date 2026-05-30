@@ -121,3 +121,13 @@
   0%, 100% { box-shadow: 0 0 0 0 oklch(0.78 0.15 78 / 0.6); }
   50% { box-shadow: 0 0 0 14px oklch(0.78 0.15 78 / 0); }
 }
+
+/* PMS light mode — theme tokens for Tailwind chat widget */
+.pms-light {
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.2 0.01 60);
+  --foreground: oklch(0.2 0.01 60);
+  --muted: oklch(0.95 0.01 80);
+  --muted-foreground: oklch(0.5 0.02 60);
+  --border: oklch(0.88 0.01 80);
+}

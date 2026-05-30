@@ -1,73 +1,73 @@
 // @ts-ignore
-import { createAPIFileRoute } from "@tanstack/react-start/api";
-import { extractToken, getDb, jsonResponse, validateAdminToken } from "@/lib/pms-api";
+import { createFileRoute } from "@tanstack/react-router";
+import { extractToken, validateAdminToken } from "@/lib/pms-api";
 
-export const APIRoute = createAPIFileRoute("/api/orders-and-requests")({
-  GET: async ({ request, context }: { request: Request; context: any }) => {
-    try {
-      const db = getDb(context);
-      if (!db) return jsonResponse({ success: false, error: "DB not available" }, 500);
-
-      const token = extractToken(request);
-      if (!(await validateAdminToken(db, token))) {
-        return jsonResponse({ success: false, error: "Unauthorized" }, 401);
-      }
-
-      const url = new URL(request.url);
-      const statusFilter = url.searchParams.get("status");
-      const typeFilter = url.searchParams.get("type");
-      const roomFilter = url.searchParams.get("room");
-
-      const [ordersResult, requestsResult] = await Promise.all([
-        db.prepare(
-          `SELECT * FROM room_orders WHERE hotel_id = 'remeritona' ORDER BY created_at DESC`
-        ).all(),
-        db.prepare(
-          `SELECT * FROM guest_requests WHERE hotel_id = 'remeritona' ORDER BY created_at DESC`
-        ).all(),
-      ]);
-
-      let items: any[] = [
-        ...(ordersResult.results ?? []).map((o: any) => ({
-          ...o,
-          type: "dining" as const,
-          total: o.total ?? o.total_amount,
-        })),
-        ...(requestsResult.results ?? []).map((r: any) => ({
-          ...r,
-          type: "service" as const,
-        })),
-      ];
-
-      if (statusFilter) {
-        items = items.filter((i) => i.status === statusFilter);
-      }
-      if (typeFilter === "dining") {
-        items = items.filter((i) => i.type === "dining");
-      } else if (typeFilter === "service") {
-        items = items.filter((i) => i.type === "service");
-      }
-      if (roomFilter) {
-        items = items.filter((i) => String(i.room_number) === String(roomFilter));
-      }
-
-      items.sort(
-        (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
-      );
-
-      const [pendingOrders, pendingRequests] = await Promise.all([
-        db.prepare(
-          `SELECT COUNT(*) as c FROM room_orders WHERE hotel_id = 'remeritona' AND status = 'pending'`
-        ).first() as Promise<{ c: number } | null>,
-        db.prepare(
-          `SELECT COUNT(*) as c FROM guest_requests WHERE hotel_id = 'remeritona' AND status = 'pending'`
-        ).first() as Promise<{ c: number } | null>,
-      ]);
-      const pendingCount = (pendingOrders?.c ?? 0) + (pendingRequests?.c ?? 0);
-
-      return jsonResponse({ success: true, items, pendingCount });
-    } catch (error) {
-      return jsonResponse({ success: false, error: String(error) }, 500);
-    }
+export const Route = createFileRoute("/api/orders-and-requests")({
+  server: {
+    handlers: {
+      GET: async ({ request }: { request: Request }) => {
+        try {
+          const { env } = await import("cloudflare:workers");
+          const db = (env as unknown as { 
+            remeritona_bookings: D1Database 
+          }).remeritona_bookings;
+          if (!db) {
+            return Response.json(
+              { error: "DB not available" }, 
+              { status: 500 }
+            );
+          }
+          const token = extractToken(request);
+          if (!(await validateAdminToken(db, token))) {
+            return Response.json(
+              { error: "Unauthorized" }, 
+              { status: 401 }
+            );
+          }
+          const diningRows = await db.prepare(`
+            SELECT
+              CAST(id AS TEXT) as id,
+              room_number,
+              guest_name,
+              items,
+              total as total_amount,
+              status,
+              created_at,
+              booking_ref,
+              'dining' as type
+            FROM room_orders
+            WHERE hotel_id = 'remeritona'
+            ORDER BY created_at DESC
+          `).all();
+          const serviceRows = await db.prepare(`
+            SELECT
+              id,
+              room_number,
+              guest_name,
+              booking_ref,
+              request_type,
+              notes,
+              status,
+              created_at,
+              'service' as type
+            FROM guest_requests
+            ORDER BY created_at DESC
+          `).all();
+          const combined = [
+            ...(diningRows.results || []),
+            ...(serviceRows.results || []),
+          ].sort((a: any, b: any) =>
+            new Date(b.created_at).getTime() - 
+            new Date(a.created_at).getTime()
+          );
+          return Response.json({ results: combined });
+        } catch (error) {
+          return Response.json(
+            { error: String(error) }, 
+            { status: 500 }
+          );
+        }
+      },
+    },
   },
 });

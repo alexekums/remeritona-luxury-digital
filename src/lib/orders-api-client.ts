@@ -8,16 +8,29 @@ function authHeaders(token: string): HeadersInit {
 export async function fetchOrdersAndRequests(
   token: string,
   params?: { status?: string; type?: string; room?: string }
-): Promise<{ success: boolean; items?: any[]; pendingCount?: number; error?: string }> {
-  const qs = new URLSearchParams();
-  if (params?.status) qs.set("status", params.status);
-  if (params?.type) qs.set("type", params.type);
-  if (params?.room) qs.set("room", params.room);
-  const query = qs.toString();
-  const res = await fetch(`/api/orders-and-requests${query ? `?${query}` : ""}`, {
-    headers: authHeaders(token),
+): Promise<{ success: boolean; items?: any[]; results?: any[]; error?: string }> {
+  const res = await fetch("/api/orders-and-requests", {
+    headers: {
+      ...authHeaders(token),
+      "X-Admin-Token": token,
+    },
   });
-  return res.json();
+  const data = await res.json();
+  let items: any[] = data.results ?? data.items ?? [];
+
+  if (params?.status) {
+    items = items.filter((i) => i.status === params.status);
+  }
+  if (params?.type === "dining") {
+    items = items.filter((i) => i.type === "dining");
+  } else if (params?.type === "service") {
+    items = items.filter((i) => i.type === "service");
+  }
+  if (params?.room) {
+    items = items.filter((i) => String(i.room_number) === String(params.room));
+  }
+
+  return { ...data, success: res.ok, items, results: items };
 }
 
 export async function patchItemStatus(

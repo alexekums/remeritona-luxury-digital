@@ -1,6 +1,12 @@
-export function getDb(context: { cloudflare?: { env?: Record<string, unknown> } }): D1Database | null {
-  const db = context?.cloudflare?.env?.remeritona_bookings;
-  return (db as D1Database) ?? null;
+export async function getDb(): Promise<D1Database | null> {
+  try {
+    const { env } = await import("cloudflare:workers");
+    return (env as unknown as { 
+      remeritona_bookings: D1Database 
+    }).remeritona_bookings ?? null;
+  } catch {
+    return null;
+  }
 }
 
 export async function validateAdminToken(db: D1Database, token: string | null): Promise<boolean> {
@@ -33,3 +39,12 @@ export function jsonResponse(data: unknown, status = 200): Response {
 
 export const ROOM_ORDER_STATUSES = ["pending", "accepted", "preparing", "delivered"] as const;
 export const GUEST_REQUEST_STATUSES = ["pending", "accepted", "in_progress", "completed"] as const;
+
+export async function getTableColumnNames(db: D1Database, table: string): Promise<string[]> {
+  const result = await db.prepare(`SELECT name FROM pragma_table_info(?)`).bind(table).all();
+  return (result.results ?? []).map((row) => String((row as { name: string }).name));
+}
+
+export function tableHasColumn(columns: string[], name: string): boolean {
+  return columns.includes(name);
+}

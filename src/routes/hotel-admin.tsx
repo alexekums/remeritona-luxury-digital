@@ -6,7 +6,11 @@ import {
   getRoomRates, updateRoomRate, getOccupancyForecast,
 } from "@/functions/adminAuth";
 import { OrdersRequestsView } from "@/components/OrdersRequestsView";
-import { fetchOrdersAndRequests, patchItemStatus, playNotificationPing } from "@/lib/orders-api-client";
+import { SpaManagementView } from "@/components/SpaManagementView";
+import { MenuManagementView } from "@/components/MenuManagementView";
+import { FloatingChatWidget } from "@/components/FloatingChatWidget";
+import { ChatWidgetProvider, useChatWidget } from "@/contexts/ChatWidgetContext";
+import { fetchOrdersAndRequests, patchItemStatus } from "@/lib/orders-api-client";
 import {
   formatOrderItemsSummary,
   getRequestSummary,
@@ -194,7 +198,69 @@ body { margin: 0; padding: 0; font-family: Arial, sans-serif; font-size: 11px; c
   }
 }
 
-type AdminTab = "dashboard" | "bookings" | "rooms" | "reports" | "room-rates" | "guest-history" | "occupancy-forecast" | "orders-requests";
+type AdminTab =
+  | "dashboard" | "bookings" | "rooms" | "reports" | "room-rates" | "guest-history"
+  | "occupancy-forecast" | "orders-requests" | "spa-management" | "menu-management";
+
+const PMS_ROUTE_MAP: Partial<Record<AdminTab, string>> = {
+  "orders-requests": "/orders-requests",
+  "spa-management": "/spa-management",
+  "menu-management": "/menu-management",
+};
+
+function GuestMessagesSidebarItem({
+  colors,
+  sidebarExpanded,
+}: {
+  colors: { gold: string; textMuted: string; border: string };
+  sidebarExpanded: boolean;
+}) {
+  const { totalUnread, openChat } = useChatWidget();
+  return (
+    <button
+      onClick={openChat}
+      style={{
+        background: "none",
+        border: "none",
+        cursor: "pointer",
+        padding: "8px 12px",
+        width: "100%",
+        display: "flex",
+        alignItems: "center",
+        gap: 8,
+        color: colors.textMuted,
+        fontSize: 12,
+        fontFamily: "Georgia, serif",
+      }}
+    >
+      <span style={{ fontSize: 16, lineHeight: 1 }}>💬</span>
+      {sidebarExpanded && (
+        <span style={{ display: "flex", alignItems: "center", gap: 6, flex: 1 }}>
+          Guest Messages
+          {totalUnread > 0 && (
+            <span
+              style={{
+                background: colors.gold,
+                color: "#0a0a0a",
+                fontSize: 9,
+                fontWeight: 700,
+                borderRadius: 10,
+                minWidth: 18,
+                height: 18,
+                display: "inline-flex",
+                alignItems: "center",
+                justifyContent: "center",
+                padding: "0 5px",
+              }}
+            >
+              {totalUnread > 99 ? "99+" : totalUnread}
+            </span>
+          )}
+        </span>
+      )}
+    </button>
+  );
+}
 
 export function AdminPage({ initialTab }: { initialTab?: AdminTab } = {}) {
   const router = useRouter();
@@ -209,14 +275,18 @@ export function AdminPage({ initialTab }: { initialTab?: AdminTab } = {}) {
   const [activeTab, setActiveTab] = useState<AdminTab>(initialTab ?? "dashboard");
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   const isOrdersPage = pathname === "/orders-requests" || activeTab === "orders-requests";
+  const isSpaPage = pathname === "/spa-management" || activeTab === "spa-management";
+  const isMenuPage = pathname === "/menu-management" || activeTab === "menu-management";
+  const isPmsSubPage = isOrdersPage || isSpaPage || isMenuPage;
 
   const navigateToTab = (tab: AdminTab) => {
     setActiveTab(tab);
     setShowStaffManagement(false);
     if (window.innerWidth < 768) setMobileSidebarOpen(false);
-    if (tab === "orders-requests" && pathname !== "/orders-requests") {
-      router.navigate({ to: "/orders-requests" });
-    } else if (tab !== "orders-requests" && pathname === "/orders-requests") {
+    const targetRoute = PMS_ROUTE_MAP[tab];
+    if (targetRoute && pathname !== targetRoute) {
+      router.navigate({ to: targetRoute });
+    } else if (!targetRoute && (pathname === "/orders-requests" || pathname === "/spa-management" || pathname === "/menu-management")) {
       router.navigate({ to: "/hotel-admin" });
     }
   };
@@ -230,6 +300,7 @@ export function AdminPage({ initialTab }: { initialTab?: AdminTab } = {}) {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [staffRole, setStaffRole] = useState<string>("");
+  const canManageMenu = staffRole === "admin" || staffRole === "manager";
 
   // Staff Management state (admin/manager only)
   const [showStaffManagement, setShowStaffManagement] = useState(false);
@@ -351,7 +422,8 @@ export function AdminPage({ initialTab }: { initialTab?: AdminTab } = {}) {
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [notificationItems, setNotificationItems] = useState<any[]>([]);
   const [notificationPendingCount, setNotificationPendingCount] = useState(0);
-  const lastPendingCountRef = useRef<number | null>(null);
+  const lastCountRef = useRef<number>(0);
+  const isFirstPollRef = useRef<boolean>(true);
   const [alertToast, setAlertToast] = useState<{ message: string } | null>(null);
   const [hoveredNotifId, setHoveredNotifId] = useState<string | null>(null);
   const [notifActionLoading, setNotifActionLoading] = useState<string | null>(null);
@@ -445,40 +517,64 @@ export function AdminPage({ initialTab }: { initialTab?: AdminTab } = {}) {
 
   // Real-time notification polling (4s)
   useEffect(() => {
-    if (!token) return;
-    const pollNotifications = async () => {
+    const fetchNotifications = async () => {
       try {
-        const result = await fetchOrdersAndRequests(token);
-        if (!result.success) return;
-        const items = result.items ?? [];
+        const adminToken =
+          localStorage.getItem(TOKEN_KEY) ||
+          localStorage.getItem("admin_token") ||
+          sessionStorage.getItem("admin_token");
+        if (!adminToken) return;
+
+        const res = await fetch("/api/orders-and-requests", {
+          headers: { "X-Admin-Token": adminToken },
+        });
+        if (!res.ok) return;
+
+        const data = await res.json() as { results: any[] };
+        const items = data.results || [];
         const pendingCount = items.filter((i: any) => i.status === "pending").length;
+
         setNotificationItems(items);
         setNotificationPendingCount(pendingCount);
 
-        const prev = lastPendingCountRef.current;
-        if (prev !== null && pendingCount > prev) {
-          const newestPending = items
-            .filter((i: any) => i.status === "pending")
-            .sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())[0];
-          if (newestPending) {
-            const msg =
-              newestPending.type === "dining"
-                ? `New order from Room ${newestPending.room_number}`
-                : `New request from Room ${newestPending.room_number}`;
-            setAlertToast({ message: msg });
-            playNotificationPing();
-            setTimeout(() => setAlertToast(null), 5000);
-          }
+        if (!isFirstPollRef.current && pendingCount > lastCountRef.current) {
+          const newest = items.find((i: any) => i.status === "pending");
+          const roomNumber = newest?.room_number ?? "";
+          const isService = newest?.type === "service";
+
+          try {
+            const ctx = new (window.AudioContext ||
+              (window as any).webkitAudioContext)();
+            const osc = ctx.createOscillator();
+            const gain = ctx.createGain();
+            osc.connect(gain);
+            gain.connect(ctx.destination);
+            osc.frequency.value = 880;
+            osc.type = "sine";
+            gain.gain.setValueAtTime(0.3, ctx.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.6);
+            osc.start(ctx.currentTime);
+            osc.stop(ctx.currentTime + 0.6);
+          } catch (e) {}
+
+          showToast(
+            isService
+              ? `New service request from Room ${roomNumber}`
+              : `New food order from Room ${roomNumber}`
+          );
         }
-        lastPendingCountRef.current = pendingCount;
-      } catch {
-        // Polling failure — silent retry on next interval
+
+        lastCountRef.current = pendingCount;
+        isFirstPollRef.current = false;
+      } catch (e) {
+        console.error("Notification poll error:", e);
       }
     };
-    pollNotifications();
-    const interval = setInterval(pollNotifications, 4000);
+
+    fetchNotifications();
+    const interval = setInterval(fetchNotifications, 4000);
     return () => clearInterval(interval);
-  }, [token]);
+  }, []);
 
   // Load room rates when tab changes to room-rates
   useEffect(() => {
@@ -891,11 +987,11 @@ export function AdminPage({ initialTab }: { initialTab?: AdminTab } = {}) {
         showToast("Status updated");
         const refreshed = await fetchOrdersAndRequests(token);
         if (refreshed.success) {
-          const items = refreshed.items ?? [];
+          const items = refreshed.items ?? refreshed.results ?? [];
           setNotificationItems(items);
           const pendingCount = items.filter((i: any) => i.status === "pending").length;
           setNotificationPendingCount(pendingCount);
-          lastPendingCountRef.current = pendingCount;
+          lastCountRef.current = pendingCount;
         }
         await loadStats(token);
       } else {
@@ -1359,6 +1455,7 @@ export function AdminPage({ initialTab }: { initialTab?: AdminTab } = {}) {
 
   // ==================== MAIN DASHBOARD ====================
   return (
+    <ChatWidgetProvider>
     <div style={{ minHeight: "100vh", background: colors.bg, fontFamily: "Georgia, serif", color: colors.text }}>
 
       {/* Toast */}
@@ -1701,6 +1798,69 @@ export function AdminPage({ initialTab }: { initialTab?: AdminTab } = {}) {
             </div>
           )}
 
+          {/* SERVICES Group */}
+          {(staffRole !== "accountant") && (
+            <div>
+              <button onClick={() => {
+                const newGroups = new Set(expandedGroups);
+                if (newGroups.has("services")) newGroups.delete("services");
+                else newGroups.add("services");
+                setExpandedGroups(newGroups);
+              }} style={{
+                background: "none", border: "none", cursor: "pointer",
+                padding: "8px 12px", width: "100%",
+                display: "flex", alignItems: "center", justifyContent: "space-between",
+                color: colors.textMuted, fontSize: 10, letterSpacing: "0.15em",
+                textTransform: "uppercase"
+              }}>
+                <span style={{ display: sidebarExpanded ? "inline" : "none" }}>Services</span>
+                {expandedGroups.has("services") ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+              </button>
+              {expandedGroups.has("services") && (
+                <div style={{ marginLeft: 8 }}>
+                  {staffRole !== "accountant" && (
+                    <Link
+                      to="/spa-management"
+                      onClick={() => navigateToTab("spa-management")}
+                      style={{
+                        display: "flex", alignItems: "center", gap: 8,
+                        padding: "8px 12px", width: "100%",
+                        textDecoration: "none",
+                        color: isSpaPage ? colors.gold : colors.textMuted,
+                        fontSize: 12,
+                        borderLeft: isSpaPage ? `3px solid ${colors.gold}` : "3px solid transparent",
+                        paddingLeft: isSpaPage ? 9 : 12,
+                        boxSizing: "border-box",
+                      }}
+                    >
+                      <span style={{ fontSize: 16, lineHeight: 1 }}>💆</span>
+                      {sidebarExpanded && <span>Spa & Wellness</span>}
+                    </Link>
+                  )}
+                  {canManageMenu && (
+                    <Link
+                      to="/menu-management"
+                      onClick={() => navigateToTab("menu-management")}
+                      style={{
+                        display: "flex", alignItems: "center", gap: 8,
+                        padding: "8px 12px", width: "100%",
+                        textDecoration: "none",
+                        color: isMenuPage ? colors.gold : colors.textMuted,
+                        fontSize: 12,
+                        borderLeft: isMenuPage ? `3px solid ${colors.gold}` : "3px solid transparent",
+                        paddingLeft: isMenuPage ? 9 : 12,
+                        boxSizing: "border-box",
+                      }}
+                    >
+                      <span style={{ fontSize: 16, lineHeight: 1 }}>🍽️</span>
+                      {sidebarExpanded && <span>Menu & Pricing</span>}
+                    </Link>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+
           {/* FINANCE Group (admin, manager, accountant) */}
           {(staffRole === "admin" || staffRole === "manager" || staffRole === "accountant") && (
             <div>
@@ -1824,7 +1984,7 @@ export function AdminPage({ initialTab }: { initialTab?: AdminTab } = {}) {
         marginLeft: window.innerWidth < 768 ? 0 : (sidebarExpanded ? 220 : 56),
         transition: "margin-left 0.25s ease"
       }}>
-        {loading && !isOrdersPage && (
+        {loading && !isPmsSubPage && (
           <p style={{ color: colors.textMuted, textAlign: "center", padding: 40 }}>Loading...</p>
         )}
 
@@ -1839,8 +1999,30 @@ export function AdminPage({ initialTab }: { initialTab?: AdminTab } = {}) {
           </p>
         )}
 
+        {/* ===== SPA & WELLNESS ===== */}
+        {isSpaPage && staffRole !== "accountant" && token && (
+          <SpaManagementView token={token} colors={colors} onToast={showToast} />
+        )}
+
+        {isSpaPage && staffRole === "accountant" && (
+          <p style={{ color: colors.textMuted, textAlign: "center", padding: 40 }}>
+            You do not have access to Spa & Wellness.
+          </p>
+        )}
+
+        {/* ===== MENU & PRICING ===== */}
+        {isMenuPage && canManageMenu && token && (
+          <MenuManagementView token={token} staffRole={staffRole} colors={colors} onToast={showToast} />
+        )}
+
+        {isMenuPage && !canManageMenu && (
+          <p style={{ color: colors.textMuted, textAlign: "center", padding: 40 }}>
+            You do not have access to Menu & Pricing.
+          </p>
+        )}
+
         {/* ===== STAFF MANAGEMENT TAB ===== */}
-        {!loading && !isOrdersPage && showStaffManagement && (staffRole === "admin" || staffRole === "manager") && (
+        {!loading && !isPmsSubPage && showStaffManagement && (staffRole === "admin" || staffRole === "manager") && (
           <div>
             {/* Onboard Staff Form */}
             <div style={{ background: colors.surface, border: `1px solid ${colors.border}`, padding: 24, marginBottom: 32 }}>
@@ -2163,7 +2345,7 @@ export function AdminPage({ initialTab }: { initialTab?: AdminTab } = {}) {
         )}
 
         {/* ===== DASHBOARD TAB ===== */}
-        {!loading && !isOrdersPage && activeTab === "dashboard" && !showStaffManagement && stats && (
+        {!loading && !isPmsSubPage && activeTab === "dashboard" && !showStaffManagement && stats && (
           <div>
             {/* Stats Cards */}
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 16, marginBottom: 32 }}>
@@ -2379,7 +2561,7 @@ export function AdminPage({ initialTab }: { initialTab?: AdminTab } = {}) {
         )}
 
         {/* ===== ROOMS TAB ===== */}
-        {!loading && !isOrdersPage && activeTab === "rooms" && !showStaffManagement && stats && (
+        {!loading && !isPmsSubPage && activeTab === "rooms" && !showStaffManagement && stats && (
           <div>
             {/* Collapse All / Expand All */}
             <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 8 }}>
@@ -2579,7 +2761,7 @@ export function AdminPage({ initialTab }: { initialTab?: AdminTab } = {}) {
         )}
 
         {/* ===== REPORTS TAB ===== */}
-        {!loading && !isOrdersPage && activeTab === "reports" && !showStaffManagement && (
+        {!loading && !isPmsSubPage && activeTab === "reports" && !showStaffManagement && (
           <div style={{ padding: 24 }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 24 }}>
               <h2 style={{ color: colors.gold, fontSize: 14, letterSpacing: "0.2em", textTransform: "uppercase", margin: 0 }}>
@@ -2736,7 +2918,7 @@ export function AdminPage({ initialTab }: { initialTab?: AdminTab } = {}) {
         )}
 
         {/* ===== ROOM RATES TAB ===== */}
-        {!loading && !isOrdersPage && activeTab === "room-rates" && !showStaffManagement && (
+        {!loading && !isPmsSubPage && activeTab === "room-rates" && !showStaffManagement && (
           <div style={{ padding: 24 }}>
             <h2 style={{ color: colors.gold, fontSize: 14, letterSpacing: "0.2em", textTransform: "uppercase", margin: "0 0 24px" }}>
               Room Rates
@@ -2825,7 +3007,7 @@ export function AdminPage({ initialTab }: { initialTab?: AdminTab } = {}) {
         )}
 
         {/* ===== GUEST HISTORY TAB ===== */}
-        {!loading && !isOrdersPage && activeTab === "guest-history" && !showStaffManagement && stats && (
+        {!loading && !isPmsSubPage && activeTab === "guest-history" && !showStaffManagement && stats && (
           <div style={{ padding: 24 }}>
             <h2 style={{ color: colors.gold, fontSize: 14, letterSpacing: "0.2em", textTransform: "uppercase", margin: "0 0 24px" }}>
               Guest History
@@ -2862,7 +3044,7 @@ export function AdminPage({ initialTab }: { initialTab?: AdminTab } = {}) {
         )}
 
         {/* ===== OCCUPANCY FORECAST TAB ===== */}
-        {!loading && !isOrdersPage && activeTab === "occupancy-forecast" && !showStaffManagement && (
+        {!loading && !isPmsSubPage && activeTab === "occupancy-forecast" && !showStaffManagement && (
           <div style={{ padding: 24 }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 24 }}>
               <h2 style={{ color: colors.gold, fontSize: 14, letterSpacing: "0.2em", textTransform: "uppercase", margin: 0 }}>
@@ -3953,6 +4135,8 @@ export function AdminPage({ initialTab }: { initialTab?: AdminTab } = {}) {
         </div>
       )}
     </div>
+    {token && <FloatingChatWidget token={token} colors={colors} isDark={isDark} />}
+    </ChatWidgetProvider>
   );
 }
 

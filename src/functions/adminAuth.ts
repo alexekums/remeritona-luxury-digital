@@ -155,18 +155,10 @@ export const loginStaff = createServerFn({ method: "POST" })
     const token = crypto.randomUUID();
     const expiresAt = new Date(Date.now() + 8 * 60 * 60 * 1000).toISOString();
 
-    // Store session in admin_sessions table (same table as adminLogin)
-    // Wrap in try/catch in case of foreign key constraint issues
-    try {
-      await db.prepare(
-        `INSERT INTO admin_sessions (token, hotel_id, staff_id, created_at, expires_at) VALUES (?, ?, ?, datetime('now'), ?)`
-      ).bind(token, 'remeritona', staff.id, expiresAt).run();
-    } catch {
-      // If INSERT fails (e.g., foreign key constraint), store with staff_username instead
-      await db.prepare(
-        `INSERT INTO admin_sessions (token, hotel_id, staff_id, staff_username, created_at, expires_at) VALUES (?, ?, ?, ?, datetime('now'), ?)`
-      ).bind(token, 'remeritona', staff.id, staff.username, expiresAt).run();
-    }
+    // Store session in admin_sessions table with NULL staff_id to bypass foreign key constraint
+    await db.prepare(
+      `INSERT INTO admin_sessions (token, hotel_id, staff_id, staff_username, created_at, expires_at) VALUES (?, 'remeritona', NULL, ?, datetime('now'), ?)`
+    ).bind(token, staff.username, expiresAt).run();
 
     // Update last login timestamp
     await db.prepare(
@@ -284,18 +276,18 @@ async function validateToken(token: string, db: any): Promise<{ type: "admin" | 
     `SELECT * FROM admin_sessions WHERE token = ? AND expires_at > datetime('now') LIMIT 1`
   ).bind(token).first() as any;
   if (session) {
-    // Fetch staff info from staff_users table using staff_id or staff_username from session
+    // Fetch staff info from staff_users table - check staff_username first, then staff_id fallback
     let staff = null;
-    if (session.staff_id) {
-      staff = await db.prepare(
-        `SELECT id, username, full_name, role FROM staff_users WHERE id = ? LIMIT 1`
-      ).bind(session.staff_id).first() as any;
-    }
-    // If staff_id lookup fails, try staff_username fallback
-    if (!staff && session.staff_username) {
+    if (session.staff_username) {
       staff = await db.prepare(
         `SELECT id, username, full_name, role FROM staff_users WHERE username = ? LIMIT 1`
       ).bind(session.staff_username).first() as any;
+    }
+    // If staff_username lookup fails, try staff_id fallback
+    if (!staff && session.staff_id) {
+      staff = await db.prepare(
+        `SELECT id, username, full_name, role FROM staff_users WHERE id = ? LIMIT 1`
+      ).bind(session.staff_id).first() as any;
     }
     if (!staff) return null;
     return { type: "staff", staff };
@@ -322,12 +314,15 @@ export const getDashboardStats = createServerFn({ method: "POST" })
     const auth = await validateToken(data.token, db);
     if (!auth) return { success: false, error: "Unauthorized" };
     const today = new Date().toISOString().split("T")[0];
-    const [checkIns, checkOuts, allBookings, roomStatuses, revenueResult] = await Promise.all([
+    const [checkIns, checkOuts, allBookings, roomStatuses, revenueResult, returningGuests, pendingRequests, pendingOrders] = await Promise.all([
       db.prepare(`SELECT * FROM bookings WHERE hotel_id = 'remeritona' AND check_in = ? AND status != 'cancelled' ORDER BY created_at DESC`).bind(today).all(),
       db.prepare(`SELECT * FROM bookings WHERE hotel_id = 'remeritona' AND check_out = ? AND status != 'cancelled' ORDER BY created_at DESC`).bind(today).all(),
       db.prepare(`SELECT * FROM bookings WHERE hotel_id = 'remeritona' ORDER BY created_at DESC LIMIT 100`).all(),
       db.prepare(`SELECT * FROM room_status WHERE hotel_id = 'remeritona' ORDER BY CAST(room_number AS INTEGER) ASC`).all(),
       db.prepare(`SELECT SUM(total) as revenue FROM bookings WHERE hotel_id = 'remeritona' AND status IN ('confirmed','checked_in','checked_out') AND created_at >= date('now', 'start of month')`).first(),
+      db.prepare(`SELECT guest_email, guest_name, COUNT(*) as visit_count, SUM(total) as total_spent, MAX(created_at) as last_visit FROM bookings WHERE hotel_id = 'remeritona' AND status != 'cancelled' GROUP BY guest_email HAVING visit_count > 1 ORDER BY visit_count DESC LIMIT 20`).all(),
+      db.prepare(`SELECT * FROM guest_requests WHERE status = 'pending' AND hotel_id = 'remeritona' ORDER BY created_at DESC`).all(),
+      db.prepare(`SELECT * FROM room_orders WHERE status = 'pending' AND hotel_id = 'remeritona' ORDER BY created_at DESC`).all(),
     ]);
     return {
       success: true,
@@ -336,6 +331,9 @@ export const getDashboardStats = createServerFn({ method: "POST" })
       allBookings: allBookings.results,
       roomStatuses: roomStatuses.results,
       monthlyRevenue: (revenueResult as any)?.revenue ?? 0,
+      returningGuests: returningGuests.results ?? [],
+      pendingRequests: pendingRequests.results ?? [],
+      pendingOrders: pendingOrders.results ?? [],
     };
   });
 
@@ -802,4 +800,158 @@ export const getRevenueReport = createServerFn({ method: "POST" })
       byPaymentMethod: byPaymentMethodArray,
       bookings: bookingsWithNights,
     };
+  });
+
+export const deleteStaff = createServerFn({ method: "POST" })
+  .inputValidator((data: { token: string; staffId: number }) => data)
+  .handler(async ({ data }): Promise<any> => {
+    const db = cfEnv().remeritona_bookings;
+    const auth = await validateToken(data.token, db);
+    if (!auth) return { success: false, error: "Unauthorized" };
+
+    // Check that caller is admin or manager
+    if (auth.staff.role !== "admin" && auth.staff.role !== "manager") {
+      return { success: false, error: "Only admins and managers can delete staff" };
+    }
+
+    // Get the staff member to delete
+    const staffToDelete = await db.prepare(
+      `SELECT id, role FROM staff_users WHERE id = ? LIMIT 1`
+    ).bind(data.staffId).first() as any;
+    if (!staffToDelete) {
+      return { success: false, error: "Staff member not found" };
+    }
+
+    // Check that a manager cannot delete an admin or another manager
+    if (auth.staff.role === "manager") {
+      if (staffToDelete.role === "admin" || staffToDelete.role === "manager") {
+        return { success: false, error: "Managers cannot delete admins or other managers" };
+      }
+    }
+
+    // Delete the staff member
+    await db.prepare(
+      `DELETE FROM staff_users WHERE id = ?`
+    ).bind(data.staffId).run();
+
+    return { success: true };
+  });
+
+// ── Room Rate Management ─────────────────────────────────────────────────────
+export const getRoomRates = createServerFn({ method: "POST" })
+  .inputValidator((data: { token: string }) => data)
+  .handler(async ({ data }): Promise<any> => {
+    const db = cfEnv().remeritona_bookings;
+    const auth = await validateToken(data.token, db);
+    if (!auth) return { success: false, error: "Unauthorized" };
+
+    const rates = await db.prepare(
+      `SELECT * FROM room_rates ORDER BY room_type`
+    ).all();
+
+    // Default rates if table is empty
+    const defaultRates = [
+      { room_type: "Classic", price_per_night: 35000 },
+      { room_type: "Superior", price_per_night: 50000 },
+      { room_type: "Executive", price_per_night: 65000 },
+      { room_type: "Executive Twin", price_per_night: 70000 },
+      { room_type: "Business Suite", price_per_night: 85000 },
+      { room_type: "Executive Suite", price_per_night: 120000 },
+    ];
+
+    const existingRates = rates.results ?? [];
+    if (existingRates.length === 0) {
+      return { success: true, rates: defaultRates };
+    }
+
+    return { success: true, rates: existingRates };
+  });
+
+export const updateRoomRate = createServerFn({ method: "POST" })
+  .inputValidator((data: { token: string; roomType: string; price: number }) => data)
+  .handler(async ({ data }): Promise<any> => {
+    const db = cfEnv().remeritona_bookings;
+    const auth = await validateToken(data.token, db);
+    if (!auth) return { success: false, error: "Unauthorized" };
+
+    // Only admin and manager can edit rates
+    if (auth.staff.role !== "admin" && auth.staff.role !== "manager") {
+      return { success: false, error: "Only admins and managers can edit rates" };
+    }
+
+    await db.prepare(
+      `INSERT INTO room_rates (room_type, price_per_night, updated_at, updated_by)
+       VALUES (?, ?, datetime('now'), ?)
+       ON CONFLICT(room_type) DO UPDATE SET
+       price_per_night = ?, updated_at = datetime('now'), updated_by = ?`
+    ).bind(data.roomType, data.price, auth.staff.full_name, data.price, auth.staff.full_name).run();
+
+    return { success: true };
+  });
+
+// ── Occupancy Forecast ───────────────────────────────────────────────────────
+export const getOccupancyForecast = createServerFn({ method: "POST" })
+  .inputValidator((data: { token: string; days: number }) => data)
+  .handler(async ({ data }): Promise<any> => {
+    const db = cfEnv().remeritona_bookings;
+    const auth = await validateToken(data.token, db);
+    if (!auth) return { success: false, error: "Unauthorized" };
+
+    const forecast = [];
+    const totalRooms = 96;
+
+    for (let i = 0; i < data.days; i++) {
+      const date = new Date();
+      date.setDate(date.getDate() + i);
+      const dateStr = date.toISOString().split("T")[0];
+
+      const booked = await db.prepare(
+        `SELECT COUNT(DISTINCT room_number) as count
+         FROM bookings
+         WHERE hotel_id = 'remeritona'
+         AND status IN ('confirmed', 'checked_in')
+         AND check_in <= ? AND check_out > ?`
+      ).bind(dateStr, dateStr).first() as any;
+
+      const bookedRooms = booked?.count ?? 0;
+      const occupancyPercent = (bookedRooms / totalRooms) * 100;
+
+      forecast.push({
+        date: dateStr,
+        bookedRooms,
+        totalRooms,
+        occupancyPercent: Math.round(occupancyPercent * 10) / 10,
+      });
+    }
+
+    return { success: true, forecast };
+  });
+
+// ── Guest Requests and Room Orders ──────────────────────────────────────────
+export const markRequestDone = createServerFn({ method: "POST" })
+  .inputValidator((data: { token: string; requestId: number }) => data)
+  .handler(async ({ data }): Promise<any> => {
+    const db = cfEnv().remeritona_bookings;
+    const auth = await validateToken(data.token, db);
+    if (!auth) return { success: false, error: "Unauthorized" };
+
+    await db.prepare(
+      `UPDATE guest_requests SET status = 'done' WHERE id = ?`
+    ).bind(data.requestId).run();
+
+    return { success: true };
+  });
+
+export const markOrderDone = createServerFn({ method: "POST" })
+  .inputValidator((data: { token: string; orderId: number }) => data)
+  .handler(async ({ data }): Promise<any> => {
+    const db = cfEnv().remeritona_bookings;
+    const auth = await validateToken(data.token, db);
+    if (!auth) return { success: false, error: "Unauthorized" };
+
+    await db.prepare(
+      `UPDATE room_orders SET status = 'done' WHERE id = ?`
+    ).bind(data.orderId).run();
+
+    return { success: true };
   });

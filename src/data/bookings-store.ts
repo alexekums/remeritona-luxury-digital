@@ -25,7 +25,7 @@ export type StoredBooking = {
   pendingBalance?: number;
   scheduledChargeAt?: string; // ISO — 24h before check-in
   amountCharged: number; // money actually paid so far
-  status: "confirmed" | "cancelled" | "scheduled";
+  status: "confirmed" | "cancelled" | "scheduled" | "checked_in" | "checked_out";
   cancellation?: {
     cancelledAt: string;
     refundPercent: 0 | 50 | 100;
