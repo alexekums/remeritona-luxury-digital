@@ -37,6 +37,7 @@ const STATUS_FILTERS = [
   { value: "accepted", label: "Accepted" },
   { value: "in_progress", label: "In Progress" },
   { value: "completed", label: "Completed" },
+  { value: "archived", label: "Archived" },
 ];
 
 export function OrdersRequestsView({ token, colors, onToast }: Props) {
@@ -61,7 +62,9 @@ export function OrdersRequestsView({ token, colors, onToast }: Props) {
               ? activeTab === "dining"
                 ? "delivered"
                 : "completed"
-              : statusFilter;
+              : statusFilter === "archived"
+                ? "archived"
+                : statusFilter;
       }
       if (roomSearch.trim()) params.room = roomSearch.trim();
       const result = await fetchOrdersAndRequests(token, params);
@@ -94,6 +97,23 @@ export function OrdersRequestsView({ token, colors, onToast }: Props) {
       }
     } catch {
       onToast?.("Failed to update status", "error");
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  const handleArchive = async (item: any) => {
+    setActionLoading(String(item.id));
+    try {
+      const result = await patchItemStatus(token, item.id, item.type, "archived");
+      if (result.success) {
+        onToast?.("Item archived", "success");
+        await loadData();
+      } else {
+        onToast?.(result.error ?? "Failed to archive", "error");
+      }
+    } catch {
+      onToast?.("Failed to archive", "error");
     } finally {
       setActionLoading(null);
     }
@@ -191,6 +211,7 @@ export function OrdersRequestsView({ token, colors, onToast }: Props) {
           displayItems.map((order: any) => {
             const actionLabel = getRoomOrderActionLabel(order.status);
             const isDone = order.status === "delivered" || order.status === "done";
+            const isArchived = order.status === "archived";
             const { lines: orderLines, rawFallback } = parseOrderItemsForDisplay(order.items);
             const orderTotal = Number(order.total_amount ?? order.total ?? 0);
             return (
@@ -252,10 +273,31 @@ export function OrdersRequestsView({ token, colors, onToast }: Props) {
                       {timeAgo(order.created_at)}
                     </span>
                   </div>
-                  {isDone ? (
+                  {isArchived ? (
                     <span style={{ fontSize: 11, color: colors.textMuted, letterSpacing: "0.1em" }}>
-                      Completed ✓
+                      Archived ✓
                     </span>
+                  ) : isDone ? (
+                    <div style={{ display: "flex", gap: 8 }}>
+                      <button
+                        onClick={() => handleArchive(order)}
+                        disabled={actionLoading === String(order.id)}
+                        style={{
+                          background: "transparent",
+                          color: colors.textMuted,
+                          border: `1px solid ${colors.border}`,
+                          padding: "8px 16px",
+                          fontSize: 11,
+                          cursor: "pointer",
+                          letterSpacing: "0.1em",
+                          textTransform: "uppercase",
+                          opacity: actionLoading === String(order.id) ? 0.6 : 1,
+                          fontFamily: "Georgia, serif",
+                        }}
+                      >
+                        Archive
+                      </button>
+                    </div>
                   ) : actionLabel ? (
                     <button
                       onClick={() => handleAdvance(order)}
@@ -285,6 +327,7 @@ export function OrdersRequestsView({ token, colors, onToast }: Props) {
           displayItems.map((req: any) => {
             const actionLabel = getGuestRequestActionLabel(req.status);
             const isDone = req.status === "completed" || req.status === "done";
+            const isArchived = req.status === "archived";
             return (
               <div
                 key={`req-${req.id}`}
@@ -324,10 +367,31 @@ export function OrdersRequestsView({ token, colors, onToast }: Props) {
                 </p>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 12 }}>
                   <span style={{ fontSize: 11, color: colors.textMuted }}>{timeAgo(req.created_at)}</span>
-                  {isDone ? (
+                  {isArchived ? (
                     <span style={{ fontSize: 11, color: colors.textMuted, letterSpacing: "0.1em" }}>
-                      Completed ✓
+                      Archived ✓
                     </span>
+                  ) : isDone ? (
+                    <div style={{ display: "flex", gap: 8 }}>
+                      <button
+                        onClick={() => handleArchive(req)}
+                        disabled={actionLoading === String(req.id)}
+                        style={{
+                          background: "transparent",
+                          color: colors.textMuted,
+                          border: `1px solid ${colors.border}`,
+                          padding: "8px 16px",
+                          fontSize: 11,
+                          cursor: "pointer",
+                          letterSpacing: "0.1em",
+                          textTransform: "uppercase",
+                          opacity: actionLoading === String(req.id) ? 0.6 : 1,
+                          fontFamily: "Georgia, serif",
+                        }}
+                      >
+                        Archive
+                      </button>
+                    </div>
                   ) : actionLabel ? (
                     <button
                       onClick={() => handleAdvance(req)}

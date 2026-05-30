@@ -20,6 +20,7 @@ import { Route as HotelAdminRouteImport } from './routes/hotel-admin'
 import { Route as GalleryRouteImport } from './routes/gallery'
 import { Route as DiningRouteImport } from './routes/dining'
 import { Route as ContactRouteImport } from './routes/contact'
+import { Route as ChatManagementRouteImport } from './routes/chat-management'
 import { Route as BookingRouteImport } from './routes/booking'
 import { Route as AboutRouteImport } from './routes/about'
 import { Route as IndexRouteImport } from './routes/index'
@@ -30,8 +31,10 @@ import { Route as ApiOrdersAndRequestsRouteImport } from './routes/api/orders-an
 import { Route as ApiMenuItemsRouteImport } from './routes/api/menu-items'
 import { Route as ApiMessagesThreadRouteImport } from './routes/api/messages.thread'
 import { Route as ApiMessagesReplyRouteImport } from './routes/api/messages.reply'
+import { Route as ApiMessagesMessageRouteImport } from './routes/api/messages.message'
 import { Route as ApiMessagesMarkReadRouteImport } from './routes/api/messages.mark-read'
 import { Route as ApiMessagesConversationsRouteImport } from './routes/api/messages.conversations'
+import { Route as ApiMessagesConversationRouteImport } from './routes/api/messages.conversation'
 import { Route as ApiMenuItemsIdRouteImport } from './routes/api/menu-items.$id'
 import { Route as ApiSpaBookingsIdStatusRouteImport } from './routes/api/spa-bookings.$id.status'
 import { Route as ApiRoomOrdersIdStatusRouteImport } from './routes/api/room-orders.$id.status'
@@ -92,6 +95,11 @@ const ContactRoute = ContactRouteImport.update({
   path: '/contact',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ChatManagementRoute = ChatManagementRouteImport.update({
+  id: '/chat-management',
+  path: '/chat-management',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const BookingRoute = BookingRouteImport.update({
   id: '/booking',
   path: '/booking',
@@ -142,6 +150,11 @@ const ApiMessagesReplyRoute = ApiMessagesReplyRouteImport.update({
   path: '/api/messages/reply',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiMessagesMessageRoute = ApiMessagesMessageRouteImport.update({
+  id: '/api/messages/message',
+  path: '/api/messages/message',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiMessagesMarkReadRoute = ApiMessagesMarkReadRouteImport.update({
   id: '/api/messages/mark-read',
   path: '/api/messages/mark-read',
@@ -153,6 +166,11 @@ const ApiMessagesConversationsRoute =
     path: '/api/messages/conversations',
     getParentRoute: () => rootRouteImport,
   } as any)
+const ApiMessagesConversationRoute = ApiMessagesConversationRouteImport.update({
+  id: '/api/messages/conversation',
+  path: '/api/messages/conversation',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiMenuItemsIdRoute = ApiMenuItemsIdRouteImport.update({
   id: '/$id',
   path: '/$id',
@@ -179,6 +197,7 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/about': typeof AboutRoute
   '/booking': typeof BookingRoute
+  '/chat-management': typeof ChatManagementRoute
   '/contact': typeof ContactRoute
   '/dining': typeof DiningRoute
   '/gallery': typeof GalleryRoute
@@ -196,8 +215,10 @@ export interface FileRoutesByFullPath {
   '/api/spa-bookings': typeof ApiSpaBookingsRouteWithChildren
   '/rooms/$slug': typeof RoomsSlugRoute
   '/api/menu-items/$id': typeof ApiMenuItemsIdRoute
+  '/api/messages/conversation': typeof ApiMessagesConversationRoute
   '/api/messages/conversations': typeof ApiMessagesConversationsRoute
   '/api/messages/mark-read': typeof ApiMessagesMarkReadRoute
+  '/api/messages/message': typeof ApiMessagesMessageRoute
   '/api/messages/reply': typeof ApiMessagesReplyRoute
   '/api/messages/thread': typeof ApiMessagesThreadRoute
   '/api/guest-requests/$id/status': typeof ApiGuestRequestsIdStatusRoute
@@ -208,6 +229,7 @@ export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/about': typeof AboutRoute
   '/booking': typeof BookingRoute
+  '/chat-management': typeof ChatManagementRoute
   '/contact': typeof ContactRoute
   '/dining': typeof DiningRoute
   '/gallery': typeof GalleryRoute
@@ -225,8 +247,10 @@ export interface FileRoutesByTo {
   '/api/spa-bookings': typeof ApiSpaBookingsRouteWithChildren
   '/rooms/$slug': typeof RoomsSlugRoute
   '/api/menu-items/$id': typeof ApiMenuItemsIdRoute
+  '/api/messages/conversation': typeof ApiMessagesConversationRoute
   '/api/messages/conversations': typeof ApiMessagesConversationsRoute
   '/api/messages/mark-read': typeof ApiMessagesMarkReadRoute
+  '/api/messages/message': typeof ApiMessagesMessageRoute
   '/api/messages/reply': typeof ApiMessagesReplyRoute
   '/api/messages/thread': typeof ApiMessagesThreadRoute
   '/api/guest-requests/$id/status': typeof ApiGuestRequestsIdStatusRoute
@@ -238,6 +262,7 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/about': typeof AboutRoute
   '/booking': typeof BookingRoute
+  '/chat-management': typeof ChatManagementRoute
   '/contact': typeof ContactRoute
   '/dining': typeof DiningRoute
   '/gallery': typeof GalleryRoute
@@ -255,8 +280,10 @@ export interface FileRoutesById {
   '/api/spa-bookings': typeof ApiSpaBookingsRouteWithChildren
   '/rooms/$slug': typeof RoomsSlugRoute
   '/api/menu-items/$id': typeof ApiMenuItemsIdRoute
+  '/api/messages/conversation': typeof ApiMessagesConversationRoute
   '/api/messages/conversations': typeof ApiMessagesConversationsRoute
   '/api/messages/mark-read': typeof ApiMessagesMarkReadRoute
+  '/api/messages/message': typeof ApiMessagesMessageRoute
   '/api/messages/reply': typeof ApiMessagesReplyRoute
   '/api/messages/thread': typeof ApiMessagesThreadRoute
   '/api/guest-requests/$id/status': typeof ApiGuestRequestsIdStatusRoute
@@ -269,6 +296,7 @@ export interface FileRouteTypes {
     | '/'
     | '/about'
     | '/booking'
+    | '/chat-management'
     | '/contact'
     | '/dining'
     | '/gallery'
@@ -286,8 +314,10 @@ export interface FileRouteTypes {
     | '/api/spa-bookings'
     | '/rooms/$slug'
     | '/api/menu-items/$id'
+    | '/api/messages/conversation'
     | '/api/messages/conversations'
     | '/api/messages/mark-read'
+    | '/api/messages/message'
     | '/api/messages/reply'
     | '/api/messages/thread'
     | '/api/guest-requests/$id/status'
@@ -298,6 +328,7 @@ export interface FileRouteTypes {
     | '/'
     | '/about'
     | '/booking'
+    | '/chat-management'
     | '/contact'
     | '/dining'
     | '/gallery'
@@ -315,8 +346,10 @@ export interface FileRouteTypes {
     | '/api/spa-bookings'
     | '/rooms/$slug'
     | '/api/menu-items/$id'
+    | '/api/messages/conversation'
     | '/api/messages/conversations'
     | '/api/messages/mark-read'
+    | '/api/messages/message'
     | '/api/messages/reply'
     | '/api/messages/thread'
     | '/api/guest-requests/$id/status'
@@ -327,6 +360,7 @@ export interface FileRouteTypes {
     | '/'
     | '/about'
     | '/booking'
+    | '/chat-management'
     | '/contact'
     | '/dining'
     | '/gallery'
@@ -344,8 +378,10 @@ export interface FileRouteTypes {
     | '/api/spa-bookings'
     | '/rooms/$slug'
     | '/api/menu-items/$id'
+    | '/api/messages/conversation'
     | '/api/messages/conversations'
     | '/api/messages/mark-read'
+    | '/api/messages/message'
     | '/api/messages/reply'
     | '/api/messages/thread'
     | '/api/guest-requests/$id/status'
@@ -357,6 +393,7 @@ export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AboutRoute: typeof AboutRoute
   BookingRoute: typeof BookingRoute
+  ChatManagementRoute: typeof ChatManagementRoute
   ContactRoute: typeof ContactRoute
   DiningRoute: typeof DiningRoute
   GalleryRoute: typeof GalleryRoute
@@ -372,8 +409,10 @@ export interface RootRouteChildren {
   ApiOrdersAndRequestsRoute: typeof ApiOrdersAndRequestsRoute
   ApiSaveBookingRoute: typeof ApiSaveBookingRoute
   ApiSpaBookingsRoute: typeof ApiSpaBookingsRouteWithChildren
+  ApiMessagesConversationRoute: typeof ApiMessagesConversationRoute
   ApiMessagesConversationsRoute: typeof ApiMessagesConversationsRoute
   ApiMessagesMarkReadRoute: typeof ApiMessagesMarkReadRoute
+  ApiMessagesMessageRoute: typeof ApiMessagesMessageRoute
   ApiMessagesReplyRoute: typeof ApiMessagesReplyRoute
   ApiMessagesThreadRoute: typeof ApiMessagesThreadRoute
   ApiGuestRequestsIdStatusRoute: typeof ApiGuestRequestsIdStatusRoute
@@ -459,6 +498,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ContactRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/chat-management': {
+      id: '/chat-management'
+      path: '/chat-management'
+      fullPath: '/chat-management'
+      preLoaderRoute: typeof ChatManagementRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/booking': {
       id: '/booking'
       path: '/booking'
@@ -529,6 +575,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiMessagesReplyRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/messages/message': {
+      id: '/api/messages/message'
+      path: '/api/messages/message'
+      fullPath: '/api/messages/message'
+      preLoaderRoute: typeof ApiMessagesMessageRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/messages/mark-read': {
       id: '/api/messages/mark-read'
       path: '/api/messages/mark-read'
@@ -541,6 +594,13 @@ declare module '@tanstack/react-router' {
       path: '/api/messages/conversations'
       fullPath: '/api/messages/conversations'
       preLoaderRoute: typeof ApiMessagesConversationsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/messages/conversation': {
+      id: '/api/messages/conversation'
+      path: '/api/messages/conversation'
+      fullPath: '/api/messages/conversation'
+      preLoaderRoute: typeof ApiMessagesConversationRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/menu-items/$id': {
@@ -612,6 +672,7 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AboutRoute: AboutRoute,
   BookingRoute: BookingRoute,
+  ChatManagementRoute: ChatManagementRoute,
   ContactRoute: ContactRoute,
   DiningRoute: DiningRoute,
   GalleryRoute: GalleryRoute,
@@ -627,8 +688,10 @@ const rootRouteChildren: RootRouteChildren = {
   ApiOrdersAndRequestsRoute: ApiOrdersAndRequestsRoute,
   ApiSaveBookingRoute: ApiSaveBookingRoute,
   ApiSpaBookingsRoute: ApiSpaBookingsRouteWithChildren,
+  ApiMessagesConversationRoute: ApiMessagesConversationRoute,
   ApiMessagesConversationsRoute: ApiMessagesConversationsRoute,
   ApiMessagesMarkReadRoute: ApiMessagesMarkReadRoute,
+  ApiMessagesMessageRoute: ApiMessagesMessageRoute,
   ApiMessagesReplyRoute: ApiMessagesReplyRoute,
   ApiMessagesThreadRoute: ApiMessagesThreadRoute,
   ApiGuestRequestsIdStatusRoute: ApiGuestRequestsIdStatusRoute,

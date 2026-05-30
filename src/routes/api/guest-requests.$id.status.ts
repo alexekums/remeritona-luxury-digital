@@ -37,7 +37,7 @@ export const Route = createFileRoute("/api/guest-requests/$id/status")({
           }
 
           await db.prepare(
-            `UPDATE guest_requests SET status = ?, updated_at = datetime('now') WHERE id = ?`
+            `UPDATE guest_requests SET status = ? WHERE id = ?`
           ).bind(status, params.id).run();
 
           const row = await db.prepare(`SELECT * FROM guest_requests WHERE id = ?`).bind(params.id).first();

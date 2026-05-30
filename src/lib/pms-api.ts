@@ -37,8 +37,8 @@ export function jsonResponse(data: unknown, status = 200): Response {
   });
 }
 
-export const ROOM_ORDER_STATUSES = ["pending", "accepted", "preparing", "delivered"] as const;
-export const GUEST_REQUEST_STATUSES = ["pending", "accepted", "in_progress", "completed"] as const;
+export const ROOM_ORDER_STATUSES = ["pending", "accepted", "preparing", "delivered", "archived"] as const;
+export const GUEST_REQUEST_STATUSES = ["pending", "accepted", "in_progress", "completed", "archived"] as const;
 
 export async function getTableColumnNames(db: D1Database, table: string): Promise<string[]> {
   const result = await db.prepare(`SELECT name FROM pragma_table_info(?)`).bind(table).all();

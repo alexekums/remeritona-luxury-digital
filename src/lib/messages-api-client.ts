@@ -38,3 +38,19 @@ export async function markMessagesRead(token: string, room_number: string) {
   });
   return res.json() as Promise<{ success: boolean; error?: string }>;
 }
+
+export async function deleteConversation(token: string, room: string) {
+  const res = await fetch(`/api/messages/conversation?room=${encodeURIComponent(room)}`, {
+    method: "DELETE",
+    headers: authHeaders(token),
+  });
+  return res.json() as Promise<{ success: boolean; error?: string }>;
+}
+
+export async function deleteMessage(token: string, id: string) {
+  const res = await fetch(`/api/messages/message?id=${encodeURIComponent(id)}`, {
+    method: "DELETE",
+    headers: authHeaders(token),
+  });
+  return res.json() as Promise<{ success: boolean; error?: string }>;
+}

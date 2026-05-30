@@ -428,6 +428,11 @@ export function AdminPage({ initialTab }: { initialTab?: AdminTab } = {}) {
   const [hoveredNotifId, setHoveredNotifId] = useState<string | null>(null);
   const [notifActionLoading, setNotifActionLoading] = useState<string | null>(null);
 
+  // Messages notification state
+  const [messageUnreadCount, setMessageUnreadCount] = useState(0);
+  const messageLastCountRef = useRef<number>(0);
+  const messageIsFirstPollRef = useRef<boolean>(true);
+
   const isDark = theme === "dark";
 
   const colors = {
@@ -573,6 +578,58 @@ export function AdminPage({ initialTab }: { initialTab?: AdminTab } = {}) {
 
     fetchNotifications();
     const interval = setInterval(fetchNotifications, 4000);
+    return () => clearInterval(interval);
+  }, []);
+
+  // Poll for message notifications
+  useEffect(() => {
+    const fetchMessageNotifications = async () => {
+      try {
+        const adminToken =
+          localStorage.getItem(TOKEN_KEY) ||
+          localStorage.getItem("admin_token") ||
+          sessionStorage.getItem("admin_token");
+        if (!adminToken) return;
+
+        const res = await fetch("/api/messages/conversations", {
+          headers: { "X-Admin-Token": adminToken },
+        });
+        if (!res.ok) return;
+
+        const data = await res.json() as { success: boolean; conversations?: any[] };
+        const conversations = data.conversations || [];
+        const unreadCount = conversations.reduce((sum: number, c: any) => sum + (c.unread_count || 0), 0);
+
+        setMessageUnreadCount(unreadCount);
+
+        if (!messageIsFirstPollRef.current && unreadCount > messageLastCountRef.current) {
+          try {
+            const ctx = new (window.AudioContext ||
+              (window as any).webkitAudioContext)();
+            const osc = ctx.createOscillator();
+            const gain = ctx.createGain();
+            osc.connect(gain);
+            gain.connect(ctx.destination);
+            osc.frequency.value = 880;
+            osc.type = "sine";
+            gain.gain.setValueAtTime(0.3, ctx.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.6);
+            osc.start(ctx.currentTime);
+            osc.stop(ctx.currentTime + 0.6);
+          } catch (e) {}
+
+          showToast("New message from guest");
+        }
+
+        messageLastCountRef.current = unreadCount;
+        messageIsFirstPollRef.current = false;
+      } catch (e) {
+        console.error("Message notification poll error:", e);
+      }
+    };
+
+    fetchMessageNotifications();
+    const interval = setInterval(fetchMessageNotifications, 4000);
     return () => clearInterval(interval);
   }, []);
 
@@ -1640,6 +1697,23 @@ export function AdminPage({ initialTab }: { initialTab?: AdminTab } = {}) {
                 </span>
               )}
             </button>
+            <Link to="/chat-management" style={{
+              background: "none", border: "none", cursor: "pointer",
+              color: colors.textMuted, padding: 4, position: "relative",
+              textDecoration: "none"
+            }}>
+              <Bell size={18} />
+              {messageUnreadCount > 0 && (
+                <span style={{
+                  position: "absolute", top: 0, right: 0,
+                  background: "#ef4444", color: "#fff",
+                  fontSize: 9, padding: "2px 5px", borderRadius: "10px",
+                  fontWeight: 700
+                }}>
+                  {messageUnreadCount}
+                </span>
+              )}
+            </Link>
             <button onClick={() => {
               setSidebarExpanded(!sidebarExpanded);
               if (window.innerWidth < 768) setMobileSidebarOpen(false);
@@ -1747,6 +1821,23 @@ export function AdminPage({ initialTab }: { initialTab?: AdminTab } = {}) {
                     {sidebarExpanded && <span>Orders & Requests</span>}
                   </Link>
                 )}
+                {/* Guest Messages */}
+                <Link
+                  to="/chat-management"
+                  style={{
+                    display: "flex", alignItems: "center", gap: 8,
+                    padding: "8px 12px", width: "100%",
+                    textDecoration: "none",
+                    color: colors.textMuted,
+                    fontSize: 12,
+                    borderLeft: "3px solid transparent",
+                    paddingLeft: 12,
+                    boxSizing: "border-box",
+                  }}
+                >
+                  <span style={{ fontSize: 16, lineHeight: 1 }}>💬</span>
+                  {sidebarExpanded && <span>Guest Messages</span>}
+                </Link>
               </div>
             )}
           </div>

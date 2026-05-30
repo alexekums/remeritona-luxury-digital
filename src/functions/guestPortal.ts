@@ -50,7 +50,7 @@ export const updateServiceRequest = createServerFn({ method: "POST" })
   .inputValidator((d: { id: string; status: string }) => d)
     .handler(async ({ data }): AnyPromise => {
     await db().prepare(
-      `UPDATE service_requests SET status = ?, updated_at = datetime('now') WHERE id = ?`
+      `UPDATE service_requests SET status = ? WHERE id = ?`
     ).bind(data.status, data.id).run();
     return { success: true };
   });
