@@ -121,23 +121,23 @@ export const cancelBooking = createServerFn({ method: "POST" })
         <p><strong>Reference:</strong> ${data.reference}</p>
       `;
 
-      // Email to guest
-      await mailerSend.email.send(
-        new EmailParams()
-          .setFrom(sentFrom)
-          .setTo([new Recipient(data.guestEmail, data.guestName)])
-          .setSubject(`Booking Cancelled – ${data.roomName} | Ref: ${data.reference}`)
-          .setHtml(guestHtml)
-      );
+      // Email to Guest
+await mailerSend.email.send(
+  new EmailParams()
+    .setFrom(new Recipient("booking@remeritonahotel.com", "Remeritona Hotel"))
+    .setTo([new Recipient(data.guestEmail, data.guestName)])
+    .setSubject(`Booking Cancelled - ${data.roomName} | Ref: ${data.reference}`)
+    .setHtml(guestHtml)
+);
 
-      // Email to hotel
-      await mailerSend.email.send(
-        new EmailParams()
-          .setFrom(sentFrom)
-          .setTo([new Recipient("alexekums@gmail.com", "Remeritona Hotel")])
-          .setSubject(`Cancellation Alert – ${data.guestName}`)
-          .setHtml(hotelHtml)
-      );
+// Email to Hotel 
+await mailerSend.email.send(
+  new EmailParams()
+    .setFrom(new Recipient("booking@remeritonahotel.com", "Remeritona Hotel"))
+    .setTo([new Recipient("alexekums@gmail.com", "Remeritona Hotel")])  // Your email
+    .setSubject(`Cancellation Alert | ${data.guestName}`)
+    .setHtml(hotelHtml)
+);
 
       return { success: true, refundAmount: data.refundAmount };
     } catch (error) {
