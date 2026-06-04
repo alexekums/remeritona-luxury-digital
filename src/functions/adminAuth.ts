@@ -108,7 +108,7 @@ async function hashPassword(password: string): Promise<string> {
 }
 
 export const registerStaff = createServerFn({ method: "POST" })
-  .inputValidator((data: { username: string; password: string; fullName: string; role: 'front-desk' | 'accountant' | 'manager' | 'admin' }) => data)
+  .inputValidator((data: { username: string; password: string; fullName: string; role: 'front-desk' | 'accountant' | 'manager' | 'admin' | 'kitchen' | 'housekeeping' | 'spa' }) => data)
   .handler(async ({ data }): Promise<any> => {
     const db = cfEnv().remeritona_bookings;
 
@@ -188,9 +188,9 @@ export const getPendingStaff = createServerFn({ method: "POST" })
     let query = `SELECT id, username, full_name, role, created_at FROM staff_users WHERE is_approved = 0`;
     const params: any[] = [];
 
-    // Hierarchy rule: Manager can only see front-desk and accountant, Admin can see all
+    // Hierarchy rule: Manager can only see front-desk, accountant, kitchen, housekeeping, spa, Admin can see all
     if (data.userRole === "manager") {
-      query += ` AND role IN ('front-desk', 'accountant')`;
+      query += ` AND role IN ('front-desk', 'accountant', 'kitchen', 'housekeeping', 'spa')`;
     }
 
     query += ` ORDER BY created_at DESC`;
@@ -352,7 +352,7 @@ export const getActiveBookingForRoom = createServerFn({ method: "POST" })
   });
 
 export const updateRoomStatus = createServerFn({ method: "POST" })
-  .inputValidator((data: { token: string; roomNumber: string; status: string; updatedBy: string; force?: boolean }) => data)
+  .inputValidator((data: { token: string; roomNumber: string; status: string; updatedBy: string; force?: boolean; reserved_for?: string; reserved_until?: string; reserved_ref?: string }) => data)
   .handler(async ({ data }): Promise<any> => {
     const db = cfEnv().remeritona_bookings;
     const auth = await validateToken(data.token, db);
@@ -368,9 +368,21 @@ export const updateRoomStatus = createServerFn({ method: "POST" })
       }
     }
 
-    await db.prepare(
-      `UPDATE room_status SET status = ?, updated_at = datetime('now'), updated_by = ? WHERE room_number = ? AND hotel_id = 'remeritona'`
-    ).bind(data.status, data.updatedBy, data.roomNumber).run();
+    // Build update query based on provided fields
+    if (data.status === 'reserved' && data.reserved_for && data.reserved_until) {
+      await db.prepare(
+        `UPDATE room_status SET status = ?, updated_at = datetime('now'), updated_by = ?, reserved_for = ?, reserved_until = ?, reserved_ref = ? WHERE room_number = ? AND hotel_id = 'remeritona'`
+      ).bind(data.status, data.updatedBy, data.reserved_for, data.reserved_until, data.reserved_ref || null, data.roomNumber).run();
+    } else if (data.status !== 'reserved') {
+      // Clear reservation fields when changing to non-reserved status
+      await db.prepare(
+        `UPDATE room_status SET status = ?, updated_at = datetime('now'), updated_by = ?, reserved_for = NULL, reserved_until = NULL, reserved_ref = NULL WHERE room_number = ? AND hotel_id = 'remeritona'`
+      ).bind(data.status, data.updatedBy, data.roomNumber).run();
+    } else {
+      await db.prepare(
+        `UPDATE room_status SET status = ?, updated_at = datetime('now'), updated_by = ? WHERE room_number = ? AND hotel_id = 'remeritona'`
+      ).bind(data.status, data.updatedBy, data.roomNumber).run();
+    }
     return { success: true };
   });
 
@@ -601,7 +613,7 @@ export const checkInGuest = createServerFn({ method: "POST" })
           method: "POST",
           headers: { "Content-Type": "application/json", Authorization: "Bearer " + apiKey },
           body: JSON.stringify({
-            from: { email: "booking@test-zxk54v85kdxljy6v.mlsender.net", name: "Remeritona Hotel" },
+            from: { email: "booking@remeritonahotel.com", name: "Remeritona Hotel" },
             to: [{ email: data.guestEmail, name: data.guestName }],
             subject: "Welcome to Remeritona — Room " + data.roomNumber + " is Ready",
             html: welcomeHtml,
@@ -685,6 +697,40 @@ export const checkRoomAvailability = createServerFn({ method: "POST" })
       return { success: false, error: "Invalid date range" };
     }
 
+    // Count total rooms per type from room_status table
+    const totalRoomsByType = await db.prepare(`
+      SELECT room_slug, room_name, room_number
+      FROM room_status
+      WHERE hotel_id = 'remeritona'
+    `).all();
+
+    const roomsList = totalRoomsByType.results ?? [];
+    const roomsByType: Record<string, number> = {};
+
+    for (const room of roomsList as any) {
+      const typeKey = normalizeRoomTypeKey(room.room_slug ?? "");
+      if (!typeKey) continue;
+      roomsByType[typeKey] = (roomsByType[typeKey] ?? 0) + 1;
+    }
+
+    // Count unavailable rooms (occupied, maintenance, reserved) per type
+    const unavailableRoomsByType = await db.prepare(`
+      SELECT room_slug
+      FROM room_status
+      WHERE hotel_id = 'remeritona'
+      AND status IN ('occupied', 'maintenance', 'reserved')
+    `).all();
+
+    const unavailableList = unavailableRoomsByType.results ?? [];
+    const unavailableByType: Record<string, number> = {};
+
+    for (const room of unavailableList as any) {
+      const typeKey = normalizeRoomTypeKey(room.room_slug ?? "");
+      if (!typeKey) continue;
+      unavailableByType[typeKey] = (unavailableByType[typeKey] ?? 0) + 1;
+    }
+
+    // Count active bookings per type
     const bookedRows = await db.prepare(`
       SELECT COALESCE(NULLIF(room_type_key, ''), room_slug) AS type_key,
              COALESCE(SUM(num_rooms), 0) AS booked
@@ -708,15 +754,30 @@ export const checkRoomAvailability = createServerFn({ method: "POST" })
       fullyBooked: boolean;
     }> = {};
 
-    for (const [typeKey, total] of Object.entries(ROOM_TYPE_CAPACITIES)) {
+    // Calculate availability for each room type
+    for (const [typeKey, total] of Object.entries(roomsByType)) {
+      const unavailable = unavailableByType[typeKey] ?? 0;
       const booked = bookedByType[typeKey] ?? 0;
-      const available = Math.max(0, total - booked);
+      const available = Math.max(0, total - unavailable - booked);
       availability[typeKey] = {
         total,
-        booked,
+        booked: booked + unavailable,
         available,
         fullyBooked: available === 0,
       };
+    }
+
+    // Also include types from ROOM_TYPE_CAPACITIES that might not have rooms yet
+    for (const [typeKey, total] of Object.entries(ROOM_TYPE_CAPACITIES)) {
+      if (!availability[typeKey]) {
+        const booked = bookedByType[typeKey] ?? 0;
+        availability[typeKey] = {
+          total,
+          booked,
+          available: Math.max(0, total - booked),
+          fullyBooked: total === 0 || total - booked === 0,
+        };
+      }
     }
 
     return {

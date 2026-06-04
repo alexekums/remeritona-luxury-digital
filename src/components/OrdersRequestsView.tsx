@@ -29,6 +29,7 @@ type Props = {
   token: string;
   colors: Colors;
   onToast?: (message: string, type?: "success" | "error") => void;
+  staffRole?: string;
 };
 
 const STATUS_FILTERS = [
@@ -37,22 +38,27 @@ const STATUS_FILTERS = [
   { value: "accepted", label: "Accepted" },
   { value: "in_progress", label: "In Progress" },
   { value: "completed", label: "Completed" },
-  { value: "archived", label: "Archived" },
 ];
 
-export function OrdersRequestsView({ token, colors, onToast }: Props) {
-  const [activeTab, setActiveTab] = useState<"dining" | "service">("dining");
+export function OrdersRequestsView({ token, colors, onToast, staffRole }: Props) {
+  const defaultTab = staffRole === "housekeeping" ? "service" : staffRole === "kitchen" ? "dining" : "dining";
+  const [activeTab, setActiveTab] = useState<"dining" | "service">(defaultTab);
   const [statusFilter, setStatusFilter] = useState("all");
   const [roomSearch, setRoomSearch] = useState("");
   const [items, setItems] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
+  const [showArchived, setShowArchived] = useState(false);
 
   const loadData = useCallback(async () => {
     if (!token) return;
     try {
-      const params: { status?: string; room?: string } = {};
-      if (statusFilter !== "all") {
+      const params: { status?: string; room?: string; exclude_archived?: boolean } = {};
+      if (showArchived) {
+        params.status = "archived";
+      } else if (statusFilter === "all") {
+        params.exclude_archived = true;
+      } else {
         params.status =
           statusFilter === "in_progress"
             ? activeTab === "dining"
@@ -62,9 +68,8 @@ export function OrdersRequestsView({ token, colors, onToast }: Props) {
               ? activeTab === "dining"
                 ? "delivered"
                 : "completed"
-              : statusFilter === "archived"
-                ? "archived"
-                : statusFilter;
+              : statusFilter;
+        params.exclude_archived = true;
       }
       if (roomSearch.trim()) params.room = roomSearch.trim();
       const result = await fetchOrdersAndRequests(token, params);
@@ -72,7 +77,7 @@ export function OrdersRequestsView({ token, colors, onToast }: Props) {
     } finally {
       setLoading(false);
     }
-  }, [token, statusFilter, roomSearch, activeTab]);
+  }, [token, statusFilter, roomSearch, activeTab, showArchived]);
 
   useEffect(() => {
     loadData();
@@ -137,25 +142,42 @@ export function OrdersRequestsView({ token, colors, onToast }: Props) {
       </h1>
 
       <div style={{ display: "flex", gap: 0, marginBottom: 20, borderBottom: `1px solid ${colors.border}` }}>
-        {(["dining", "service"] as const).map((tab) => (
+        {staffRole !== "housekeeping" && (
           <button
-            key={tab}
-            onClick={() => setActiveTab(tab)}
+            onClick={() => setActiveTab("dining")}
             style={{
               background: "none",
               border: "none",
-              borderBottom: activeTab === tab ? `2px solid ${colors.gold}` : "2px solid transparent",
+              borderBottom: activeTab === "dining" ? `2px solid ${colors.gold}` : "2px solid transparent",
               padding: "10px 20px",
               cursor: "pointer",
-              color: activeTab === tab ? colors.gold : colors.textMuted,
+              color: activeTab === "dining" ? colors.gold : colors.textMuted,
               fontSize: 13,
               letterSpacing: "0.1em",
               fontFamily: "Georgia, serif",
             }}
           >
-            {tab === "dining" ? "Dining Orders" : "Service Requests"}
+            Dining Orders
           </button>
-        ))}
+        )}
+        {staffRole !== "kitchen" && (
+          <button
+            onClick={() => setActiveTab("service")}
+            style={{
+              background: "none",
+              border: "none",
+              borderBottom: activeTab === "service" ? `2px solid ${colors.gold}` : "2px solid transparent",
+              padding: "10px 20px",
+              cursor: "pointer",
+              color: activeTab === "service" ? colors.gold : colors.textMuted,
+              fontSize: 13,
+              letterSpacing: "0.1em",
+              fontFamily: "Georgia, serif",
+            }}
+          >
+            Service Requests
+          </button>
+        )}
       </div>
 
       <div style={{ display: "flex", flexWrap: "wrap", gap: 12, marginBottom: 24, alignItems: "center" }}>
@@ -417,6 +439,40 @@ export function OrdersRequestsView({ token, colors, onToast }: Props) {
             );
           })}
       </div>
+      {!showArchived && (
+        <div style={{ textAlign: "center", marginTop: 16 }}>
+          <button
+            onClick={() => setShowArchived(true)}
+            style={{
+              background: "none",
+              border: "none",
+              cursor: "pointer",
+              color: colors.textMuted,
+              fontSize: 11,
+              fontFamily: "Georgia, serif",
+            }}
+          >
+            Show archived ▾
+          </button>
+        </div>
+      )}
+      {showArchived && (
+        <div style={{ textAlign: "center", marginTop: 16 }}>
+          <button
+            onClick={() => setShowArchived(false)}
+            style={{
+              background: "none",
+              border: "none",
+              cursor: "pointer",
+              color: colors.textMuted,
+              fontSize: 11,
+              fontFamily: "Georgia, serif",
+            }}
+          >
+            Hide archived ▴
+          </button>
+        </div>
+      )}
     </div>
   );
 }

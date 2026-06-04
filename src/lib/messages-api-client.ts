@@ -4,7 +4,7 @@ export { playNotificationPing };
 
 function authHeaders(token: string): HeadersInit {
   return {
-    Authorization: `Bearer ${token}`,
+    "X-Admin-Token": token,
     "Content-Type": "application/json",
   };
 }

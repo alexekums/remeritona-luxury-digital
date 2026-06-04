@@ -25,10 +25,13 @@ import { Route as BookingRouteImport } from './routes/booking'
 import { Route as AboutRouteImport } from './routes/about'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as RoomsSlugRouteImport } from './routes/rooms.$slug'
+import { Route as ApiSyncReservationsRouteImport } from './routes/api/sync-reservations'
 import { Route as ApiSpaBookingsRouteImport } from './routes/api/spa-bookings'
 import { Route as ApiSaveBookingRouteImport } from './routes/api/save-booking'
 import { Route as ApiOrdersAndRequestsRouteImport } from './routes/api/orders-and-requests'
+import { Route as ApiNewBookingsCountRouteImport } from './routes/api/new-bookings-count'
 import { Route as ApiMenuItemsRouteImport } from './routes/api/menu-items'
+import { Route as ApiBookingsRecentRouteImport } from './routes/api/bookings-recent'
 import { Route as ApiMessagesThreadRouteImport } from './routes/api/messages.thread'
 import { Route as ApiMessagesReplyRouteImport } from './routes/api/messages.reply'
 import { Route as ApiMessagesMessageRouteImport } from './routes/api/messages.message'
@@ -120,6 +123,11 @@ const RoomsSlugRoute = RoomsSlugRouteImport.update({
   path: '/$slug',
   getParentRoute: () => RoomsRoute,
 } as any)
+const ApiSyncReservationsRoute = ApiSyncReservationsRouteImport.update({
+  id: '/api/sync-reservations',
+  path: '/api/sync-reservations',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiSpaBookingsRoute = ApiSpaBookingsRouteImport.update({
   id: '/api/spa-bookings',
   path: '/api/spa-bookings',
@@ -135,9 +143,19 @@ const ApiOrdersAndRequestsRoute = ApiOrdersAndRequestsRouteImport.update({
   path: '/api/orders-and-requests',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiNewBookingsCountRoute = ApiNewBookingsCountRouteImport.update({
+  id: '/api/new-bookings-count',
+  path: '/api/new-bookings-count',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiMenuItemsRoute = ApiMenuItemsRouteImport.update({
   id: '/api/menu-items',
   path: '/api/menu-items',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiBookingsRecentRoute = ApiBookingsRecentRouteImport.update({
+  id: '/api/bookings-recent',
+  path: '/api/bookings-recent',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiMessagesThreadRoute = ApiMessagesThreadRouteImport.update({
@@ -209,10 +227,13 @@ export interface FileRoutesByFullPath {
   '/policies': typeof PoliciesRoute
   '/rooms': typeof RoomsRouteWithChildren
   '/spa-management': typeof SpaManagementRoute
+  '/api/bookings-recent': typeof ApiBookingsRecentRoute
   '/api/menu-items': typeof ApiMenuItemsRouteWithChildren
+  '/api/new-bookings-count': typeof ApiNewBookingsCountRoute
   '/api/orders-and-requests': typeof ApiOrdersAndRequestsRoute
   '/api/save-booking': typeof ApiSaveBookingRoute
   '/api/spa-bookings': typeof ApiSpaBookingsRouteWithChildren
+  '/api/sync-reservations': typeof ApiSyncReservationsRoute
   '/rooms/$slug': typeof RoomsSlugRoute
   '/api/menu-items/$id': typeof ApiMenuItemsIdRoute
   '/api/messages/conversation': typeof ApiMessagesConversationRoute
@@ -241,10 +262,13 @@ export interface FileRoutesByTo {
   '/policies': typeof PoliciesRoute
   '/rooms': typeof RoomsRouteWithChildren
   '/spa-management': typeof SpaManagementRoute
+  '/api/bookings-recent': typeof ApiBookingsRecentRoute
   '/api/menu-items': typeof ApiMenuItemsRouteWithChildren
+  '/api/new-bookings-count': typeof ApiNewBookingsCountRoute
   '/api/orders-and-requests': typeof ApiOrdersAndRequestsRoute
   '/api/save-booking': typeof ApiSaveBookingRoute
   '/api/spa-bookings': typeof ApiSpaBookingsRouteWithChildren
+  '/api/sync-reservations': typeof ApiSyncReservationsRoute
   '/rooms/$slug': typeof RoomsSlugRoute
   '/api/menu-items/$id': typeof ApiMenuItemsIdRoute
   '/api/messages/conversation': typeof ApiMessagesConversationRoute
@@ -274,10 +298,13 @@ export interface FileRoutesById {
   '/policies': typeof PoliciesRoute
   '/rooms': typeof RoomsRouteWithChildren
   '/spa-management': typeof SpaManagementRoute
+  '/api/bookings-recent': typeof ApiBookingsRecentRoute
   '/api/menu-items': typeof ApiMenuItemsRouteWithChildren
+  '/api/new-bookings-count': typeof ApiNewBookingsCountRoute
   '/api/orders-and-requests': typeof ApiOrdersAndRequestsRoute
   '/api/save-booking': typeof ApiSaveBookingRoute
   '/api/spa-bookings': typeof ApiSpaBookingsRouteWithChildren
+  '/api/sync-reservations': typeof ApiSyncReservationsRoute
   '/rooms/$slug': typeof RoomsSlugRoute
   '/api/menu-items/$id': typeof ApiMenuItemsIdRoute
   '/api/messages/conversation': typeof ApiMessagesConversationRoute
@@ -308,10 +335,13 @@ export interface FileRouteTypes {
     | '/policies'
     | '/rooms'
     | '/spa-management'
+    | '/api/bookings-recent'
     | '/api/menu-items'
+    | '/api/new-bookings-count'
     | '/api/orders-and-requests'
     | '/api/save-booking'
     | '/api/spa-bookings'
+    | '/api/sync-reservations'
     | '/rooms/$slug'
     | '/api/menu-items/$id'
     | '/api/messages/conversation'
@@ -340,10 +370,13 @@ export interface FileRouteTypes {
     | '/policies'
     | '/rooms'
     | '/spa-management'
+    | '/api/bookings-recent'
     | '/api/menu-items'
+    | '/api/new-bookings-count'
     | '/api/orders-and-requests'
     | '/api/save-booking'
     | '/api/spa-bookings'
+    | '/api/sync-reservations'
     | '/rooms/$slug'
     | '/api/menu-items/$id'
     | '/api/messages/conversation'
@@ -372,10 +405,13 @@ export interface FileRouteTypes {
     | '/policies'
     | '/rooms'
     | '/spa-management'
+    | '/api/bookings-recent'
     | '/api/menu-items'
+    | '/api/new-bookings-count'
     | '/api/orders-and-requests'
     | '/api/save-booking'
     | '/api/spa-bookings'
+    | '/api/sync-reservations'
     | '/rooms/$slug'
     | '/api/menu-items/$id'
     | '/api/messages/conversation'
@@ -405,10 +441,13 @@ export interface RootRouteChildren {
   PoliciesRoute: typeof PoliciesRoute
   RoomsRoute: typeof RoomsRouteWithChildren
   SpaManagementRoute: typeof SpaManagementRoute
+  ApiBookingsRecentRoute: typeof ApiBookingsRecentRoute
   ApiMenuItemsRoute: typeof ApiMenuItemsRouteWithChildren
+  ApiNewBookingsCountRoute: typeof ApiNewBookingsCountRoute
   ApiOrdersAndRequestsRoute: typeof ApiOrdersAndRequestsRoute
   ApiSaveBookingRoute: typeof ApiSaveBookingRoute
   ApiSpaBookingsRoute: typeof ApiSpaBookingsRouteWithChildren
+  ApiSyncReservationsRoute: typeof ApiSyncReservationsRoute
   ApiMessagesConversationRoute: typeof ApiMessagesConversationRoute
   ApiMessagesConversationsRoute: typeof ApiMessagesConversationsRoute
   ApiMessagesMarkReadRoute: typeof ApiMessagesMarkReadRoute
@@ -533,6 +572,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof RoomsSlugRouteImport
       parentRoute: typeof RoomsRoute
     }
+    '/api/sync-reservations': {
+      id: '/api/sync-reservations'
+      path: '/api/sync-reservations'
+      fullPath: '/api/sync-reservations'
+      preLoaderRoute: typeof ApiSyncReservationsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/spa-bookings': {
       id: '/api/spa-bookings'
       path: '/api/spa-bookings'
@@ -554,11 +600,25 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiOrdersAndRequestsRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/new-bookings-count': {
+      id: '/api/new-bookings-count'
+      path: '/api/new-bookings-count'
+      fullPath: '/api/new-bookings-count'
+      preLoaderRoute: typeof ApiNewBookingsCountRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/menu-items': {
       id: '/api/menu-items'
       path: '/api/menu-items'
       fullPath: '/api/menu-items'
       preLoaderRoute: typeof ApiMenuItemsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/bookings-recent': {
+      id: '/api/bookings-recent'
+      path: '/api/bookings-recent'
+      fullPath: '/api/bookings-recent'
+      preLoaderRoute: typeof ApiBookingsRecentRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/messages/thread': {
@@ -684,10 +744,13 @@ const rootRouteChildren: RootRouteChildren = {
   PoliciesRoute: PoliciesRoute,
   RoomsRoute: RoomsRouteWithChildren,
   SpaManagementRoute: SpaManagementRoute,
+  ApiBookingsRecentRoute: ApiBookingsRecentRoute,
   ApiMenuItemsRoute: ApiMenuItemsRouteWithChildren,
+  ApiNewBookingsCountRoute: ApiNewBookingsCountRoute,
   ApiOrdersAndRequestsRoute: ApiOrdersAndRequestsRoute,
   ApiSaveBookingRoute: ApiSaveBookingRoute,
   ApiSpaBookingsRoute: ApiSpaBookingsRouteWithChildren,
+  ApiSyncReservationsRoute: ApiSyncReservationsRoute,
   ApiMessagesConversationRoute: ApiMessagesConversationRoute,
   ApiMessagesConversationsRoute: ApiMessagesConversationsRoute,
   ApiMessagesMarkReadRoute: ApiMessagesMarkReadRoute,

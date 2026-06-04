@@ -26,7 +26,7 @@ export const sendBookingEmail = createServerFn({ method: "POST" })
     const cfEnv = env as unknown as { MAILERSEND_API_KEY: string };
     const mailerSend = new MailerSend({ apiKey: cfEnv.MAILERSEND_API_KEY || "" });
 
-    const sentFrom = new Sender("booking@test-zxk54v85kdxljy6v.mlsender.net", "Remeritona Hotel");
+    const sentFrom = new Sender("booking@remeritonahotel.com", "Remeritona Hotel");
 
     const htmlContent = await render(
       React.createElement(BookingEmail, data)

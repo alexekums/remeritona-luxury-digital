@@ -1,6 +1,7 @@
 // @ts-ignore
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useState, useEffect, useRef } from "react";
+import { ChevronLeft } from "lucide-react";
 import {
   fetchConversations,
   fetchThread,
@@ -15,6 +16,7 @@ export const Route = createFileRoute("/chat-management")({
 });
 
 function ChatManagement() {
+  const navigate = useNavigate();
   const [conversations, setConversations] = useState<any[]>([]);
   const [selectedRoom, setSelectedRoom] = useState<string | null>(null);
   const [selectedGuest, setSelectedGuest] = useState<string | null>(null);
@@ -23,10 +25,11 @@ function ChatManagement() {
   const [searchQuery, setSearchQuery] = useState("");
   const [totalUnread, setTotalUnread] = useState(0);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
   const pollIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const threadPollIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
-  const TOKEN_KEY = "pms_admin_token";
+  const TOKEN_KEY = "remeritona_admin_token";
 
   const getToken = () => {
     return localStorage.getItem(TOKEN_KEY) || localStorage.getItem("admin_token") || sessionStorage.getItem("admin_token");
@@ -34,9 +37,14 @@ function ChatManagement() {
 
   const fetchConversationsData = async () => {
     const token = getToken();
-    if (!token) return;
+    console.log("chat-management: token =", token);
+    if (!token) {
+      console.log("chat-management: no token found");
+      return;
+    }
     try {
       const data = await fetchConversations(token);
+      console.log("chat-management: API response =", data);
       if (data.success && data.conversations) {
         const sorted = [...data.conversations].sort((a, b) => {
           const aUnread = (a.unread_count || 0) > 0 ? -1 : 1;
@@ -52,16 +60,28 @@ function ChatManagement() {
     }
   };
 
-  const fetchThreadData = async (room: string) => {
+  const isNearBottom = () => {
+    const el = containerRef.current;
+    if (!el) return true;
+    return el.scrollHeight - el.scrollTop - el.clientHeight < 100;
+  };
+
+  const scrollToBottom = (smooth = true) => {
+    messagesEndRef.current?.scrollIntoView({ behavior: smooth ? "smooth" : "auto" });
+  };
+
+  const fetchThreadData = async (room: string, isNewMessage = false) => {
     const token = getToken();
     if (!token) return;
     try {
       const data = await fetchThread(token, room);
       if (data.success && data.messages) {
+        const wasNearBottom = isNearBottom();
         setMessages(data.messages);
-        setTimeout(() => {
-          messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-        }, 100);
+        // Only auto-scroll if it's the first load or if user was near bottom when new message arrives
+        if (!isNewMessage || wasNearBottom) {
+          setTimeout(() => scrollToBottom(true), 100);
+        }
       }
     } catch (error) {
       console.error("Failed to fetch thread:", error);
@@ -123,7 +143,7 @@ function ChatManagement() {
   };
 
   const formatTime = (dateString: string) => {
-    const date = new Date(dateString);
+    const date = new Date(dateString + 'Z');
     const now = new Date();
     const diffMs = now.getTime() - date.getTime();
     const diffMins = Math.floor(diffMs / 60000);
@@ -138,8 +158,12 @@ function ChatManagement() {
   };
 
   const formatMessageTime = (dateString: string) => {
-    const date = new Date(dateString);
-    return date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+    const date = new Date(dateString + 'Z');
+    return date.toLocaleTimeString('en-NG', {
+      timeZone: 'Africa/Lagos',
+      hour: '2-digit',
+      minute: '2-digit'
+    });
   };
 
   const filteredConversations = conversations.filter((c) => {
@@ -161,8 +185,8 @@ function ChatManagement() {
 
   useEffect(() => {
     if (selectedRoom) {
-      fetchThreadData(selectedRoom);
-      threadPollIntervalRef.current = setInterval(() => fetchThreadData(selectedRoom), 4000);
+      fetchThreadData(selectedRoom, false); // First load, always scroll
+      threadPollIntervalRef.current = setInterval(() => fetchThreadData(selectedRoom, true), 4000);
     }
     return () => {
       if (threadPollIntervalRef.current) clearInterval(threadPollIntervalRef.current);
@@ -242,9 +266,17 @@ function ChatManagement() {
           <>
             {/* HEADER */}
             <div className="flex-shrink-0 p-4 border-b flex items-center justify-between bg-card">
-              <span className="font-semibold">
-                Room {selectedRoom} — {selectedGuest}
-              </span>
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={() => navigate({ to: "/hotel-admin" })}
+                  className="text-muted-foreground hover:text-foreground transition-colors"
+                >
+                  <ChevronLeft size={20} />
+                </button>
+                <span className="font-semibold">
+                  Room {selectedRoom} — {selectedGuest}
+                </span>
+              </div>
               <button
                 onClick={() => {
                   if (confirm(`Delete conversation for Room ${selectedRoom}?`)) {
@@ -258,57 +290,77 @@ function ChatManagement() {
             </div>
 
             {/* MESSAGE THREAD */}
-            <div className="flex-1 overflow-y-auto p-4 space-y-3 bg-background">
-              {messages.map((msg) => (
-                <div
-                  key={msg.id}
-                  onContextMenu={(e) => {
-                    e.preventDefault();
-                    if (confirm("Delete this message?")) {
-                      handleDeleteMessage(msg.id);
-                    }
-                  }}
-                >
-                  {msg.sender === "guest" && (
-                    <div className="flex justify-start">
-                      <div className="max-w-[75%] bg-secondary text-foreground px-4 py-2.5 rounded-2xl rounded-bl-sm text-sm">
-                        <p>{msg.message}</p>
-                        <p className="text-[10px] opacity-60 mt-1">{formatMessageTime(msg.created_at)}</p>
-                      </div>
+            <div ref={containerRef} className="flex-1 overflow-y-auto p-4 space-y-3 bg-background min-h-0">
+              {messages.map((msg) => {
+                const isSystem = msg.sender === "system" ||
+                  msg.message.startsWith("NEW_SESSION") ||
+                  msg.message.startsWith("TIMEOUT:");
+
+                if (isSystem) {
+                  return (
+                    <div key={msg.id} className="flex items-center gap-3 my-3">
+                      <div className="flex-1 h-px bg-border opacity-30" />
+                      <span className="text-xs text-muted-foreground">
+                        {msg.message.startsWith("NEW_SESSION") ? "New session" :
+                         msg.message.startsWith("TIMEOUT") ? "Chat ended" :
+                         msg.message}
+                      </span>
+                      <div className="flex-1 h-px bg-border opacity-30" />
                     </div>
-                  )}
-                  {msg.sender === "staff" && (
-                    <div className="flex justify-end">
-                      <div className="max-w-[75%] bg-[#C9A84C] text-black px-4 py-2.5 rounded-2xl rounded-br-sm text-sm">
-                        <p>{msg.message}</p>
-                        <p className="text-[10px] opacity-60 mt-1">{formatMessageTime(msg.created_at)}</p>
-                      </div>
-                    </div>
-                  )}
-                  {msg.sender === "ai" && (
-                    <div>
-                      <div className="text-[10px] text-muted-foreground mb-1">✨ AI Concierge</div>
+                  );
+                }
+
+                return (
+                  <div
+                    key={msg.id}
+                    onContextMenu={(e) => {
+                      e.preventDefault();
+                      if (confirm("Delete this message?")) {
+                        handleDeleteMessage(msg.id);
+                      }
+                    }}
+                  >
+                    {msg.sender === "guest" && (
                       <div className="flex justify-start">
-                        <div className="max-w-[75%] bg-blue-500/10 border border-blue-500/20 text-foreground px-4 py-2.5 rounded-2xl rounded-bl-sm text-sm">
+                        <div className="max-w-[75%] bg-secondary text-foreground px-4 py-2.5 rounded-2xl rounded-bl-sm text-sm">
                           <p>{msg.message}</p>
                           <p className="text-[10px] opacity-60 mt-1">{formatMessageTime(msg.created_at)}</p>
                         </div>
                       </div>
-                    </div>
-                  )}
-                  {msg.sender === "ai_flagged" && (
-                    <div>
-                      <div className="text-[10px] text-red-400 mb-1">🔴 Needs Staff Attention</div>
-                      <div className="flex justify-start">
-                        <div className="max-w-[75%] bg-red-500/10 border border-red-500/20 text-foreground px-4 py-2.5 rounded-2xl rounded-bl-sm text-sm">
+                    )}
+                    {msg.sender === "staff" && (
+                      <div className="flex justify-end">
+                        <div className="max-w-[75%] bg-[#C9A84C] text-black px-4 py-2.5 rounded-2xl rounded-br-sm text-sm">
                           <p>{msg.message}</p>
                           <p className="text-[10px] opacity-60 mt-1">{formatMessageTime(msg.created_at)}</p>
                         </div>
                       </div>
-                    </div>
-                  )}
-                </div>
-              ))}
+                    )}
+                    {msg.sender === "ai" && (
+                      <div>
+                        <div className="text-[10px] text-muted-foreground mb-1">✨ AI Concierge</div>
+                        <div className="flex justify-start">
+                          <div className="max-w-[75%] bg-blue-500/10 border border-blue-500/20 text-foreground px-4 py-2.5 rounded-2xl rounded-bl-sm text-sm">
+                            <p>{msg.message}</p>
+                            <p className="text-[10px] opacity-60 mt-1">{formatMessageTime(msg.created_at)}</p>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                    {msg.sender === "ai_flagged" && (
+                      <div>
+                        <div className="text-[10px] text-red-400 mb-1">🔴 Needs Staff Attention</div>
+                        <div className="flex justify-start">
+                          <div className="max-w-[75%] bg-red-500/10 border border-red-500/20 text-foreground px-4 py-2.5 rounded-2xl rounded-bl-sm text-sm">
+                            <p>{msg.message}</p>
+                            <p className="text-[10px] opacity-60 mt-1">{formatMessageTime(msg.created_at)}</p>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
               <div ref={messagesEndRef} />
             </div>
 

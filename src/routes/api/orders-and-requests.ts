@@ -8,23 +8,29 @@ export const Route = createFileRoute("/api/orders-and-requests")({
       GET: async ({ request }: { request: Request }) => {
         try {
           const { env } = await import("cloudflare:workers");
-          const db = (env as unknown as { 
-            remeritona_bookings: D1Database 
+          const db = (env as unknown as {
+            remeritona_bookings: D1Database
           }).remeritona_bookings;
           if (!db) {
             return Response.json(
-              { error: "DB not available" }, 
+              { error: "DB not available" },
               { status: 500 }
             );
           }
           const token = extractToken(request);
           if (!(await validateAdminToken(db, token))) {
             return Response.json(
-              { error: "Unauthorized" }, 
+              { error: "Unauthorized" },
               { status: 401 }
             );
           }
-          const diningRows = await db.prepare(`
+
+          const url = new URL(request.url);
+          const status = url.searchParams.get("status");
+          const excludeArchived = url.searchParams.get("exclude_archived") === "true";
+          const room = url.searchParams.get("room");
+
+          let diningQuery = `
             SELECT
               CAST(id AS TEXT) as id,
               room_number,
@@ -37,9 +43,8 @@ export const Route = createFileRoute("/api/orders-and-requests")({
               'dining' as type
             FROM room_orders
             WHERE hotel_id = 'remeritona'
-            ORDER BY created_at DESC
-          `).all();
-          const serviceRows = await db.prepare(`
+          `;
+          let serviceQuery = `
             SELECT
               id,
               room_number,
@@ -51,19 +56,46 @@ export const Route = createFileRoute("/api/orders-and-requests")({
               created_at,
               'service' as type
             FROM guest_requests
-            ORDER BY created_at DESC
-          `).all();
+            WHERE hotel_id = 'remeritona'
+          `;
+
+          const params: any[] = [];
+
+          if (status) {
+            diningQuery += ` AND status = ?`;
+            serviceQuery += ` AND status = ?`;
+            params.push(status);
+          }
+
+          if (excludeArchived) {
+            diningQuery += ` AND status != 'archived'`;
+            serviceQuery += ` AND status != 'archived'`;
+          }
+
+          if (room) {
+            diningQuery += ` AND room_number = ?`;
+            serviceQuery += ` AND room_number = ?`;
+            params.push(room);
+          }
+
+          diningQuery += ` ORDER BY created_at DESC`;
+          serviceQuery += ` ORDER BY created_at DESC`;
+
+          const diningRows = await db.prepare(diningQuery).bind(...params).all();
+          const serviceRows = await db.prepare(serviceQuery).bind(...params).all();
+
           const combined = [
             ...(diningRows.results || []),
             ...(serviceRows.results || []),
           ].sort((a: any, b: any) =>
-            new Date(b.created_at).getTime() - 
+            new Date(b.created_at).getTime() -
             new Date(a.created_at).getTime()
           );
+
           return Response.json({ results: combined });
         } catch (error) {
           return Response.json(
-            { error: String(error) }, 
+            { error: String(error) },
             { status: 500 }
           );
         }

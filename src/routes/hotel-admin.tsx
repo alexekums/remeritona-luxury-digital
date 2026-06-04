@@ -8,8 +8,6 @@ import {
 import { OrdersRequestsView } from "@/components/OrdersRequestsView";
 import { SpaManagementView } from "@/components/SpaManagementView";
 import { MenuManagementView } from "@/components/MenuManagementView";
-import { FloatingChatWidget } from "@/components/FloatingChatWidget";
-import { ChatWidgetProvider, useChatWidget } from "@/contexts/ChatWidgetContext";
 import { fetchOrdersAndRequests, patchItemStatus } from "@/lib/orders-api-client";
 import {
   formatOrderItemsSummary,
@@ -23,7 +21,7 @@ import {
   LogOut, Moon, Sun, Users, Hotel, TrendingUp,
   CheckCircle, XCircle, Clock, Search, RefreshCw,
   BedDouble, Sparkles, AlertCircle, ChevronDown, ChevronRight, X,
-  LayoutDashboard, Calendar, Plus, Menu, Bell, DollarSign, History, BarChart3
+  LayoutDashboard, Calendar, Plus, Menu, Bell, MessageCircle, DollarSign, History, BarChart3
 } from "lucide-react";
 import logo from "@/assets/logo.png";
 
@@ -42,6 +40,7 @@ const ROOM_STATUSES = [
   { value: "vacant_dirty", label: "Vacant — Dirty", color: "#f59e0b" },
   { value: "occupied", label: "Occupied", color: "#ef4444" },
   { value: "maintenance", label: "Maintenance", color: "#8b5cf6" },
+  { value: "reserved", label: "Reserved", color: "#a855f7" },
 ];
 
 // Room type display order and labels
@@ -208,60 +207,6 @@ const PMS_ROUTE_MAP: Partial<Record<AdminTab, string>> = {
   "menu-management": "/menu-management",
 };
 
-function GuestMessagesSidebarItem({
-  colors,
-  sidebarExpanded,
-}: {
-  colors: { gold: string; textMuted: string; border: string };
-  sidebarExpanded: boolean;
-}) {
-  const { totalUnread, openChat } = useChatWidget();
-  return (
-    <button
-      onClick={openChat}
-      style={{
-        background: "none",
-        border: "none",
-        cursor: "pointer",
-        padding: "8px 12px",
-        width: "100%",
-        display: "flex",
-        alignItems: "center",
-        gap: 8,
-        color: colors.textMuted,
-        fontSize: 12,
-        fontFamily: "Georgia, serif",
-      }}
-    >
-      <span style={{ fontSize: 16, lineHeight: 1 }}>💬</span>
-      {sidebarExpanded && (
-        <span style={{ display: "flex", alignItems: "center", gap: 6, flex: 1 }}>
-          Guest Messages
-          {totalUnread > 0 && (
-            <span
-              style={{
-                background: colors.gold,
-                color: "#0a0a0a",
-                fontSize: 9,
-                fontWeight: 700,
-                borderRadius: 10,
-                minWidth: 18,
-                height: 18,
-                display: "inline-flex",
-                alignItems: "center",
-                justifyContent: "center",
-                padding: "0 5px",
-              }}
-            >
-              {totalUnread > 99 ? "99+" : totalUnread}
-            </span>
-          )}
-        </span>
-      )}
-    </button>
-  );
-}
-
 export function AdminPage({ initialTab }: { initialTab?: AdminTab } = {}) {
   const router = useRouter();
   const [theme, setTheme] = useState<"dark" | "light">("dark");
@@ -307,7 +252,7 @@ export function AdminPage({ initialTab }: { initialTab?: AdminTab } = {}) {
   const [newStaffFullName, setNewStaffFullName] = useState("");
   const [newStaffUsername, setNewStaffUsername] = useState("");
   const [newStaffPassword, setNewStaffPassword] = useState("");
-  const [newStaffRole, setNewStaffRole] = useState<"front-desk" | "accountant" | "manager" | "admin">("front-desk");
+  const [newStaffRole, setNewStaffRole] = useState<"front-desk" | "accountant" | "manager" | "admin" | "kitchen" | "housekeeping" | "spa">("front-desk");
   const [newStaffLoading, setNewStaffLoading] = useState(false);
   const [staffList, setStaffList] = useState<any[]>([]);
   const [staffListLoading, setStaffListLoading] = useState(false);
@@ -407,6 +352,9 @@ export function AdminPage({ initialTab }: { initialTab?: AdminTab } = {}) {
   // Room status tab filter
   const [roomStatusFilter, setRoomStatusFilter] = useState<string | null>(null);
 
+  // Reserve modal state
+  const [reserveModal, setReserveModal] = useState<{ roomNumber: string; guestName: string; reservedUntil: string; reservedRef: string } | null>(null);
+
   // Room Rates state
   const [roomRates, setRoomRates] = useState<any[]>([]);
   const [roomRatesLoading, setRoomRatesLoading] = useState(false);
@@ -432,6 +380,12 @@ export function AdminPage({ initialTab }: { initialTab?: AdminTab } = {}) {
   const [messageUnreadCount, setMessageUnreadCount] = useState(0);
   const messageLastCountRef = useRef<number>(0);
   const messageIsFirstPollRef = useRef<boolean>(true);
+
+  // Booking notification state
+  const [bookingPendingCount, setBookingPendingCount] = useState(0);
+  const [bookingNotifications, setBookingNotifications] = useState<any[]>([]);
+  const lastBookingCountRef = useRef<number>(0);
+  const isFirstBookingPollRef = useRef<boolean>(true);
 
   const isDark = theme === "dark";
 
@@ -630,6 +584,76 @@ export function AdminPage({ initialTab }: { initialTab?: AdminTab } = {}) {
 
     fetchMessageNotifications();
     const interval = setInterval(fetchMessageNotifications, 4000);
+    return () => clearInterval(interval);
+  }, []);
+
+  // Poll for new bookings
+  useEffect(() => {
+    const checkNewBookings = async () => {
+      try {
+        const adminToken =
+          localStorage.getItem(TOKEN_KEY) ||
+          localStorage.getItem("admin_token") ||
+          sessionStorage.getItem("admin_token");
+        if (!adminToken) return;
+
+        const res = await fetch("/api/new-bookings-count", {
+          headers: { "X-Admin-Token": adminToken },
+        });
+        if (!res.ok) return;
+
+        const data = await res.json() as { count: number; latest?: any };
+        const count = data.count ?? 0;
+
+        setBookingPendingCount(count);
+
+        // Fetch recent bookings for the bell panel
+        const bookingsRes = await fetch("/api/bookings-recent", {
+          headers: { "X-Admin-Token": adminToken },
+        });
+        if (bookingsRes.ok) {
+          const bookingsData = await bookingsRes.json() as { results: any[] };
+          setBookingNotifications((bookingsData.results || []).map((b: any) => ({
+            ...b,
+            type: "booking",
+            id: b.reference,
+          })));
+        }
+
+        if (!isFirstBookingPollRef.current && count > lastBookingCountRef.current) {
+          const booking = data.latest;
+
+          // Play ping sound (slightly different pitch)
+          try {
+            const ctx = new (window.AudioContext ||
+              (window as any).webkitAudioContext)();
+            const osc = ctx.createOscillator();
+            const gain = ctx.createGain();
+            osc.connect(gain);
+            gain.connect(ctx.destination);
+            osc.frequency.value = 660;
+            osc.type = "sine";
+            gain.gain.setValueAtTime(0.3, ctx.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.6);
+            osc.start(ctx.currentTime);
+            osc.stop(ctx.currentTime + 0.6);
+          } catch (e) {}
+
+          // Toast notification
+          showToast(
+            `New booking: ${booking?.guest_name ?? 'Guest'} — ${booking?.room_name ?? ''}`
+          );
+        }
+
+        lastBookingCountRef.current = count;
+        isFirstBookingPollRef.current = false;
+      } catch (e) {
+        console.error("Booking poll error:", e);
+      }
+    };
+
+    checkNewBookings();
+    const interval = setInterval(checkNewBookings, 5000);
     return () => clearInterval(interval);
   }, []);
 
@@ -1061,7 +1085,10 @@ export function AdminPage({ initialTab }: { initialTab?: AdminTab } = {}) {
     }
   };
 
-  const bellPanelItems = notificationItems.slice(0, 8);
+  const bellPanelItems = [
+    ...bookingNotifications.slice(0, 3),
+    ...notificationItems.slice(0, 5)
+  ].slice(0, 8);
 
   const handleLogout = () => {
     localStorage.removeItem(TOKEN_KEY);
@@ -1073,15 +1100,36 @@ export function AdminPage({ initialTab }: { initialTab?: AdminTab } = {}) {
     setPin("");
   };
 
-  const handleRoomStatus = async (roomNumber: string, status: string) => {
+  const handleRoomStatus = async (roomNumber: string, status: string, reservedData?: { reserved_for: string; reserved_until: string; reserved_ref: string }) => {
     if (!token) return;
     setActionLoading(roomNumber);
     try {
-      await updateRoomStatus({ data: { token, roomNumber, status, updatedBy: staffName } });
+      await updateRoomStatus({ data: { token, roomNumber, status, updatedBy: staffName, ...reservedData } });
       showToast("Room status updated");
       await loadStats(token);
     } catch {
       showToast("Failed to update room", "error");
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  const handleReserveRoom = async () => {
+    if (!token || !reserveModal) return;
+    setActionLoading(reserveModal.roomNumber);
+    try {
+      await handleRoomStatus(
+        reserveModal.roomNumber,
+        "reserved",
+        {
+          reserved_for: reserveModal.guestName,
+          reserved_until: reserveModal.reservedUntil,
+          reserved_ref: reserveModal.reservedRef
+        }
+      );
+      setReserveModal(null);
+    } catch {
+      showToast("Failed to reserve room", "error");
     } finally {
       setActionLoading(null);
     }
@@ -1512,7 +1560,6 @@ export function AdminPage({ initialTab }: { initialTab?: AdminTab } = {}) {
 
   // ==================== MAIN DASHBOARD ====================
   return (
-    <ChatWidgetProvider>
     <div style={{ minHeight: "100vh", background: colors.bg, fontFamily: "Georgia, serif", color: colors.text }}>
 
       {/* Toast */}
@@ -1562,10 +1609,15 @@ export function AdminPage({ initialTab }: { initialTab?: AdminTab } = {}) {
 
           {bellPanelItems.map((item: any) => {
             const itemKey = `${item.type}-${item.id}`;
+            const isBooking = item.type === "booking";
             const summary =
               item.type === "dining"
                 ? formatOrderItemsSummary(item.items)
-                : getRequestSummary(item);
+                : item.type === "service"
+                ? getRequestSummary(item)
+                : isBooking
+                ? item.room_name || "Room"
+                : "";
             const isHovered = hoveredNotifId === itemKey;
             return (
               <div
@@ -1579,24 +1631,40 @@ export function AdminPage({ initialTab }: { initialTab?: AdminTab } = {}) {
                 }}
               >
                 <div style={{ display: "flex", gap: 8, alignItems: "flex-start" }}>
-                  <span style={{ fontSize: 16, lineHeight: 1 }}>{item.type === "dining" ? "🍽️" : "🛎️"}</span>
+                  <span style={{ fontSize: 16, lineHeight: 1 }}>
+                    {isBooking ? "📅" : item.type === "dining" ? "🍽️" : "🛎️"}
+                  </span>
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <p style={{ margin: "0 0 4px", fontSize: 13, color: colors.text, fontWeight: 600 }}>
-                      Room {item.room_number} — {summary.length > 48 ? `${summary.slice(0, 48)}…` : summary}
+                      {isBooking
+                        ? `${item.guest_name} — ${summary}`
+                        : `Room ${item.room_number} — ${summary.length > 48 ? `${summary.slice(0, 48)}…` : summary}`
+                      }
                     </p>
                     <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
                       <span style={{ fontSize: 10, color: colors.textMuted }}>{timeAgo(item.created_at)}</span>
-                      <span style={{
-                        fontSize: 9, padding: "2px 6px",
-                        background: getStatusBadgeColor(item.status),
-                        color: "#fff", textTransform: "uppercase", letterSpacing: "0.08em",
-                      }}>
-                        {item.status}
-                      </span>
+                      {!isBooking && (
+                        <span style={{
+                          fontSize: 9, padding: "2px 6px",
+                          background: getStatusBadgeColor(item.status),
+                          color: "#fff", textTransform: "uppercase", letterSpacing: "0.08em",
+                        }}>
+                          {item.status}
+                        </span>
+                      )}
+                      {isBooking && (
+                        <span style={{
+                          fontSize: 9, padding: "2px 6px",
+                          background: "#c9a96e",
+                          color: "#0a0a0a", textTransform: "uppercase", letterSpacing: "0.08em",
+                        }}>
+                          New Booking
+                        </span>
+                      )}
                     </div>
                   </div>
                 </div>
-                {isHovered && (item.status === "pending" || item.status === "accepted") && (
+                {!isBooking && isHovered && (item.status === "pending" || item.status === "accepted") && (
                   <div style={{ display: "flex", gap: 6, marginTop: 8, justifyContent: "flex-end" }}>
                     {item.status === "pending" && (
                       <button
@@ -1673,13 +1741,27 @@ export function AdminPage({ initialTab }: { initialTab?: AdminTab } = {}) {
         <div style={{
           padding: "16px", borderBottom: `1px solid ${colors.border}`,
           display: "flex", alignItems: "center", justifyContent: "space-between",
-          height: 64
+          height: 64, flexShrink: 0
         }}>
-          {sidebarExpanded && (
-            <span style={{ color: colors.gold, fontSize: 12, fontWeight: 700, letterSpacing: "0.2em" }}>
-              REMERITONA
-            </span>
-          )}
+          {/* LEFT: hamburger only */}
+          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+            <button onClick={() => {
+              setSidebarExpanded(!sidebarExpanded);
+              if (window.innerWidth < 768) setMobileSidebarOpen(false);
+            }} style={{
+              background: "none", border: "none", cursor: "pointer",
+              color: colors.textMuted, padding: 4, position: "relative"
+            }}>
+              <Menu size={18} />
+            </button>
+            {sidebarExpanded && (
+              <span style={{ color: colors.gold, fontSize: 12, fontWeight: 700, letterSpacing: "0.2em" }}>
+                REMERITONA
+              </span>
+            )}
+          </div>
+
+          {/* RIGHT: bells always here */}
           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
             <button onClick={() => setNotificationsOpen(!notificationsOpen)} style={{
               background: "none", border: "none", cursor: "pointer",
@@ -1702,7 +1784,7 @@ export function AdminPage({ initialTab }: { initialTab?: AdminTab } = {}) {
               color: colors.textMuted, padding: 4, position: "relative",
               textDecoration: "none"
             }}>
-              <Bell size={18} />
+              <MessageCircle size={18} />
               {messageUnreadCount > 0 && (
                 <span style={{
                   position: "absolute", top: 0, right: 0,
@@ -1714,136 +1796,137 @@ export function AdminPage({ initialTab }: { initialTab?: AdminTab } = {}) {
                 </span>
               )}
             </Link>
-            <button onClick={() => {
-              setSidebarExpanded(!sidebarExpanded);
-              if (window.innerWidth < 768) setMobileSidebarOpen(false);
-            }} style={{
-              background: "none", border: "none", cursor: "pointer",
-              color: colors.textMuted, padding: 4
-            }}>
-              {sidebarExpanded ? <Menu size={18} /> : <Menu size={18} />}
-            </button>
           </div>
         </div>
 
         {/* Navigation Groups */}
         <div style={{ flex: 1, overflowY: "auto", padding: "8px 0" }}>
           {/* FRONT DESK Group */}
-          <div>
-            <button onClick={() => {
-              const newGroups = new Set(expandedGroups);
-              if (newGroups.has("front-desk")) newGroups.delete("front-desk");
-              else newGroups.add("front-desk");
-              setExpandedGroups(newGroups);
-            }} style={{
-              background: "none", border: "none", cursor: "pointer",
-              padding: "8px 12px", width: "100%",
-              display: "flex", alignItems: "center", justifyContent: "space-between",
-              color: colors.textMuted, fontSize: 10, letterSpacing: "0.15em",
-              textTransform: "uppercase"
-            }}>
-              <span style={{ display: sidebarExpanded ? "inline" : "none" }}>Front Desk</span>
-              {expandedGroups.has("front-desk") ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
-            </button>
-            {expandedGroups.has("front-desk") && (
-              <div style={{ marginLeft: 8 }}>
-                {/* Dashboard */}
-                <button onClick={() => navigateToTab("dashboard")} style={{
-                  background: "none", border: "none", cursor: "pointer",
-                  padding: "8px 12px", width: "100%",
-                  display: "flex", alignItems: "center", gap: 8,
-                  color: activeTab === "dashboard" ? colors.gold : colors.textMuted,
-                  fontSize: 12, borderLeft: activeTab === "dashboard" ? `3px solid ${colors.gold}` : "3px solid transparent",
-                  paddingLeft: activeTab === "dashboard" ? 9 : 12
-                }}>
-                  <LayoutDashboard size={16} />
-                  {sidebarExpanded && <span>Dashboard</span>}
-                </button>
-                {/* All Bookings */}
-                <button onClick={() => navigateToTab("bookings")} style={{
-                  background: "none", border: "none", cursor: "pointer",
-                  padding: "8px 12px", width: "100%",
-                  display: "flex", alignItems: "center", gap: 8,
-                  color: activeTab === "bookings" ? colors.gold : colors.textMuted,
-                  fontSize: 12, borderLeft: activeTab === "bookings" ? `3px solid ${colors.gold}` : "3px solid transparent",
-                  paddingLeft: activeTab === "bookings" ? 9 : 12
-                }}>
-                  <Calendar size={16} />
-                  {sidebarExpanded && <span>All Bookings</span>}
-                </button>
-                {/* Guest History */}
-                <button onClick={() => navigateToTab("guest-history")} style={{
-                  background: "none", border: "none", cursor: "pointer",
-                  padding: "8px 12px", width: "100%",
-                  display: "flex", alignItems: "center", gap: 8,
-                  color: activeTab === "guest-history" ? colors.gold : colors.textMuted,
-                  fontSize: 12, borderLeft: activeTab === "guest-history" ? `3px solid ${colors.gold}` : "3px solid transparent",
-                  paddingLeft: activeTab === "guest-history" ? 9 : 12
-                }}>
-                  <History size={16} />
-                  {sidebarExpanded && <span>Guest History</span>}
-                </button>
-                {/* Walk-in (not for accountant) */}
-                {staffRole !== "accountant" && (
-                  <button onClick={() => {
-                    const t = new Date().toISOString().split("T")[0];
-                    const t2 = new Date(Date.now()+86400000).toISOString().split("T")[0];
-                    setWalkIn({ name: "", email: "", phone: "", roomType: "classic", numRooms: 1, checkIn: t, checkOut: t2, paymentMethod: "cash", notes: "" });
-                    setShowWalkIn(true);
-                    if (window.innerWidth < 768) setMobileSidebarOpen(false);
-                  }} style={{
-                    background: "none", border: "none", cursor: "pointer",
-                    padding: "8px 12px", width: "100%",
-                    display: "flex", alignItems: "center", gap: 8,
-                    color: colors.textMuted, fontSize: 12
-                  }}>
-                    <Plus size={16} />
-                    {sidebarExpanded && <span>Walk-in</span>}
-                  </button>
-                )}
-                {/* Orders & Requests (not for accountant) */}
-                {staffRole !== "accountant" && (
-                  <Link
-                    to="/orders-requests"
-                    onClick={() => navigateToTab("orders-requests")}
-                    style={{
-                      display: "flex", alignItems: "center", gap: 8,
+          {staffRole !== "spa" && (
+            <div>
+              <button onClick={() => {
+                const newGroups = new Set(expandedGroups);
+                if (newGroups.has("front-desk")) newGroups.delete("front-desk");
+                else newGroups.add("front-desk");
+                setExpandedGroups(newGroups);
+              }} style={{
+                background: "none", border: "none", cursor: "pointer",
+                padding: "8px 12px", width: "100%",
+                display: "flex", alignItems: "center", justifyContent: "space-between",
+                color: colors.textMuted, fontSize: 10, letterSpacing: "0.15em",
+                textTransform: "uppercase"
+              }}>
+                <span style={{ display: sidebarExpanded ? "inline" : "none" }}>Front Desk</span>
+                {expandedGroups.has("front-desk") ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+              </button>
+              {expandedGroups.has("front-desk") && (
+                <div style={{ marginLeft: 8 }}>
+                  {/* Dashboard (admin, manager, front-desk only) */}
+                  {(staffRole === "admin" || staffRole === "manager" || staffRole === "front-desk") && (
+                    <button onClick={() => navigateToTab("dashboard")} style={{
+                      background: "none", border: "none", cursor: "pointer",
                       padding: "8px 12px", width: "100%",
-                      textDecoration: "none",
-                      color: isOrdersPage ? colors.gold : colors.textMuted,
-                      fontSize: 12,
-                      borderLeft: isOrdersPage ? `3px solid ${colors.gold}` : "3px solid transparent",
-                      paddingLeft: isOrdersPage ? 9 : 12,
-                      boxSizing: "border-box",
-                    }}
-                  >
-                    <span style={{ fontSize: 16, lineHeight: 1 }}>📋</span>
-                    {sidebarExpanded && <span>Orders & Requests</span>}
-                  </Link>
-                )}
-                {/* Guest Messages */}
-                <Link
-                  to="/chat-management"
-                  style={{
-                    display: "flex", alignItems: "center", gap: 8,
-                    padding: "8px 12px", width: "100%",
-                    textDecoration: "none",
-                    color: colors.textMuted,
-                    fontSize: 12,
-                    borderLeft: "3px solid transparent",
-                    paddingLeft: 12,
-                    boxSizing: "border-box",
-                  }}
-                >
-                  <span style={{ fontSize: 16, lineHeight: 1 }}>💬</span>
-                  {sidebarExpanded && <span>Guest Messages</span>}
-                </Link>
-              </div>
-            )}
-          </div>
+                      display: "flex", alignItems: "center", gap: 8,
+                      color: activeTab === "dashboard" ? colors.gold : colors.textMuted,
+                      fontSize: 12, borderLeft: activeTab === "dashboard" ? `3px solid ${colors.gold}` : "3px solid transparent",
+                      paddingLeft: activeTab === "dashboard" ? 9 : 12
+                    }}>
+                      <LayoutDashboard size={16} />
+                      {sidebarExpanded && <span>Dashboard</span>}
+                    </button>
+                  )}
+                  {/* All Bookings (admin, manager, front-desk only) */}
+                  {(staffRole === "admin" || staffRole === "manager" || staffRole === "front-desk") && (
+                    <button onClick={() => navigateToTab("bookings")} style={{
+                      background: "none", border: "none", cursor: "pointer",
+                      padding: "8px 12px", width: "100%",
+                      display: "flex", alignItems: "center", gap: 8,
+                      color: activeTab === "bookings" ? colors.gold : colors.textMuted,
+                      fontSize: 12, borderLeft: activeTab === "bookings" ? `3px solid ${colors.gold}` : "3px solid transparent",
+                      paddingLeft: activeTab === "bookings" ? 9 : 12
+                    }}>
+                      <Calendar size={16} />
+                      {sidebarExpanded && <span>All Bookings</span>}
+                    </button>
+                  )}
+                  {/* Guest History (admin, manager, front-desk only) */}
+                  {(staffRole === "admin" || staffRole === "manager" || staffRole === "front-desk") && (
+                    <button onClick={() => navigateToTab("guest-history")} style={{
+                      background: "none", border: "none", cursor: "pointer",
+                      padding: "8px 12px", width: "100%",
+                      display: "flex", alignItems: "center", gap: 8,
+                      color: activeTab === "guest-history" ? colors.gold : colors.textMuted,
+                      fontSize: 12, borderLeft: activeTab === "guest-history" ? `3px solid ${colors.gold}` : "3px solid transparent",
+                      paddingLeft: activeTab === "guest-history" ? 9 : 12
+                    }}>
+                      <History size={16} />
+                      {sidebarExpanded && <span>Guest History</span>}
+                    </button>
+                  )}
+                  {/* Walk-in (admin, manager, front-desk only) */}
+                  {(staffRole === "admin" || staffRole === "manager" || staffRole === "front-desk") && (
+                    <button onClick={() => {
+                      const t = new Date().toISOString().split("T")[0];
+                      const t2 = new Date(Date.now()+86400000).toISOString().split("T")[0];
+                      setWalkIn({ name: "", email: "", phone: "", roomType: "classic", numRooms: 1, checkIn: t, checkOut: t2, paymentMethod: "cash", notes: "" });
+                      setShowWalkIn(true);
+                      if (window.innerWidth < 768) setMobileSidebarOpen(false);
+                    }} style={{
+                      background: "none", border: "none", cursor: "pointer",
+                      padding: "8px 12px", width: "100%",
+                      display: "flex", alignItems: "center", gap: 8,
+                      color: colors.textMuted, fontSize: 12
+                    }}>
+                      <Plus size={16} />
+                      {sidebarExpanded && <span>Walk-in</span>}
+                    </button>
+                  )}
+                  {/* Orders & Requests (kitchen, housekeeping, front-desk, admin, manager) */}
+                  {staffRole !== "accountant" && staffRole !== "spa" && (
+                    <Link
+                      to="/orders-requests"
+                      onClick={() => navigateToTab("orders-requests")}
+                      style={{
+                        display: "flex", alignItems: "center", gap: 8,
+                        padding: "8px 12px", width: "100%",
+                        textDecoration: "none",
+                        color: isOrdersPage ? colors.gold : colors.textMuted,
+                        fontSize: 12,
+                        borderLeft: isOrdersPage ? `3px solid ${colors.gold}` : "3px solid transparent",
+                        paddingLeft: isOrdersPage ? 9 : 12,
+                        boxSizing: "border-box",
+                      }}
+                    >
+                      <span style={{ fontSize: 16, lineHeight: 1 }}>📋</span>
+                      {sidebarExpanded && <span>Orders & Requests</span>}
+                    </Link>
+                  )}
+                  {/* Guest Messages (not for accountant, kitchen, housekeeping, spa) */}
+                  {staffRole !== "accountant" && staffRole !== "kitchen" && staffRole !== "housekeeping" && staffRole !== "spa" && (
+                    <Link
+                      to="/chat-management"
+                      style={{
+                        display: "flex", alignItems: "center", gap: 8,
+                        padding: "8px 12px", width: "100%",
+                        textDecoration: "none",
+                        color: colors.textMuted,
+                        fontSize: 12,
+                        borderLeft: "3px solid transparent",
+                        paddingLeft: 12,
+                        boxSizing: "border-box",
+                      }}
+                    >
+                      <span style={{ fontSize: 16, lineHeight: 1 }}>💬</span>
+                      {sidebarExpanded && <span>Guest Messages</span>}
+                    </Link>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
 
-          {/* ROOMS Group (hidden from accountant) */}
-          {staffRole !== "accountant" && (
+          {/* ROOMS Group (housekeeping, admin, manager, front-desk only) */}
+          {staffRole !== "accountant" && staffRole !== "kitchen" && staffRole !== "spa" && (
             <div>
               <button onClick={() => {
                 const newGroups = new Set(expandedGroups);
@@ -1873,24 +1956,27 @@ export function AdminPage({ initialTab }: { initialTab?: AdminTab } = {}) {
                     <BedDouble size={16} />
                     {sidebarExpanded && <span>Room Status</span>}
                   </button>
-                  <button onClick={() => navigateToTab("occupancy-forecast")} style={{
-                    background: "none", border: "none", cursor: "pointer",
-                    padding: "8px 12px", width: "100%",
-                    display: "flex", alignItems: "center", gap: 8,
-                    color: activeTab === "occupancy-forecast" ? colors.gold : colors.textMuted,
-                    fontSize: 12, borderLeft: activeTab === "occupancy-forecast" ? `3px solid ${colors.gold}` : "3px solid transparent",
-                    paddingLeft: activeTab === "occupancy-forecast" ? 9 : 12
-                  }}>
-                    <BarChart3 size={16} />
-                    {sidebarExpanded && <span>Occupancy Forecast</span>}
-                  </button>
+                  {/* Occupancy Forecast (admin, manager, front-desk only) */}
+                  {staffRole !== "housekeeping" && (
+                    <button onClick={() => navigateToTab("occupancy-forecast")} style={{
+                      background: "none", border: "none", cursor: "pointer",
+                      padding: "8px 12px", width: "100%",
+                      display: "flex", alignItems: "center", gap: 8,
+                      color: activeTab === "occupancy-forecast" ? colors.gold : colors.textMuted,
+                      fontSize: 12, borderLeft: activeTab === "occupancy-forecast" ? `3px solid ${colors.gold}` : "3px solid transparent",
+                      paddingLeft: activeTab === "occupancy-forecast" ? 9 : 12
+                    }}>
+                      <BarChart3 size={16} />
+                      {sidebarExpanded && <span>Occupancy Forecast</span>}
+                    </button>
+                  )}
                 </div>
               )}
             </div>
           )}
 
-          {/* SERVICES Group */}
-          {(staffRole !== "accountant") && (
+          {/* SERVICES Group (spa, admin, manager, front-desk only) */}
+          {staffRole !== "accountant" && staffRole !== "kitchen" && staffRole !== "housekeeping" && (
             <div>
               <button onClick={() => {
                 const newGroups = new Set(expandedGroups);
@@ -1909,25 +1995,23 @@ export function AdminPage({ initialTab }: { initialTab?: AdminTab } = {}) {
               </button>
               {expandedGroups.has("services") && (
                 <div style={{ marginLeft: 8 }}>
-                  {staffRole !== "accountant" && (
-                    <Link
-                      to="/spa-management"
-                      onClick={() => navigateToTab("spa-management")}
-                      style={{
-                        display: "flex", alignItems: "center", gap: 8,
-                        padding: "8px 12px", width: "100%",
-                        textDecoration: "none",
-                        color: isSpaPage ? colors.gold : colors.textMuted,
-                        fontSize: 12,
-                        borderLeft: isSpaPage ? `3px solid ${colors.gold}` : "3px solid transparent",
-                        paddingLeft: isSpaPage ? 9 : 12,
-                        boxSizing: "border-box",
-                      }}
-                    >
-                      <span style={{ fontSize: 16, lineHeight: 1 }}>💆</span>
-                      {sidebarExpanded && <span>Spa & Wellness</span>}
-                    </Link>
-                  )}
+                  <Link
+                    to="/spa-management"
+                    onClick={() => navigateToTab("spa-management")}
+                    style={{
+                      display: "flex", alignItems: "center", gap: 8,
+                      padding: "8px 12px", width: "100%",
+                      textDecoration: "none",
+                      color: isSpaPage ? colors.gold : colors.textMuted,
+                      fontSize: 12,
+                      borderLeft: isSpaPage ? `3px solid ${colors.gold}` : "3px solid transparent",
+                      paddingLeft: isSpaPage ? 9 : 12,
+                      boxSizing: "border-box",
+                    }}
+                  >
+                    <span style={{ fontSize: 16, lineHeight: 1 }}>💆</span>
+                    {sidebarExpanded && <span>Spa & Wellness</span>}
+                  </Link>
                   {canManageMenu && (
                     <Link
                       to="/menu-management"
@@ -2081,7 +2165,7 @@ export function AdminPage({ initialTab }: { initialTab?: AdminTab } = {}) {
 
         {/* ===== ORDERS & REQUESTS ===== */}
         {isOrdersPage && staffRole !== "accountant" && token && (
-          <OrdersRequestsView token={token} colors={colors} onToast={showToast} />
+          <OrdersRequestsView token={token} colors={colors} onToast={showToast} staffRole={staffRole} />
         )}
 
         {isOrdersPage && staffRole === "accountant" && (
@@ -2189,6 +2273,9 @@ export function AdminPage({ initialTab }: { initialTab?: AdminTab } = {}) {
                     >
                       <option value="front-desk">Front Desk</option>
                       <option value="accountant">Accountant</option>
+                      <option value="kitchen">Kitchen</option>
+                      <option value="housekeeping">Housekeeping</option>
+                      <option value="spa">Spa</option>
                       {staffRole === "admin" && <option value="manager">Manager</option>}
                       {staffRole === "admin" && <option value="admin">Admin</option>}
                     </select>
@@ -2224,7 +2311,10 @@ export function AdminPage({ initialTab }: { initialTab?: AdminTab } = {}) {
                       "front-desk": "#3b82f6",
                       "accountant": "#8b5cf6",
                       "manager": "#f59e0b",
-                      "admin": "#ef4444"
+                      "admin": "#ef4444",
+                      "kitchen": "#f97316",
+                      "housekeeping": "#14b8a6",
+                      "spa": "#ec4899",
                     };
                     return (
                       <div
@@ -2759,7 +2849,7 @@ export function AdminPage({ initialTab }: { initialTab?: AdminTab } = {}) {
                       return (
                         <div key={room.room_slug} style={{
                           background: colors.surface,
-                          border: `1px solid ${room.status === "occupied" ? "#ef444433" : room.status === "maintenance" ? "#8b5cf633" : colors.border}`,
+                          border: `1px solid ${room.status === "occupied" ? "#ef444433" : room.status === "maintenance" ? "#8b5cf633" : room.status === "reserved" ? "#a855f733" : colors.border}`,
                           padding: 14
                         }}>
                           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 10 }}>
@@ -2822,9 +2912,51 @@ export function AdminPage({ initialTab }: { initialTab?: AdminTab } = {}) {
                                   }}>Maintenance</button>
                               </div>
                             </div>
+                          ) : room.status === "reserved" ? (
+                            <div style={{
+                              background: "#a855f711", border: "1px solid #a855f766",
+                              padding: "8px", fontSize: 9, color: "#a855f7",
+                              lineHeight: 1.6
+                            }}>
+                              <div style={{ marginBottom: 4 }}>
+                                <span style={{ color: "#a855f7", fontSize: 9, letterSpacing: "0.06em" }}>
+                                  📅 Reserved for:
+                                </span><br />
+                                <span style={{ color: colors.text, fontSize: 9, fontWeight: 600 }}>
+                                  {room.reserved_for || "Unknown"}
+                                </span>
+                              </div>
+                              <div style={{ marginBottom: 4 }}>
+                                <span style={{ color: "#a855f7", fontSize: 9, letterSpacing: "0.06em" }}>
+                                  Until:
+                                </span><br />
+                                <span style={{ color: colors.text, fontSize: 9 }}>
+                                  {room.reserved_until ? new Date(room.reserved_until).toLocaleDateString() : "Not set"}
+                                </span>
+                              </div>
+                              {room.reserved_ref && (
+                                <div style={{ marginBottom: 4 }}>
+                                  <span style={{ color: "#a855f7", fontSize: 9, letterSpacing: "0.06em" }}>
+                                    Ref:
+                                  </span><br />
+                                  <span style={{ color: colors.text, fontSize: 9 }}>
+                                    {room.reserved_ref}
+                                  </span>
+                                </div>
+                              )}
+                              <div style={{ marginTop: 6, textAlign: "center" }}>
+                                <button onClick={() => handleRoomStatus(room.room_number, "vacant_clean")}
+                                  disabled={actionLoading === room.room_number}
+                                  style={{
+                                    background: "none", border: "1px solid #22c55e", color: "#22c55e",
+                                    padding: "3px 8px", fontSize: 8, cursor: "pointer",
+                                    letterSpacing: "0.06em", textTransform: "uppercase"
+                                  }}>Clear Reserve</button>
+                              </div>
+                            </div>
                           ) : (
                             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 5 }}>
-                              {ROOM_STATUSES.map(s => (
+                              {ROOM_STATUSES.filter(s => s.value !== "reserved").map(s => (
                                 <button key={s.value} onClick={() => handleRoomStatus(room.room_number, s.value)}
                                   disabled={room.status === s.value || actionLoading === room.room_number}
                                   style={{
@@ -2838,6 +2970,16 @@ export function AdminPage({ initialTab }: { initialTab?: AdminTab } = {}) {
                                   {s.label}
                                 </button>
                               ))}
+                              <button onClick={() => setReserveModal({ roomNumber: room.room_number, guestName: "", reservedUntil: "", reservedRef: "" })}
+                                disabled={actionLoading === room.room_number}
+                                style={{
+                                  background: "none", border: "1px solid #a855f7", color: "#a855f7",
+                                  padding: "5px 4px", fontSize: 8, cursor: "pointer",
+                                  letterSpacing: "0.06em", textTransform: "uppercase",
+                                  opacity: actionLoading === room.room_number ? 0.5 : 1
+                                }}>
+                                Reserve
+                              </button>
                             </div>
                           )}
                         </div>
@@ -4225,9 +4367,92 @@ export function AdminPage({ initialTab }: { initialTab?: AdminTab } = {}) {
           </div>
         </div>
       )}
+
+      {/* ==================== RESERVE ROOM MODAL ==================== */}
+      {reserveModal && (
+        <div style={{
+          position: "fixed", inset: 0, background: "rgba(0,0,0,0.75)",
+          zIndex: 400, display: "flex", alignItems: "center", justifyContent: "center", padding: 20
+        }}>
+          <div style={{
+            background: colors.surface, border: `1px solid #a855f7`,
+            padding: 32, maxWidth: 400, width: "100%"
+          }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 24 }}>
+              <p style={{ color: colors.gold, fontSize: 11, letterSpacing: "0.3em", textTransform: "uppercase", margin: 0 }}>Reserve Room</p>
+              <button onClick={() => setReserveModal(null)} style={{ background: "none", border: "none", cursor: "pointer", color: colors.textMuted }}>
+                <X size={18} />
+              </button>
+            </div>
+            <div style={{ marginBottom: 16 }}>
+              <p style={{ margin: 0, fontSize: 13, color: colors.textMuted, marginBottom: 4 }}>Room Number</p>
+              <p style={{ margin: 0, fontSize: 16, color: colors.text, fontWeight: 600 }}>{reserveModal.roomNumber}</p>
+            </div>
+            <div style={{ marginBottom: 16 }}>
+              <label style={{ display: "block", color: colors.gold, fontSize: 11, letterSpacing: "0.2em", textTransform: "uppercase", marginBottom: 8 }}>
+                Guest Name
+              </label>
+              <input
+                type="text"
+                value={reserveModal.guestName}
+                onChange={e => setReserveModal({ ...reserveModal, guestName: e.target.value })}
+                placeholder="Enter guest name"
+                style={{
+                  width: "100%", background: colors.surface2, border: `1px solid ${colors.border}`,
+                  padding: "12px 16px", color: colors.text, fontSize: 14,
+                  fontFamily: "Georgia, serif", outline: "none", boxSizing: "border-box"
+                }}
+              />
+            </div>
+            <div style={{ marginBottom: 16 }}>
+              <label style={{ display: "block", color: colors.gold, fontSize: 11, letterSpacing: "0.2em", textTransform: "uppercase", marginBottom: 8 }}>
+                Reserved Until
+              </label>
+              <input
+                type="date"
+                value={reserveModal.reservedUntil}
+                onChange={e => setReserveModal({ ...reserveModal, reservedUntil: e.target.value })}
+                style={{
+                  width: "100%", background: colors.surface2, border: `1px solid ${colors.border}`,
+                  padding: "12px 16px", color: colors.text, fontSize: 14,
+                  fontFamily: "Georgia, serif", outline: "none", boxSizing: "border-box"
+                }}
+              />
+            </div>
+            <div style={{ marginBottom: 20 }}>
+              <label style={{ display: "block", color: colors.gold, fontSize: 11, letterSpacing: "0.2em", textTransform: "uppercase", marginBottom: 8 }}>
+                Booking Reference (Optional)
+              </label>
+              <input
+                type="text"
+                value={reserveModal.reservedRef}
+                onChange={e => setReserveModal({ ...reserveModal, reservedRef: e.target.value })}
+                placeholder="e.g. REF-12345"
+                style={{
+                  width: "100%", background: colors.surface2, border: `1px solid ${colors.border}`,
+                  padding: "12px 16px", color: colors.text, fontSize: 14,
+                  fontFamily: "Georgia, serif", outline: "none", boxSizing: "border-box"
+                }}
+              />
+            </div>
+            <div style={{ display: "flex", gap: 12, justifyContent: "flex-end" }}>
+              <button onClick={() => setReserveModal(null)} style={{
+                background: "none", border: `1px solid ${colors.border}`,
+                padding: "10px 20px", fontSize: 11, cursor: "pointer",
+                color: colors.textMuted, letterSpacing: "0.15em", textTransform: "uppercase",
+                fontFamily: "Georgia, serif"
+              }}>Cancel</button>
+              <button onClick={handleReserveRoom} disabled={!reserveModal.guestName || !reserveModal.reservedUntil} style={{
+                background: "#a855f7", color: "#fff", border: "none",
+                padding: "10px 20px", fontSize: 11, cursor: "pointer",
+                letterSpacing: "0.15em", textTransform: "uppercase", fontWeight: 700,
+                fontFamily: "Georgia, serif", opacity: (!reserveModal.guestName || !reserveModal.reservedUntil) ? 0.5 : 1
+              }}>Confirm Reserve</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
-    {token && <FloatingChatWidget token={token} colors={colors} isDark={isDark} />}
-    </ChatWidgetProvider>
   );
 }
 

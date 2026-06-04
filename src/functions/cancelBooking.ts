@@ -94,7 +94,7 @@ export const cancelBooking = createServerFn({ method: "POST" })
 
       // Send cancellation email to guest
       const mailerSend = new MailerSend({ apiKey: cfEnv.MAILERSEND_API_KEY });
-      const sentFrom = new Sender("booking@test-zxk54v85kdxljy6v.mlsender.net", "Remeritona Hotel");
+      const sentFrom = new Sender("booking@remeritonahotel.com", "Remeritona Hotel");
 
       const guestHtml = `
         <div style="background:#111;color:#ddd;font-family:sans-serif;padding:20px;">

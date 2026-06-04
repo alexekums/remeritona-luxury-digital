@@ -1,4 +1,4 @@
-import { Outlet, Link, createRootRoute, HeadContent, Scripts } from "@tanstack/react-router";
+import { Outlet, Link, createRootRoute, HeadContent, Scripts, useLocation } from "@tanstack/react-router";
 
 import appCss from "../styles.css?url";
 import { WhatsAppButton } from "@/components/WhatsAppButton";
@@ -96,11 +96,21 @@ function RootShell({ children }: { children: React.ReactNode }) {
 }
 
 function RootComponent() {
+  const { pathname } = useLocation();
+  const isAdminPage = pathname.startsWith('/hotel-admin') ||
+    pathname.startsWith('/orders-requests') ||
+    pathname.startsWith('/chat-management') ||
+    pathname.startsWith('/room-status') ||
+    pathname.startsWith('/reports') ||
+    pathname.startsWith('/staff-management') ||
+    pathname.startsWith('/spa-management') ||
+    pathname.startsWith('/menu-management');
+
   return (
     <>
       <IntroAnimation />
       <Outlet />
-      <WhatsAppButton />
+      {!isAdminPage && <WhatsAppButton />}
     </>
   );
 }

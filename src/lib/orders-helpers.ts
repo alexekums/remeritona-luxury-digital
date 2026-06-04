@@ -1,6 +1,8 @@
 export function timeAgo(dateStr: string): string {
-  const diff = Date.now() - new Date(dateStr).getTime();
-  const mins = Math.floor(diff / 60000);
+  const now = new Date();
+  const msgDate = new Date(dateStr + 'Z');
+  const diffMs = now.getTime() - msgDate.getTime();
+  const mins = Math.floor(diffMs / 60000);
   if (mins < 1) return "just now";
   if (mins < 60) return `${mins} min ago`;
   const hrs = Math.floor(mins / 60);
