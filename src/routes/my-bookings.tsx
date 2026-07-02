@@ -4,8 +4,9 @@ import { SiteHeader } from "@/components/SiteHeader";
 import { SiteFooter } from "@/components/SiteFooter";
 import { refundPolicy, saveBooking, type StoredBooking } from "@/data/bookings-store";
 import { formatNaira } from "@/data/rooms";
-import { Search, ShieldCheck, AlertTriangle, Check } from "lucide-react";
+import { Search, ShieldCheck, AlertTriangle, Check, Calendar } from "lucide-react";
 import { cancelBooking, lookupBooking } from "@/functions/cancelBooking";
+import { updateBookingDates } from "@/functions/adminAuth";
 
 export const Route = createFileRoute("/my-bookings")({
   head: () => ({
@@ -25,6 +26,11 @@ function MyBookingsPage() {
   const [showConfirm, setShowConfirm] = useState(false);
   const [cancelMessage, setCancelMessage] = useState<string | null>(null);
   const [processing, setProcessing] = useState(false);
+  const [showReschedule, setShowReschedule] = useState(false);
+  const [newCheckIn, setNewCheckIn] = useState("");
+  const [newCheckOut, setNewCheckOut] = useState("");
+  const [rescheduleProcessing, setRescheduleProcessing] = useState(false);
+  const [rescheduleMessage, setRescheduleMessage] = useState<string | null>(null);
 
   // Auto-fill form from URL params and trigger lookup
   useEffect(() => {
@@ -188,6 +194,41 @@ function MyBookingsPage() {
     }
   };
 
+  const handleReschedule = async () => {
+    if (!booking || !newCheckIn || !newCheckOut) return;
+    setRescheduleProcessing(true);
+    try {
+      const result = await updateBookingDates({
+        data: {
+          reference: booking.reference,
+          newCheckIn,
+          newCheckOut,
+          requestedBy: 'guest'
+        }
+      });
+      setRescheduleProcessing(false);
+      if (!result.success) {
+        setError(result.error ?? "Failed to reschedule booking");
+        return;
+      }
+      const updated: StoredBooking = {
+        ...booking,
+        checkIn: newCheckIn,
+        checkOut: newCheckOut,
+        nights: Math.ceil((new Date(newCheckOut).getTime() - new Date(newCheckIn).getTime()) / (1000 * 60 * 60 * 24)),
+      };
+      saveBooking(updated);
+      setBooking(updated);
+      setShowReschedule(false);
+      setRescheduleMessage(`Your booking has been rescheduled to ${new Date(newCheckIn).toLocaleDateString()} - ${new Date(newCheckOut).toLocaleDateString()}.`);
+      setNewCheckIn("");
+      setNewCheckOut("");
+    } catch (err) {
+      setRescheduleProcessing(false);
+      setError("Rescheduling failed. Please try again.");
+    }
+  };
+
   return (
     <div className="min-h-screen bg-background">
       <SiteHeader />
@@ -245,6 +286,12 @@ function MyBookingsPage() {
             </p>
           )}
 
+          {rescheduleMessage && (
+            <p className="mt-6 text-gold border border-gold/40 bg-onyx px-4 py-4 text-sm inline-flex items-center gap-2">
+              <Check size={16} /> {rescheduleMessage}
+            </p>
+          )}
+
           {booking && (
             <div className="mt-8 bg-charcoal border border-gold/30 p-6">
               <div className="flex items-center justify-between mb-4">
@@ -297,12 +344,24 @@ function MyBookingsPage() {
               ) : policy && (booking.status === "confirmed" || booking.status === "scheduled") ? (
                 <div className="mt-6 border-t border-border pt-4">
                   <p className="text-sm text-muted-foreground mb-3">{policy.label}</p>
-                  <button
-                    onClick={() => setShowConfirm(true)}
-                    className="px-6 py-3 bg-destructive text-destructive-foreground font-semibold uppercase tracking-widest text-sm hover:opacity-90"
-                  >
-                    Cancel Booking
-                  </button>
+                  <div className="flex gap-3">
+                    <button
+                      onClick={() => {
+                        setShowReschedule(true);
+                        setNewCheckIn(booking.checkIn);
+                        setNewCheckOut(booking.checkOut);
+                      }}
+                      className="px-6 py-3 bg-gold text-primary-foreground font-semibold uppercase tracking-widest text-sm hover:bg-gold-soft"
+                    >
+                      Reschedule
+                    </button>
+                    <button
+                      onClick={() => setShowConfirm(true)}
+                      className="px-6 py-3 bg-destructive text-destructive-foreground font-semibold uppercase tracking-widest text-sm hover:opacity-90"
+                    >
+                      Cancel Booking
+                    </button>
+                  </div>
                 </div>
               ) : null}
             </div>
@@ -343,6 +402,68 @@ function MyBookingsPage() {
             <p className="flex items-center justify-center gap-2 text-xs text-muted-foreground mt-4">
               <ShieldCheck size={12} className="text-gold" /> Refunds are processed via the original gateway
             </p>
+          </div>
+        </div>
+      )}
+
+      {showReschedule && booking && (
+        <div className="fixed inset-0 bg-onyx/80 backdrop-blur-sm z-[60] grid place-items-center px-4">
+          <div className="bg-charcoal border border-gold/40 max-w-md w-full p-6">
+            <p className="text-gold text-xs uppercase tracking-[0.4em] mb-2">Reschedule Booking</p>
+            <h3 className="font-serif text-2xl mb-3">Change your dates</h3>
+            <p className="text-sm text-muted-foreground mb-4">Select new check-in and check-out dates for your reservation.</p>
+            <div className="space-y-4">
+              <div className="flex flex-col gap-1.5">
+                <label className="text-xs uppercase tracking-widest text-gold">New Check-in Date</label>
+                <div className="relative">
+                  <input
+                    type="date"
+                    value={newCheckIn}
+                    onChange={(e) => setNewCheckIn(e.target.value)}
+                    onKeyDown={(e) => e.preventDefault()}
+                    className="bg-onyx border border-border px-3 py-3 pr-10 text-foreground focus:border-gold focus:outline-none w-full"
+                    min={new Date().toISOString().split('T')[0]}
+                  />
+                  <Calendar className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gold pointer-events-none" />
+                </div>
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <label className="text-xs uppercase tracking-widest text-gold">New Check-out Date</label>
+                <div className="relative">
+                  <input
+                    type="date"
+                    value={newCheckOut}
+                    onChange={(e) => setNewCheckOut(e.target.value)}
+                    onKeyDown={(e) => e.preventDefault()}
+                    className="bg-onyx border border-border px-3 py-3 pr-10 text-foreground focus:border-gold focus:outline-none w-full"
+                    min={newCheckIn || new Date().toISOString().split('T')[0]}
+                  />
+                  <Calendar className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gold pointer-events-none" />
+                </div>
+              </div>
+            </div>
+            {newCheckIn && newCheckOut && newCheckOut <= newCheckIn && (
+              <p className="text-destructive text-xs mt-2">Check-out date must be after check-in date</p>
+            )}
+            <div className="flex justify-end gap-3 mt-6">
+              <button
+                onClick={() => {
+                  setShowReschedule(false);
+                  setNewCheckIn("");
+                  setNewCheckOut("");
+                }}
+                className="px-5 py-2.5 border border-border uppercase tracking-widest text-xs hover:border-gold"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleReschedule}
+                disabled={!!(rescheduleProcessing || !newCheckIn || !newCheckOut || (newCheckIn && newCheckOut && newCheckOut <= newCheckIn))}
+                className="px-5 py-2.5 bg-gold text-primary-foreground uppercase tracking-widest text-xs font-semibold disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {rescheduleProcessing ? "Processing…" : "Confirm Reschedule"}
+              </button>
+            </div>
           </div>
         </div>
       )}

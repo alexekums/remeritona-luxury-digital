@@ -21,11 +21,11 @@ export async function fetchThread(token: string, room: string) {
   return res.json() as Promise<{ success: boolean; messages?: any[]; error?: string }>;
 }
 
-export async function replyToGuest(token: string, room_number: string, message: string) {
+export async function replyToGuest(token: string, room_number: string, message: string, guest_id?: string) {
   const res = await fetch("/api/messages/reply", {
     method: "POST",
     headers: authHeaders(token),
-    body: JSON.stringify({ room_number, message }),
+    body: JSON.stringify({ room_number, message, guest_id }),
   });
   return res.json() as Promise<{ success: boolean; message?: any; error?: string }>;
 }

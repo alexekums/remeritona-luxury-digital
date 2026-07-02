@@ -15,19 +15,21 @@ export const Route = createFileRoute("/api/messages/conversations")({
             return jsonResponse({ success: false, error: "Unauthorized" }, 401);
           }
 
+          // COALESCE balances unassigned room profiles to safeguard client UI mapping
           const result = await db.prepare(
             `SELECT
-          m.room_number,
-          m.message AS last_message,
-          m.created_at AS last_at,
-          m.sender AS last_sender,
-          SUM(CASE WHEN m.read = 0 AND m.sender = 'guest' THEN 1 ELSE 0 END) AS unread_count,
-          g.full_name AS guest_name
-        FROM messages m
-        LEFT JOIN guests g ON g.room_number = m.room_number
-        WHERE m.hotel_id = 'remeritona'
-        GROUP BY m.room_number
-        ORDER BY MAX(m.created_at) DESC`
+              m.room_number,
+              m.message AS last_message,
+              m.created_at AS last_at,
+              m.sender AS last_sender,
+              SUM(CASE WHEN m.read = 0 AND m.sender = 'guest' THEN 1 ELSE 0 END) AS unread_count,
+              COALESCE(g.full_name, 'Pre-Checkin Thread') AS guest_name,
+              g.id AS guest_id
+            FROM messages m
+            LEFT JOIN guests g ON g.room_number = m.room_number
+            WHERE m.hotel_id = 'remeritona'
+            GROUP BY m.room_number
+            ORDER BY MAX(m.created_at) DESC`
           ).all();
 
           return jsonResponse({ success: true, conversations: result.results ?? [] });

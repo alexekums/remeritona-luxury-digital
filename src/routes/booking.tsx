@@ -4,13 +4,14 @@ import { SiteHeader } from "@/components/SiteHeader";
 import { SiteFooter } from "@/components/SiteFooter";
 import { rooms, formatNaira, getRoom } from "@/data/rooms";
 import { applyCoupon, type CouponResult } from "@/data/coupons";
-import { Check, CreditCard, Lock, Plus, Users, Briefcase, User, Tag, X, Clock, Wallet } from "lucide-react";
+import { Check, CreditCard, Lock, Plus, Users, Briefcase, User, Tag, X, Clock, Wallet, Calendar } from "lucide-react";
 import { z } from "zod";
 import { saveBooking, type StoredBooking } from "@/data/bookings-store";
 import { sendBookingEmail } from "@/functions/sendBookingEmail";
 import { saveBookingToDb } from "@/functions/saveBookingToDb";
 import { checkRoomAvailability } from "@/functions/adminAuth";
 import logoUrl from "@/assets/logo.png";
+import { toast } from "sonner";
 
 const TOKENIZATION_FEE = 100; // NGN — small Save-card-now charge to capture authorization
 const SAVE_CARD_MIN_HOURS = 72;
@@ -77,10 +78,38 @@ function BookingPage() {
   const [checkOut, setCheckOut] = useState(sp.checkOut ?? tomorrow);
   const [bookingType, setBookingType] = useState<"self" | "family" | "corporate">("self");
   const [numRooms, setNumRooms] = useState<number>(1);
+  const [step, setStep] = useState<1 | 2 | 3>(1);
+  const [isMounted, setIsMounted] = useState(false);
+
+  useEffect(() => { setIsMounted(true); }, []);
+
+  // Maps legacy search param slugs safely to your new room categories
+  const initialSlug = useMemo(() => {
+    if (!sp.room) return rooms[0].slug;
+    if (sp.room === "standard") return "classic";
+    if (sp.room === "deluxe") return "superior";
+    if (sp.room === "executive-suite") return "executive";
+    if (sp.room === "presidential-deluxe") return "business-suites";
+    if (sp.room === "presidential-executive") return "executive-suites";
+    return sp.room;
+  }, [sp.room]);
+
+  const [selectedSlug, setSelectedSlug] = useState(initialSlug);
+
+  // Keep state sync if search query updates dynamically
+  useEffect(() => {
+    setSelectedSlug(initialSlug);
+  }, [initialSlug]);
 
   // Live inventory per room type — refetched when dates change
   const [availability, setAvailability] = useState<Record<string, RoomAvailability>>({});
   const [availabilityLoaded, setAvailabilityLoaded] = useState(false);
+
+  // Synchronize state when URL search parameters change on navigation
+  useEffect(() => {
+    if (sp.checkIn) setCheckIn(sp.checkIn);
+    if (sp.checkOut) setCheckOut(sp.checkOut);
+  }, [sp.checkIn, sp.checkOut]);
 
   useEffect(() => {
     if (!checkIn || !checkOut || checkOut <= checkIn) {
@@ -90,6 +119,7 @@ function BookingPage() {
     }
 
     let cancelled = false;
+    setAvailability({});
     setAvailabilityLoaded(false);
 
     const fetchAvailability = async () => {
@@ -116,7 +146,7 @@ function BookingPage() {
 
     fetchAvailability();
     return () => { cancelled = true; };
-  }, [checkIn, checkOut]);
+  }, [checkIn, checkOut, step, selectedSlug, sp.checkIn, sp.checkOut, sp.room]);
 
   // Auto-capitalize: first letter of each word
   const toTitleCase = (str: string) =>
@@ -142,31 +172,42 @@ function BookingPage() {
     if (children > maxChildren) setChildren(maxChildren);
   }, [maxAdults, maxChildren, adults, children]);
 
-  // Maps legacy search param slugs safely to your new room categories
-  const initialSlug = useMemo(() => {
-    if (!sp.room) return rooms[0].slug;
-    if (sp.room === "standard") return "classic";
-    if (sp.room === "deluxe") return "superior";
-    if (sp.room === "executive-suite") return "executive";
-    if (sp.room === "presidential-deluxe") return "business-suites";
-    if (sp.room === "presidential-executive") return "executive-suites";
-    return sp.room;
-  }, [sp.room]);
-
-  const [selectedSlug, setSelectedSlug] = useState(initialSlug);
-
-  // Keep state sync if search query updates dynamically
-  useEffect(() => {
-    setSelectedSlug(initialSlug);
-  }, [initialSlug]);
-
   useEffect(() => {
     if (!availabilityLoaded) return;
     const max = availability[selectedSlug]?.available ?? 0;
     if (max > 0 && numRooms > max) setNumRooms(max);
   }, [availability, availabilityLoaded, selectedSlug, numRooms]);
 
-  const [step, setStep] = useState<1 | 2 | 3>(1);
+  const [isValidating, setIsValidating] = useState(false);
+
+  const validateStep1AndProceed = async (onSuccess: () => void) => {
+    if (!checkIn || !checkOut || checkOut <= checkIn) return;
+    setIsValidating(true);
+    try {
+      const result = await checkRoomAvailability({ data: { checkIn, checkOut } }) as {
+        success?: boolean;
+        availability?: Record<string, RoomAvailability>;
+      };
+      if (result.success && result.availability) {
+        setAvailability(result.availability);
+        const fresh = result.availability[selectedSlug];
+        const availCount = fresh?.available ?? 0;
+        if (!fresh || fresh.fullyBooked || availCount < numRooms) {
+          toast.error(`The selected room type (${room.name}) is no longer available for the selected dates. Please select another room category.`);
+          return;
+        }
+        onSuccess();
+      } else {
+        toast.error("Could not validate room availability. Please try again.");
+      }
+    } catch (e) {
+      console.error(e);
+      toast.error("Error validating room availability. Please try again.");
+    } finally {
+      setIsValidating(false);
+    }
+  };
+
   useEffect(() => { setSummaryRevealed(false); }, [step]);
   const [guest, setGuest] = useState({ name: "", email: "", phone: "", notes: "" });
   const [selectedAddons, setSelectedAddons] = useState<string[]>([]);
@@ -207,10 +248,12 @@ const scrollToSummary = () => {
   } else {
     // Desktop only: advance step and scroll to form
     if (step === 1) {
-      setStep(2);
-      setTimeout(() => {
-        stepRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
-      }, 100);
+      validateStep1AndProceed(() => {
+        setStep(2);
+        setTimeout(() => {
+          stepRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+        }, 100);
+      });
     } else if (step === 2) {
       if (validateAndContinue()) {
         setStep(3);
@@ -838,11 +881,11 @@ const sendBookingEmails = async (reference: string) => {
                                   Fully Booked for Selected Dates
                                 </span>
                               )}
-                              {availabilityLoaded && !isFullyBooked && availCount !== null && availCount <= 3 && (
-                                <span className="text-[10px] uppercase tracking-widest bg-amber-900/30 text-amber-400 border border-amber-700 px-2 py-0.5">
+                              {isMounted && !isFullyBooked && availCount !== null && availCount <= 3 && (
+                                <span className="text-[10px] uppercase tracking-widest bg-amber-900/30 text-amber-400 border border-amber-500/20 px-2 py-0.5 rounded">
                                   Only {availCount} left
                                 </span>
-              )}
+                              )}
                             </div>
                             <p className="text-xs text-muted-foreground">{r.size} · {r.beds} · {r.occupancy}</p>
                           </div>
@@ -858,9 +901,10 @@ const sendBookingEmails = async (reference: string) => {
                 <div className="flex justify-end mt-8">
                   <button
                     onClick={() => scrollToSummary()}
-                    className="px-8 py-3 bg-gold text-primary-foreground font-semibold uppercase tracking-widest text-sm hover:bg-gold-soft"
+                    disabled={isValidating}
+                    className="px-8 py-3 bg-gold text-primary-foreground font-semibold uppercase tracking-widest text-sm hover:bg-gold-soft disabled:opacity-50"
                   >
-                    Continue
+                    {isValidating ? "Validating..." : "Continue"}
                   </button>
                 </div>
               </Card>
@@ -1140,10 +1184,16 @@ const sendBookingEmails = async (reference: string) => {
             <div ref={summaryBottomRef} className="scroll-mt-4 mt-3">
               {step === 1 && (
                 <button
-                  onClick={() => { setStep(2); scrollToForm(); }}
-                  className="w-full py-4 bg-gold text-primary-foreground font-semibold uppercase tracking-widest text-sm hover:bg-gold-soft"
+                  onClick={() => {
+                    validateStep1AndProceed(() => {
+                      setStep(2);
+                      scrollToForm();
+                    });
+                  }}
+                  disabled={isValidating}
+                  className="w-full py-4 bg-gold text-primary-foreground font-semibold uppercase tracking-widest text-sm hover:bg-gold-soft disabled:opacity-50"
                 >
-                  Continue to Guest Details
+                  {isValidating ? "Validating Availability..." : "Continue to Guest Details"}
                 </button>
               )}
               {step === 2 && (
@@ -1256,17 +1306,24 @@ function Card({ title, children }: { title: string; children: React.ReactNode })
 function Input({ label, type = "text", value, onChange, min, required }: {
   label: string; type?: string; value: string; onChange: (v: string) => void; min?: string; required?: boolean;
 }) {
+  const isDateInput = type === "date";
   return (
     <div className="flex flex-col gap-1.5">
       <label className="text-xs uppercase tracking-widest text-gold">{label}{required && " *"}</label>
-      <input
-        type={type}
-        value={value}
-        min={min}
-        required={required}
-        onChange={(e) => onChange(e.target.value)}
-        className="bg-onyx border border-border px-3 py-3 text-foreground focus:border-gold focus:outline-none"
-      />
+      <div className="relative">
+        <input
+          type={type}
+          value={value}
+          min={min}
+          required={required}
+          onChange={(e) => onChange(e.target.value)}
+          onKeyDown={isDateInput ? (e) => e.preventDefault() : undefined}
+          className={`bg-onyx border border-border text-foreground focus:border-gold focus:outline-none ${isDateInput ? "px-3 py-3 pr-10 w-full" : "px-3 py-3"}`}
+        />
+        {isDateInput && (
+          <Calendar className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gold pointer-events-none" />
+        )}
+      </div>
     </div>
   );
 }

@@ -20,6 +20,7 @@ function ChatManagement() {
   const [conversations, setConversations] = useState<any[]>([]);
   const [selectedRoom, setSelectedRoom] = useState<string | null>(null);
   const [selectedGuest, setSelectedGuest] = useState<string | null>(null);
+  const [selectedGuestId, setSelectedGuestId] = useState<string | null>(null);
   const [messages, setMessages] = useState<any[]>([]);
   const [replyText, setReplyText] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
@@ -46,14 +47,14 @@ function ChatManagement() {
       const data = await fetchConversations(token);
       console.log("chat-management: API response =", data);
       if (data.success && data.conversations) {
-        const sorted = [...data.conversations].sort((a, b) => {
+        const sorted = [...data.conversations].sort((a: any, b: any) => {
           const aUnread = (a.unread_count || 0) > 0 ? -1 : 1;
           const bUnread = (b.unread_count || 0) > 0 ? -1 : 1;
           if (aUnread !== bUnread) return aUnread - bUnread;
           return new Date(b.last_at).getTime() - new Date(a.last_at).getTime();
         });
         setConversations(sorted);
-        setTotalUnread(sorted.reduce((sum, c) => sum + (c.unread_count || 0), 0));
+        setTotalUnread(sorted.reduce((sum: number, c: any) => sum + (c.unread_count || 0), 0));
       }
     } catch (error) {
       console.error("Failed to fetch conversations:", error);
@@ -70,11 +71,15 @@ function ChatManagement() {
     messagesEndRef.current?.scrollIntoView({ behavior: smooth ? "smooth" : "auto" });
   };
 
-  const fetchThreadData = async (room: string, isNewMessage = false) => {
+  const fetchThreadData = async (room: string, guestId: string | null = null, isNewMessage = false) => {
     const token = getToken();
     if (!token) return;
     try {
-      const data = await fetchThread(token, room);
+      const url = guestId 
+        ? `/api/messages/thread?room=${encodeURIComponent(room)}&guestId=${encodeURIComponent(guestId)}`
+        : `/api/messages/thread?room=${encodeURIComponent(room)}`;
+      const res = await fetch(url, { headers: { "X-Admin-Token": token, "Content-Type": "application/json" } });
+      const data: any = await res.json();
       if (data.success && data.messages) {
         const wasNearBottom = isNearBottom();
         setMessages(data.messages);
@@ -88,14 +93,15 @@ function ChatManagement() {
     }
   };
 
-  const handleSelectConversation = async (room: string, guestName: string) => {
+  const handleSelectConversation = async (room: string, guestName: string, guestId: string | null = null) => {
     setSelectedRoom(room);
     setSelectedGuest(guestName);
+    setSelectedGuestId(guestId);
     const token = getToken();
     if (token) {
       await markMessagesRead(token, room);
     }
-    await fetchThreadData(room);
+    await fetchThreadData(room, guestId);
     await fetchConversationsData();
   };
 
@@ -104,9 +110,9 @@ function ChatManagement() {
     const token = getToken();
     if (!token) return;
     try {
-      await replyToGuest(token, selectedRoom, replyText.trim());
+      await replyToGuest(token, selectedRoom, replyText.trim(), selectedGuestId || undefined);
       setReplyText("");
-      await fetchThreadData(selectedRoom);
+      await fetchThreadData(selectedRoom, selectedGuestId);
       await fetchConversationsData();
     } catch (error) {
       console.error("Failed to send reply:", error);
@@ -121,6 +127,7 @@ function ChatManagement() {
       if (selectedRoom === room) {
         setSelectedRoom(null);
         setSelectedGuest(null);
+        setSelectedGuestId(null);
         setMessages([]);
       }
       await fetchConversationsData();
@@ -185,13 +192,13 @@ function ChatManagement() {
 
   useEffect(() => {
     if (selectedRoom) {
-      fetchThreadData(selectedRoom, false); // First load, always scroll
-      threadPollIntervalRef.current = setInterval(() => fetchThreadData(selectedRoom, true), 4000);
+      fetchThreadData(selectedRoom, selectedGuestId, false); // First load, always scroll
+      threadPollIntervalRef.current = setInterval(() => fetchThreadData(selectedRoom, selectedGuestId, true), 4000);
     }
     return () => {
       if (threadPollIntervalRef.current) clearInterval(threadPollIntervalRef.current);
     };
-  }, [selectedRoom]);
+  }, [selectedRoom, selectedGuestId]);
 
   return (
     <div className="min-h-screen flex flex-row bg-background">
@@ -215,13 +222,13 @@ function ChatManagement() {
           />
         </div>
         <div className="divide-y">
-          {filteredConversations.map((conv) => (
+          {filteredConversations.map((conv: any) => (
             <div
               key={conv.room_number}
               className={`cursor-pointer p-3 border-b hover:bg-muted/50 transition-colors ${
                 selectedRoom === conv.room_number ? "bg-muted" : ""
               }`}
-              onClick={() => handleSelectConversation(conv.room_number, conv.guest_name)}
+              onClick={() => handleSelectConversation(conv.room_number, conv.guest_name, conv.guest_id || null)}
               onContextMenu={(e) => {
                 e.preventDefault();
                 if (confirm(`Delete conversation for Room ${conv.room_number}?`)) {
@@ -291,7 +298,7 @@ function ChatManagement() {
 
             {/* MESSAGE THREAD */}
             <div ref={containerRef} className="flex-1 overflow-y-auto p-4 space-y-3 bg-background min-h-0">
-              {messages.map((msg) => {
+              {messages.map((msg: any) => {
                 const isSystem = msg.sender === "system" ||
                   msg.message.startsWith("NEW_SESSION") ||
                   msg.message.startsWith("TIMEOUT:");

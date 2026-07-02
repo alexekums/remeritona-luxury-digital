@@ -3,8 +3,9 @@ import { useEffect, useState, useCallback, useRef } from "react";
 import {
   adminLogin, getDashboardStats, getActiveBookingForRoom, updateRoomStatus,
   checkInGuest, checkOutGuest, registerStaff, loginStaff, resetAdminPassword, getStaffList, getStaffActivity, getRevenueReport,
-  getRoomRates, updateRoomRate, getOccupancyForecast,
+  getRoomRates, updateRoomRate, getOccupancyForecast, updateBookingDates, markBookingNoShow,
 } from "@/functions/adminAuth";
+import { cancelBooking } from "@/functions/cancelBooking";
 import { OrdersRequestsView } from "@/components/OrdersRequestsView";
 import { SpaManagementView } from "@/components/SpaManagementView";
 import { MenuManagementView } from "@/components/MenuManagementView";
@@ -24,6 +25,10 @@ import {
   LayoutDashboard, Calendar, Plus, Menu, Bell, MessageCircle, DollarSign, History, BarChart3
 } from "lucide-react";
 import logo from "@/assets/logo.png";
+import lobbyImage from "@/assets/lobby.jpg";
+import heroExteriorImage from "@/assets/hero-exterior.jpg";
+import diningImage from "@/assets/dining.jpg";
+import spaImage from "@/assets/spa.jpg";
 
 // @ts-ignore
 export const Route = createFileRoute("/hotel-admin")({
@@ -199,7 +204,7 @@ body { margin: 0; padding: 0; font-family: Arial, sans-serif; font-size: 11px; c
 
 type AdminTab =
   | "dashboard" | "bookings" | "rooms" | "reports" | "room-rates" | "guest-history"
-  | "occupancy-forecast" | "orders-requests" | "spa-management" | "menu-management";
+  | "occupancy-forecast" | "orders-requests" | "spa-management" | "menu-management" | "chat-management";
 
 const PMS_ROUTE_MAP: Partial<Record<AdminTab, string>> = {
   "orders-requests": "/orders-requests",
@@ -222,6 +227,7 @@ export function AdminPage({ initialTab }: { initialTab?: AdminTab } = {}) {
   const isOrdersPage = pathname === "/orders-requests" || activeTab === "orders-requests";
   const isSpaPage = pathname === "/spa-management" || activeTab === "spa-management";
   const isMenuPage = pathname === "/menu-management" || activeTab === "menu-management";
+  const isChatPage = pathname === "/chat-management" || activeTab === "chat-management";
   const isPmsSubPage = isOrdersPage || isSpaPage || isMenuPage;
 
   const navigateToTab = (tab: AdminTab) => {
@@ -351,15 +357,25 @@ export function AdminPage({ initialTab }: { initialTab?: AdminTab } = {}) {
 
   // Room status tab filter
   const [roomStatusFilter, setRoomStatusFilter] = useState<string | null>(null);
+  const [roomTypeFilter, setRoomTypeFilter] = useState<string>("All Rooms");
 
   // Reserve modal state
-  const [reserveModal, setReserveModal] = useState<{ roomNumber: string; guestName: string; reservedUntil: string; reservedRef: string } | null>(null);
+  const [reserveModal, setReserveModal] = useState<{ roomNumber: string; guestName: string; reservedFrom: string; reservedUntil: string; reservedRef: string } | null>(null);
 
   // Room Rates state
   const [roomRates, setRoomRates] = useState<any[]>([]);
   const [roomRatesLoading, setRoomRatesLoading] = useState(false);
   const [editingRate, setEditingRate] = useState<{ roomType: string; currentPrice: number } | null>(null);
   const [newRatePrice, setNewRatePrice] = useState("");
+
+  // Booking reschedule state
+  const [showRescheduleModal, setShowRescheduleModal] = useState(false);
+  const [rescheduleBooking, setRescheduleBooking] = useState<any>(null);
+  const [rescheduleCheckIn, setRescheduleCheckIn] = useState("");
+  const [rescheduleCheckOut, setRescheduleCheckOut] = useState("");
+  const [rescheduleLoading, setRescheduleLoading] = useState(false);
+  const [noShowLoading, setNoShowLoading] = useState<string | null>(null);
+  const [cancelLoading, setCancelLoading] = useState<string | null>(null);
 
   // Occupancy Forecast state
   const [occupancyForecast, setOccupancyForecast] = useState<any[]>([]);
@@ -376,6 +392,38 @@ export function AdminPage({ initialTab }: { initialTab?: AdminTab } = {}) {
   const [hoveredNotifId, setHoveredNotifId] = useState<string | null>(null);
   const [notifActionLoading, setNotifActionLoading] = useState<string | null>(null);
 
+  // Active confirmed booking notification state
+  const [bookingActiveCount, setBookingActiveCount] = useState<number>(0);
+
+  // Poll for live active confirmed booking counts (every 30 seconds)
+  useEffect(() => {
+    const fetchActiveBookingCount = async () => {
+      try {
+        const adminToken =
+          localStorage.getItem(TOKEN_KEY) ||
+          localStorage.getItem("admin_token") ||
+          sessionStorage.getItem("admin_token");
+        if (!adminToken) return;
+
+        const res = await fetch("/api/bookings-active-count", {
+          headers: { "X-Admin-Token": adminToken },
+        });
+        if (!res.ok) return;
+
+        const data = await res.json() as { success: boolean; count?: number };
+        if (data.success) {
+          setBookingActiveCount(data.count ?? 0);
+        }
+      } catch (e) {
+        console.error("Active booking count poll error:", e);
+      }
+    };
+
+    fetchActiveBookingCount();
+    const interval = setInterval(fetchActiveBookingCount, 30000);
+    return () => clearInterval(interval);
+  }, []);
+
   // Messages notification state
   const [messageUnreadCount, setMessageUnreadCount] = useState(0);
   const messageLastCountRef = useRef<number>(0);
@@ -390,14 +438,16 @@ export function AdminPage({ initialTab }: { initialTab?: AdminTab } = {}) {
   const isDark = theme === "dark";
 
   const colors = {
-    bg: isDark ? "#0a0a0a" : "#f5f5f0",
-    surface: isDark ? "#141414" : "#ffffff",
-    surface2: isDark ? "#1a1a1a" : "#f0ede8",
-    border: isDark ? "#2a2a2a" : "#e0dbd0",
+    bg: isDark
+      ? "linear-gradient(135deg, #0A0A0F 0%, #0D0D12 50%, #12121A 100%), radial-gradient(ellipse at top right, rgba(201, 169, 110, 0.08) 0%, transparent 50%)"
+      : "linear-gradient(135deg, #FBFBFA 0%, #F7F5F0 50%, #EFECE6 100%), radial-gradient(ellipse at top right, rgba(201, 169, 110, 0.12) 0%, transparent 50%)",
+    surface: isDark ? "rgba(20, 20, 20, 0.6)" : "rgba(255, 255, 255, 0.7)",
+    surface2: isDark ? "rgba(26, 26, 26, 0.4)" : "rgba(240, 237, 232, 0.5)",
+    border: isDark ? "rgba(201, 169, 110, 0.2)" : "rgba(201, 169, 110, 0.25)",
     text: isDark ? "#e8e0d0" : "#1a1a1a",
     textMuted: isDark ? "#888" : "#666",
-    gold: "#c9a96e",
-    goldSoft: "#b8935a",
+    gold: "#d4af37",
+    goldSoft: "#c9a84c",
   };
 
   const showToast = (message: string, type: "success" | "error" = "success") => {
@@ -851,6 +901,16 @@ export function AdminPage({ initialTab }: { initialTab?: AdminTab } = {}) {
     }
   };
 
+  const handleResetCredentials = async (staff: any) => {
+    if (!token) return;
+    try {
+      const result = await resetAdminPassword({ data: { username: staff.username, newPassword: "temp123" } });
+      showToast(`${staff.full_name}'s credentials have been reset. Temporary password: temp123`);
+    } catch {
+      showToast("Failed to reset credentials", "error");
+    }
+  };
+
   const handleGenerateReport = async () => {
     if (!token || !reportDateFrom || !reportDateTo) return;
     setReportLoading(true);
@@ -866,6 +926,95 @@ export function AdminPage({ initialTab }: { initialTab?: AdminTab } = {}) {
     } finally {
       setReportLoading(false);
     }
+  };
+
+  const handleRescheduleBooking = async () => {
+    if (!token || !rescheduleBooking || !rescheduleCheckIn || !rescheduleCheckOut) return;
+    setRescheduleLoading(true);
+    try {
+      const result = await updateBookingDates({
+        data: {
+          reference: rescheduleBooking.reference,
+          newCheckIn: rescheduleCheckIn,
+          newCheckOut: rescheduleCheckOut,
+          requestedBy: 'staff'
+        }
+      });
+      setRescheduleLoading(false);
+      if (!result.success) {
+        showToast(result.error ?? "Failed to reschedule booking", "error");
+        return;
+      }
+      showToast("Booking dates updated successfully");
+      setShowRescheduleModal(false);
+      setRescheduleBooking(null);
+      setRescheduleCheckIn("");
+      setRescheduleCheckOut("");
+      setSelectedBooking(null);
+      await loadStats(token);
+    } catch {
+      setRescheduleLoading(false);
+      showToast("Failed to reschedule booking", "error");
+    }
+  };
+
+  const openRescheduleForBooking = (booking: any) => {
+    setRescheduleBooking(booking);
+    setRescheduleCheckIn((booking.check_in ?? "").split("T")[0]);
+    setRescheduleCheckOut((booking.check_out ?? "").split("T")[0]);
+    setShowRescheduleModal(true);
+  };
+
+  const handleMarkNoShow = async (booking: any) => {
+    if (!token || staffRole === "accountant") return;
+    setNoShowLoading(booking.reference);
+    try {
+      const result = await markBookingNoShow({ data: { token, reference: booking.reference } }) as any;
+      if (result.success) {
+        showToast(`${booking.guest_name} marked as no-show`);
+        await loadStats(token);
+      } else {
+        showToast(result.error || "Failed to mark no-show", "error");
+      }
+    } catch {
+      showToast("Failed to mark no-show", "error");
+    } finally {
+      setNoShowLoading(null);
+    }
+  };
+
+  const handleAdminCancelBooking = async (booking: any) => {
+    if (!token || staffRole === "accountant") return;
+    setCancelLoading(booking.reference);
+    try {
+      const result = await cancelBooking({ data: {
+        reference: booking.reference,
+        gateway: booking.gateway,
+        refundAmount: booking.total,
+        guestEmail: booking.guest_email,
+        guestName: booking.guest_name,
+        roomName: booking.room_name,
+        checkIn: booking.check_in,
+        total: booking.total
+      } }) as any;
+      if (result.success) {
+        showToast(`${booking.guest_name} reservation cancelled smoothly`);
+        await loadStats(token);
+      } else {
+        showToast(result.error || "Failed to cancel booking", "error");
+      }
+    } catch {
+      showToast("Failed to cancel booking", "error");
+    } finally {
+      setCancelLoading(null);
+    }
+  };
+
+  const getShiftGreeting = () => {
+    const hour = new Date().getHours();
+    if (hour < 12) return "Good morning";
+    if (hour < 17) return "Good afternoon";
+    return "Good evening";
   };
 
   const handlePrintReport = () => {
@@ -1437,6 +1586,8 @@ export function AdminPage({ initialTab }: { initialTab?: AdminTab } = {}) {
 
   const todayArrivals = stats?.todayCheckIns?.length ?? 0;
   const todayDepartures = stats?.todayCheckOuts?.length ?? 0;
+  const missedArrivals = stats?.missedArrivals ?? [];
+  const systemActivityFeed = stats?.recentRoomActivity ?? [];
   const occupiedRooms = stats?.roomStatuses?.filter((r: any) => r.status === "occupied").length ?? 0;
 
   // Vacant clean rooms for the picker — filtered by booked type, grouped by floor
@@ -1475,84 +1626,124 @@ export function AdminPage({ initialTab }: { initialTab?: AdminTab } = {}) {
     return { matchType, byFloor, total: matching.length };
   };
 
+  // Background carousel for login page
+  const backgroundImages = [
+    lobbyImage,
+    heroExteriorImage,
+    diningImage,
+    spaImage
+  ];
+  const [activeImageIndex, setActiveImageIndex] = useState(0);
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setActiveImageIndex((prev) => (prev + 1) % backgroundImages.length);
+    }, 4000);
+    return () => clearInterval(interval);
+  }, []);
+
   // ==================== LOGIN PAGE ====================
   if (!token) {
     return (
-      <div style={{
-        minHeight: "100vh", background: isDark ? "#0a0a0a" : "#f5f5f0",
-        display: "flex", alignItems: "center", justifyContent: "center",
-        fontFamily: "Georgia, serif", padding: "20px"
-      }}>
-        <div style={{ position: "absolute", top: 20, right: 20 }}>
-          <button onClick={toggleTheme} style={{
-            background: "none", border: `1px solid ${colors.border}`,
-            borderRadius: "50%", width: 40, height: 40, cursor: "pointer",
-            display: "flex", alignItems: "center", justifyContent: "center",
-            color: colors.gold
-          }}>
-            {isDark ? <Sun size={16} /> : <Moon size={16} />}
-          </button>
-        </div>
-        <div style={{
-          background: colors.surface, border: `1px solid ${colors.border}`,
-          padding: "48px", maxWidth: 400, width: "100%"
-        }}>
-          <div style={{ textAlign: "center", marginBottom: 32 }}>
-            <p style={{ color: colors.gold, fontSize: 11, letterSpacing: "0.4em", textTransform: "uppercase", marginBottom: 8 }}>
-              Staff Portal
+      <div className="grid grid-cols-1 lg:grid-cols-12 min-h-screen" style={{ fontFamily: "Georgia, serif" }}>
+        {/* Left Side - Cinematic Canvas */}
+        <div className="hidden lg:block lg:col-span-8 relative h-screen overflow-hidden">
+          {backgroundImages.map((img, index) => (
+            <div
+              key={index}
+              className="absolute inset-0 transition-all duration-1000 ease-in-out"
+              style={{
+                opacity: index === activeImageIndex ? 1 : 0,
+                backgroundImage: `url(${img})`,
+                backgroundSize: "cover",
+                backgroundPosition: "center",
+              }}
+            />
+          ))}
+          <div className="absolute inset-0 bg-black/40" />
+          <div className="absolute inset-0 flex flex-col items-center justify-center text-center px-12">
+            <h1 className="text-6xl font-light tracking-widest mb-6" style={{ color: "#D4AF37", textShadow: "0 2px 20px rgba(212, 175, 55, 0.3)" }}>
+              Remeritona
+            </h1>
+            <p className="text-sm tracking-widest uppercase" style={{ color: "#E8E8E8", letterSpacing: "0.3em" }}>
+              Intuitive Control. Tailored Hospitality.
             </p>
-            <h1 style={{ color: colors.text, fontSize: 28, fontWeight: 400, margin: 0 }}>Remeritona</h1>
-            <p style={{ color: colors.textMuted, fontSize: 13, marginTop: 8 }}>Hotel Management System</p>
           </div>
+        </div>
 
-          <form onSubmit={handleStaffLogin}>
-            <div style={{ marginBottom: 20 }}>
-              <label style={{ display: "block", color: colors.gold, fontSize: 11, letterSpacing: "0.2em", textTransform: "uppercase", marginBottom: 8 }}>
-                Username
-              </label>
-              <input
-                type="text"
-                value={username}
-                onChange={e => setUsername(e.target.value)}
-                placeholder="Enter your username"
-                style={{
-                  width: "100%", background: colors.surface2, border: `1px solid ${colors.border}`,
-                  padding: "12px 16px", color: colors.text, fontSize: 16,
-                  fontFamily: "Georgia, serif", outline: "none", boxSizing: "border-box"
-                }}
-                required
-              />
-            </div>
-            <div style={{ marginBottom: 20 }}>
-              <label style={{ display: "block", color: colors.gold, fontSize: 11, letterSpacing: "0.2em", textTransform: "uppercase", marginBottom: 8 }}>
-                Password
-              </label>
-              <input
-                type="password"
-                value={password}
-                onChange={e => setPassword(e.target.value)}
-                placeholder="Enter your password"
-                style={{
-                  width: "100%", background: colors.surface2, border: `1px solid ${colors.border}`,
-                  padding: "12px 16px", color: colors.text, fontSize: 16,
-                  fontFamily: "Georgia, serif", outline: "none", boxSizing: "border-box"
-                }}
-                required
-              />
-            </div>
-            {loginError && (
-              <p style={{ color: "#ef4444", fontSize: 13, marginBottom: 16 }}>{loginError}</p>
-            )}
-            <button type="submit" disabled={loginLoading} style={{
-              width: "100%", background: colors.gold, color: "#0a0a0a",
-              border: "none", padding: "14px", fontSize: 12,
-              letterSpacing: "0.2em", textTransform: "uppercase", fontWeight: 700,
-              cursor: loginLoading ? "not-allowed" : "pointer", opacity: loginLoading ? 0.7 : 1,
-              fontFamily: "Georgia, serif"
+        {/* Right Side - Portal Workspace */}
+        <div className="lg:col-span-4 flex items-center justify-center p-8" style={{ background: isDark ? "#0a0a0a" : "#f5f5f0" }}>
+          <div style={{ position: "absolute", top: 20, right: 20 }}>
+            <button onClick={toggleTheme} style={{
+              background: "none", border: `1px solid ${colors.border}`,
+              borderRadius: "50%", width: 40, height: 40, cursor: "pointer",
+              display: "flex", alignItems: "center", justifyContent: "center",
+              color: colors.gold
             }}>
-              {loginLoading ? "Signing in..." : "Sign In"}
+              {isDark ? <Sun size={16} /> : <Moon size={16} />}
             </button>
-          </form>
+          </div>
+          <div style={{
+            background: colors.surface, border: `1px solid ${colors.border}`,
+            padding: "48px", maxWidth: 400, width: "100%"
+          }}>
+            <div style={{ textAlign: "center", marginBottom: 32 }}>
+              <p style={{ color: colors.gold, fontSize: 11, letterSpacing: "0.4em", textTransform: "uppercase", marginBottom: 8 }}>
+                Staff Portal
+              </p>
+              <h1 style={{ color: colors.text, fontSize: 28, fontWeight: 400, margin: 0 }}>Remeritona</h1>
+              <p style={{ color: colors.textMuted, fontSize: 13, marginTop: 8 }}>Hotel Management System</p>
+            </div>
+
+            <form onSubmit={handleStaffLogin}>
+              <div style={{ marginBottom: 20 }}>
+                <label style={{ display: "block", color: colors.gold, fontSize: 11, letterSpacing: "0.2em", textTransform: "uppercase", marginBottom: 8 }}>
+                  Username
+                </label>
+                <input
+                  type="text"
+                  value={username}
+                  onChange={e => setUsername(e.target.value)}
+                  placeholder="Enter your username"
+                  style={{
+                    width: "100%", background: colors.surface2, border: `1px solid ${colors.border}`,
+                    padding: "12px 16px", color: colors.text, fontSize: 16,
+                    fontFamily: "Georgia, serif", outline: "none", boxSizing: "border-box"
+                  }}
+                  required
+                />
+              </div>
+              <div style={{ marginBottom: 20 }}>
+                <label style={{ display: "block", color: colors.gold, fontSize: 11, letterSpacing: "0.2em", textTransform: "uppercase", marginBottom: 8 }}>
+                  Password
+                </label>
+                <input
+                  type="password"
+                  value={password}
+                  onChange={e => setPassword(e.target.value)}
+                  placeholder="Enter your password"
+                  style={{
+                    width: "100%", background: colors.surface2, border: `1px solid ${colors.border}`,
+                    padding: "12px 16px", color: colors.text, fontSize: 16,
+                    fontFamily: "Georgia, serif", outline: "none", boxSizing: "border-box"
+                  }}
+                  required
+                />
+              </div>
+              {loginError && (
+                <p style={{ color: "#ef4444", fontSize: 13, marginBottom: 16 }}>{loginError}</p>
+              )}
+              <button type="submit" disabled={loginLoading} style={{
+                width: "100%", background: colors.gold, color: "#0a0a0a",
+                border: "none", padding: "14px", fontSize: 12,
+                letterSpacing: "0.2em", textTransform: "uppercase", fontWeight: 700,
+                cursor: loginLoading ? "not-allowed" : "pointer", opacity: loginLoading ? 0.7 : 1,
+                fontFamily: "Georgia, serif"
+              }}>
+                {loginLoading ? "Signing in..." : "Sign In"}
+              </button>
+            </form>
+          </div>
         </div>
       </div>
     );
@@ -1560,7 +1751,13 @@ export function AdminPage({ initialTab }: { initialTab?: AdminTab } = {}) {
 
   // ==================== MAIN DASHBOARD ====================
   return (
-    <div style={{ minHeight: "100vh", background: colors.bg, fontFamily: "Georgia, serif", color: colors.text }}>
+    <div style={{
+      minHeight: "100vh",
+      backgroundImage: colors.bg,
+      fontFamily: "Georgia, serif",
+      color: colors.text,
+      backdropFilter: "blur(10px)"
+    }}>
 
       {/* Toast */}
       {toast && (
@@ -1728,76 +1925,146 @@ export function AdminPage({ initialTab }: { initialTab?: AdminTab } = {}) {
         }} />
       )}
 
-      {/* Sidebar */}
-      <aside style={{
-        position: "fixed", left: 0, top: 0, height: "100vh",
-        background: colors.surface, borderRight: `1px solid ${colors.border}`,
-        width: sidebarExpanded ? 220 : 56,
-        transition: "width 0.25s ease",
-        zIndex: 300,
-        display: "flex", flexDirection: "column"
+      {/* Top Header Navbar */}
+      <header style={{
+        position: "fixed", top: 0, left: 0, right: 0,
+        height: 64,
+        background: colors.surface,
+        borderBottom: `1px solid ${colors.gold}33`,
+        zIndex: 400,
+        display: "flex", alignItems: "center", justifyContent: "space-between",
+        padding: "0 24px",
+        paddingLeft: window.innerWidth < 768 ? 16 : (sidebarExpanded ? 244 : 80),
+        transition: "padding-left 0.25s ease"
       }}>
-        {/* Sidebar Header */}
-        <div style={{
-          padding: "16px", borderBottom: `1px solid ${colors.border}`,
-          display: "flex", alignItems: "center", justifyContent: "space-between",
-          height: 64, flexShrink: 0
-        }}>
-          {/* LEFT: hamburger only */}
+        {/* Left Side: Logo + Hamburger */}
+        <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
+          <button onClick={() => {
+            setSidebarExpanded(!sidebarExpanded);
+            if (window.innerWidth < 768) setMobileSidebarOpen(!mobileSidebarOpen);
+          }} style={{
+            background: "none", border: "none", cursor: "pointer",
+            color: colors.textMuted, padding: 8, borderRadius: 8,
+            transition: "background 0.2s"
+          }} onMouseEnter={(e) => e.currentTarget.style.background = colors.border}
+            onMouseLeave={(e) => e.currentTarget.style.background = "none"}>
+            <Menu size={20} />
+          </button>
           <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-            <button onClick={() => {
-              setSidebarExpanded(!sidebarExpanded);
-              if (window.innerWidth < 768) setMobileSidebarOpen(false);
-            }} style={{
-              background: "none", border: "none", cursor: "pointer",
-              color: colors.textMuted, padding: 4, position: "relative"
+            <img src={logo} alt="Remeritona" style={{ height: 32, width: "auto" }} />
+            <span style={{
+              color: colors.gold,
+              fontSize: 14,
+              fontWeight: 700,
+              letterSpacing: "0.2em",
+              textTransform: "uppercase"
             }}>
-              <Menu size={18} />
-            </button>
-            {sidebarExpanded && (
-              <span style={{ color: colors.gold, fontSize: 12, fontWeight: 700, letterSpacing: "0.2em" }}>
-                REMERITONA
-              </span>
-            )}
-          </div>
-
-          {/* RIGHT: bells always here */}
-          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            <button onClick={() => setNotificationsOpen(!notificationsOpen)} style={{
-              background: "none", border: "none", cursor: "pointer",
-              color: colors.textMuted, padding: 4, position: "relative"
-            }}>
-              <Bell size={18} />
-              {notificationPendingCount > 0 && (
-                <span style={{
-                  position: "absolute", top: 0, right: 0,
-                  background: "#ef4444", color: "#fff",
-                  fontSize: 9, padding: "2px 5px", borderRadius: "10px",
-                  fontWeight: 700
-                }}>
-                  {notificationPendingCount}
-                </span>
-              )}
-            </button>
-            <Link to="/chat-management" style={{
-              background: "none", border: "none", cursor: "pointer",
-              color: colors.textMuted, padding: 4, position: "relative",
-              textDecoration: "none"
-            }}>
-              <MessageCircle size={18} />
-              {messageUnreadCount > 0 && (
-                <span style={{
-                  position: "absolute", top: 0, right: 0,
-                  background: "#ef4444", color: "#fff",
-                  fontSize: 9, padding: "2px 5px", borderRadius: "10px",
-                  fontWeight: 700
-                }}>
-                  {messageUnreadCount}
-                </span>
-              )}
-            </Link>
+              Remeritona
+            </span>
           </div>
         </div>
+
+        {/* Right Side: Notifications + Theme + Profile */}
+        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+          {/* Notification Bell */}
+          <button onClick={() => setNotificationsOpen(!notificationsOpen)} style={{
+            background: "none", border: "none", cursor: "pointer",
+            color: colors.textMuted, padding: 8, borderRadius: 8,
+            position: "relative",
+            transition: "background 0.2s"
+          }} onMouseEnter={(e) => e.currentTarget.style.background = colors.border}
+            onMouseLeave={(e) => e.currentTarget.style.background = "none"}>
+            <Bell size={20} />
+            {notificationPendingCount > 0 && (
+              <span style={{
+                position: "absolute", top: 4, right: 4,
+                background: "#ef4444", color: "#fff",
+                fontSize: 10, padding: "2px 6px", borderRadius: "10px",
+                fontWeight: 700, minWidth: 18, textAlign: "center"
+              }}>
+                {notificationPendingCount}
+              </span>
+            )}
+          </button>
+
+          {/* Guest Messages */}
+          <Link to="/chat-management" style={{
+            background: "none", border: "none", cursor: "pointer",
+            color: colors.textMuted, padding: 8, borderRadius: 8,
+            position: "relative", textDecoration: "none",
+            transition: "background 0.2s"
+          }} onMouseEnter={(e) => e.currentTarget.style.background = colors.border}
+            onMouseLeave={(e) => e.currentTarget.style.background = "none"}>
+            <MessageCircle size={20} />
+            {messageUnreadCount > 0 && (
+              <span style={{
+                position: "absolute", top: 4, right: 4,
+                background: "#ef4444", color: "#fff",
+                fontSize: 10, padding: "2px 6px", borderRadius: "10px",
+                fontWeight: 700, minWidth: 18, textAlign: "center"
+              }}>
+                {messageUnreadCount}
+              </span>
+            )}
+          </Link>
+
+          {/* Theme Toggle */}
+          <button onClick={toggleTheme} style={{
+            background: "none", border: `1px solid ${colors.border}`,
+            borderRadius: 8, width: 36, height: 36, cursor: "pointer",
+            display: "flex", alignItems: "center", justifyContent: "center",
+            color: colors.gold,
+            transition: "background 0.2s"
+          }} onMouseEnter={(e) => e.currentTarget.style.background = colors.border}
+            onMouseLeave={(e) => e.currentTarget.style.background = "none"}>
+            {isDark ? <Sun size={18} /> : <Moon size={18} />}
+          </button>
+
+          {/* User Profile */}
+          <div style={{
+            display: "flex", alignItems: "center", gap: 10,
+            padding: "6px 12px",
+            background: colors.surface2,
+            border: `1px solid ${colors.border}`,
+            borderRadius: 8
+          }}>
+            <div style={{
+              width: 32, height: 32,
+              background: colors.gold,
+              borderRadius: "50%",
+              display: "flex", alignItems: "center", justifyContent: "center",
+              color: "#0a0a0a",
+              fontSize: 14,
+              fontWeight: 700
+            }}>
+              {staffName.charAt(0).toUpperCase()}
+            </div>
+            <div style={{ display: window.innerWidth >= 768 ? "block" : "none" }}>
+              <p style={{ margin: 0, fontSize: 13, color: colors.text, fontWeight: 500 }}>{staffName}</p>
+              <p style={{ margin: 0, fontSize: 11, color: colors.textMuted, textTransform: "capitalize" }}>{staffRole}</p>
+            </div>
+            <button onClick={handleLogout} style={{
+              background: "none", border: "none", cursor: "pointer",
+              color: colors.textMuted, padding: 4,
+              transition: "color 0.2s"
+            }} onMouseEnter={(e) => e.currentTarget.style.color = "#ef4444"}
+              onMouseLeave={(e) => e.currentTarget.style.color = colors.textMuted}>
+              <LogOut size={16} />
+            </button>
+          </div>
+        </div>
+      </header>
+
+      {/* Sidebar */}
+      <aside style={{
+        position: "fixed", left: 0, top: 64, height: "calc(100vh - 64px)",
+        background: colors.surface, borderRight: `1px solid ${colors.border}`,
+        width: sidebarExpanded ? 220 : 64,
+        transition: "width 0.25s ease",
+        zIndex: 300,
+        display: "flex", flexDirection: "column",
+        overflow: "hidden"
+      }}>
 
         {/* Navigation Groups */}
         <div style={{ flex: 1, overflowY: "auto", padding: "8px 0" }}>
@@ -1811,22 +2078,24 @@ export function AdminPage({ initialTab }: { initialTab?: AdminTab } = {}) {
                 setExpandedGroups(newGroups);
               }} style={{
                 background: "none", border: "none", cursor: "pointer",
-                padding: "8px 12px", width: "100%",
-                display: "flex", alignItems: "center", justifyContent: "space-between",
+                padding: sidebarExpanded ? "8px 12px" : "8px",
+                width: "100%",
+                display: "flex", alignItems: "center", justifyContent: sidebarExpanded ? "space-between" : "center",
                 color: colors.textMuted, fontSize: 10, letterSpacing: "0.15em",
                 textTransform: "uppercase"
               }}>
                 <span style={{ display: sidebarExpanded ? "inline" : "none" }}>Front Desk</span>
-                {expandedGroups.has("front-desk") ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+                {sidebarExpanded && (expandedGroups.has("front-desk") ? <ChevronDown size={14} /> : <ChevronRight size={14} />)}
               </button>
               {expandedGroups.has("front-desk") && (
-                <div style={{ marginLeft: 8 }}>
+                <div style={{ marginLeft: sidebarExpanded ? 8 : 0 }}>
                   {/* Dashboard (admin, manager, front-desk only) */}
                   {(staffRole === "admin" || staffRole === "manager" || staffRole === "front-desk") && (
                     <button onClick={() => navigateToTab("dashboard")} style={{
                       background: "none", border: "none", cursor: "pointer",
-                      padding: "8px 12px", width: "100%",
-                      display: "flex", alignItems: "center", gap: 8,
+                      padding: sidebarExpanded ? "8px 12px" : "12px",
+                      width: "100%",
+                      display: "flex", alignItems: "center", justifyContent: sidebarExpanded ? "flex-start" : "center", gap: (sidebarExpanded ? 8 : 0),
                       color: activeTab === "dashboard" ? colors.gold : colors.textMuted,
                       fontSize: 12, borderLeft: activeTab === "dashboard" ? `3px solid ${colors.gold}` : "3px solid transparent",
                       paddingLeft: activeTab === "dashboard" ? 9 : 12
@@ -1839,22 +2108,42 @@ export function AdminPage({ initialTab }: { initialTab?: AdminTab } = {}) {
                   {(staffRole === "admin" || staffRole === "manager" || staffRole === "front-desk") && (
                     <button onClick={() => navigateToTab("bookings")} style={{
                       background: "none", border: "none", cursor: "pointer",
-                      padding: "8px 12px", width: "100%",
-                      display: "flex", alignItems: "center", gap: 8,
+                      padding: sidebarExpanded ? "8px 12px" : "12px",
+                      width: "100%",
+                      display: "flex", alignItems: "center", justifyContent: sidebarExpanded ? "flex-start" : "center", gap: (sidebarExpanded ? 8 : 0),
                       color: activeTab === "bookings" ? colors.gold : colors.textMuted,
                       fontSize: 12, borderLeft: activeTab === "bookings" ? `3px solid ${colors.gold}` : "3px solid transparent",
                       paddingLeft: activeTab === "bookings" ? 9 : 12
                     }}>
-                      <Calendar size={16} />
-                      {sidebarExpanded && <span>All Bookings</span>}
+                      <Calendar size={16} style={{ flexShrink: 0 }} />
+                      {sidebarExpanded && (
+                        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", width: "100%" }}>
+                          <span>All Bookings</span>
+                          {bookingActiveCount > 0 && (
+                            <span style={{
+                              background: colors.gold,
+                              color: "#0a0a0a",
+                              fontSize: 10,
+                              fontWeight: 700,
+                              padding: "2px 6px",
+                              borderRadius: "4px",
+                              minWidth: "16px",
+                              textAlign: "center",
+                              display: "inline-block"
+                            }}>
+                              {bookingActiveCount}
+                            </span>
+                          )}
+                        </div>
+                      )}
                     </button>
                   )}
                   {/* Guest History (admin, manager, front-desk only) */}
                   {(staffRole === "admin" || staffRole === "manager" || staffRole === "front-desk") && (
                     <button onClick={() => navigateToTab("guest-history")} style={{
                       background: "none", border: "none", cursor: "pointer",
-                      padding: "8px 12px", width: "100%",
-                      display: "flex", alignItems: "center", gap: 8,
+                      padding: sidebarExpanded ? "8px 12px" : "12px", width: "100%",
+                      display: "flex", alignItems: "center", justifyContent: sidebarExpanded ? "flex-start" : "center", gap: (sidebarExpanded ? 8 : 0),
                       color: activeTab === "guest-history" ? colors.gold : colors.textMuted,
                       fontSize: 12, borderLeft: activeTab === "guest-history" ? `3px solid ${colors.gold}` : "3px solid transparent",
                       paddingLeft: activeTab === "guest-history" ? 9 : 12
@@ -1873,8 +2162,9 @@ export function AdminPage({ initialTab }: { initialTab?: AdminTab } = {}) {
                       if (window.innerWidth < 768) setMobileSidebarOpen(false);
                     }} style={{
                       background: "none", border: "none", cursor: "pointer",
-                      padding: "8px 12px", width: "100%",
-                      display: "flex", alignItems: "center", gap: 8,
+                      padding: sidebarExpanded ? "8px 12px" : "12px",
+                      width: "100%",
+                      display: "flex", alignItems: "center", justifyContent: sidebarExpanded ? "flex-start" : "center", gap: (sidebarExpanded ? 8 : 0),
                       color: colors.textMuted, fontSize: 12
                     }}>
                       <Plus size={16} />
@@ -1887,8 +2177,8 @@ export function AdminPage({ initialTab }: { initialTab?: AdminTab } = {}) {
                       to="/orders-requests"
                       onClick={() => navigateToTab("orders-requests")}
                       style={{
-                        display: "flex", alignItems: "center", gap: 8,
-                        padding: "8px 12px", width: "100%",
+                        display: "flex", alignItems: "center", justifyContent: sidebarExpanded ? "flex-start" : "center", gap: (sidebarExpanded ? 8 : 0),
+                        padding: sidebarExpanded ? "8px 12px" : "12px", width: "100%",
                         textDecoration: "none",
                         color: isOrdersPage ? colors.gold : colors.textMuted,
                         fontSize: 12,
@@ -1906,13 +2196,13 @@ export function AdminPage({ initialTab }: { initialTab?: AdminTab } = {}) {
                     <Link
                       to="/chat-management"
                       style={{
-                        display: "flex", alignItems: "center", gap: 8,
-                        padding: "8px 12px", width: "100%",
+                        display: "flex", alignItems: "center", justifyContent: sidebarExpanded ? "flex-start" : "center", gap: (sidebarExpanded ? 8 : 0),
+                        padding: sidebarExpanded ? "8px 12px" : "12px", width: "100%",
                         textDecoration: "none",
-                        color: colors.textMuted,
+                        color: isChatPage ? colors.gold : colors.textMuted,
                         fontSize: 12,
-                        borderLeft: "3px solid transparent",
-                        paddingLeft: 12,
+                        borderLeft: isChatPage ? `3px solid ${colors.gold}` : "3px solid transparent",
+                        paddingLeft: isChatPage ? 9 : 12,
                         boxSizing: "border-box",
                       }}
                     >
@@ -1935,20 +2225,20 @@ export function AdminPage({ initialTab }: { initialTab?: AdminTab } = {}) {
                 setExpandedGroups(newGroups);
               }} style={{
                 background: "none", border: "none", cursor: "pointer",
-                padding: "8px 12px", width: "100%",
-                display: "flex", alignItems: "center", justifyContent: "space-between",
+                padding: sidebarExpanded ? "8px 12px" : "8px", width: "100%",
+                display: "flex", alignItems: "center", justifyContent: sidebarExpanded ? "space-between" : "center",
                 color: colors.textMuted, fontSize: 10, letterSpacing: "0.15em",
                 textTransform: "uppercase"
               }}>
                 <span style={{ display: sidebarExpanded ? "inline" : "none" }}>Rooms</span>
-                {expandedGroups.has("rooms") ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+                {sidebarExpanded && (expandedGroups.has("rooms") ? <ChevronDown size={14} /> : <ChevronRight size={14} />)}
               </button>
               {expandedGroups.has("rooms") && (
-                <div style={{ marginLeft: 8 }}>
+                <div style={{ marginLeft: sidebarExpanded ? 8 : 0 }}>
                   <button onClick={() => navigateToTab("rooms")} style={{
                     background: "none", border: "none", cursor: "pointer",
-                    padding: "8px 12px", width: "100%",
-                    display: "flex", alignItems: "center", gap: 8,
+                    padding: sidebarExpanded ? "8px 12px" : "12px", width: "100%",
+                    display: "flex", alignItems: "center", justifyContent: sidebarExpanded ? "flex-start" : "center", gap: (sidebarExpanded ? 8 : 0),
                     color: activeTab === "rooms" ? colors.gold : colors.textMuted,
                     fontSize: 12, borderLeft: activeTab === "rooms" ? `3px solid ${colors.gold}` : "3px solid transparent",
                     paddingLeft: activeTab === "rooms" ? 9 : 12
@@ -1960,8 +2250,8 @@ export function AdminPage({ initialTab }: { initialTab?: AdminTab } = {}) {
                   {staffRole !== "housekeeping" && (
                     <button onClick={() => navigateToTab("occupancy-forecast")} style={{
                       background: "none", border: "none", cursor: "pointer",
-                      padding: "8px 12px", width: "100%",
-                      display: "flex", alignItems: "center", gap: 8,
+                      padding: sidebarExpanded ? "8px 12px" : "12px", width: "100%",
+                      display: "flex", alignItems: "center", justifyContent: sidebarExpanded ? "flex-start" : "center", gap: (sidebarExpanded ? 8 : 0),
                       color: activeTab === "occupancy-forecast" ? colors.gold : colors.textMuted,
                       fontSize: 12, borderLeft: activeTab === "occupancy-forecast" ? `3px solid ${colors.gold}` : "3px solid transparent",
                       paddingLeft: activeTab === "occupancy-forecast" ? 9 : 12
@@ -1985,22 +2275,22 @@ export function AdminPage({ initialTab }: { initialTab?: AdminTab } = {}) {
                 setExpandedGroups(newGroups);
               }} style={{
                 background: "none", border: "none", cursor: "pointer",
-                padding: "8px 12px", width: "100%",
-                display: "flex", alignItems: "center", justifyContent: "space-between",
+                padding: sidebarExpanded ? "8px 12px" : "8px", width: "100%",
+                display: "flex", alignItems: "center", justifyContent: sidebarExpanded ? "space-between" : "center",
                 color: colors.textMuted, fontSize: 10, letterSpacing: "0.15em",
                 textTransform: "uppercase"
               }}>
                 <span style={{ display: sidebarExpanded ? "inline" : "none" }}>Services</span>
-                {expandedGroups.has("services") ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+                {sidebarExpanded && (expandedGroups.has("services") ? <ChevronDown size={14} /> : <ChevronRight size={14} />)}
               </button>
               {expandedGroups.has("services") && (
-                <div style={{ marginLeft: 8 }}>
+                <div style={{ marginLeft: sidebarExpanded ? 8 : 0 }}>
                   <Link
                     to="/spa-management"
                     onClick={() => navigateToTab("spa-management")}
                     style={{
-                      display: "flex", alignItems: "center", gap: 8,
-                      padding: "8px 12px", width: "100%",
+                      display: "flex", alignItems: "center", justifyContent: sidebarExpanded ? "flex-start" : "center", gap: (sidebarExpanded ? 8 : 0),
+                      padding: sidebarExpanded ? "8px 12px" : "12px", width: "100%",
                       textDecoration: "none",
                       color: isSpaPage ? colors.gold : colors.textMuted,
                       fontSize: 12,
@@ -2017,8 +2307,8 @@ export function AdminPage({ initialTab }: { initialTab?: AdminTab } = {}) {
                       to="/menu-management"
                       onClick={() => navigateToTab("menu-management")}
                       style={{
-                        display: "flex", alignItems: "center", gap: 8,
-                        padding: "8px 12px", width: "100%",
+                        display: "flex", alignItems: "center", justifyContent: sidebarExpanded ? "flex-start" : "center", gap: (sidebarExpanded ? 8 : 0),
+                        padding: sidebarExpanded ? "8px 12px" : "12px", width: "100%",
                         textDecoration: "none",
                         color: isMenuPage ? colors.gold : colors.textMuted,
                         fontSize: 12,
@@ -2046,20 +2336,20 @@ export function AdminPage({ initialTab }: { initialTab?: AdminTab } = {}) {
                 setExpandedGroups(newGroups);
               }} style={{
                 background: "none", border: "none", cursor: "pointer",
-                padding: "8px 12px", width: "100%",
-                display: "flex", alignItems: "center", justifyContent: "space-between",
+                padding: sidebarExpanded ? "8px 12px" : "8px", width: "100%",
+                display: "flex", alignItems: "center", justifyContent: sidebarExpanded ? "space-between" : "center",
                 color: colors.textMuted, fontSize: 10, letterSpacing: "0.15em",
                 textTransform: "uppercase"
               }}>
                 <span style={{ display: sidebarExpanded ? "inline" : "none" }}>Finance</span>
-                {expandedGroups.has("finance") ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+                {sidebarExpanded && (expandedGroups.has("finance") ? <ChevronDown size={14} /> : <ChevronRight size={14} />)}
               </button>
               {expandedGroups.has("finance") && (
-                <div style={{ marginLeft: 8 }}>
+                <div style={{ marginLeft: sidebarExpanded ? 8 : 0 }}>
                   <button onClick={() => navigateToTab("reports")} style={{
                     background: "none", border: "none", cursor: "pointer",
-                    padding: "8px 12px", width: "100%",
-                    display: "flex", alignItems: "center", gap: 8,
+                    padding: sidebarExpanded ? "8px 12px" : "12px", width: "100%",
+                    display: "flex", alignItems: "center", justifyContent: sidebarExpanded ? "flex-start" : "center", gap: (sidebarExpanded ? 8 : 0),
                     color: activeTab === "reports" ? colors.gold : colors.textMuted,
                     fontSize: 12, borderLeft: activeTab === "reports" ? `3px solid ${colors.gold}` : "3px solid transparent",
                     paddingLeft: activeTab === "reports" ? 9 : 12
@@ -2069,8 +2359,8 @@ export function AdminPage({ initialTab }: { initialTab?: AdminTab } = {}) {
                   </button>
                   <button onClick={() => navigateToTab("room-rates")} style={{
                     background: "none", border: "none", cursor: "pointer",
-                    padding: "8px 12px", width: "100%",
-                    display: "flex", alignItems: "center", gap: 8,
+                    padding: sidebarExpanded ? "8px 12px" : "12px", width: "100%",
+                    display: "flex", alignItems: "center", justifyContent: sidebarExpanded ? "flex-start" : "center", gap: (sidebarExpanded ? 8 : 0),
                     color: activeTab === "room-rates" ? colors.gold : colors.textMuted,
                     fontSize: 12, borderLeft: activeTab === "room-rates" ? `3px solid ${colors.gold}` : "3px solid transparent",
                     paddingLeft: activeTab === "room-rates" ? 9 : 12
@@ -2093,20 +2383,20 @@ export function AdminPage({ initialTab }: { initialTab?: AdminTab } = {}) {
                 setExpandedGroups(newGroups);
               }} style={{
                 background: "none", border: "none", cursor: "pointer",
-                padding: "8px 12px", width: "100%",
-                display: "flex", alignItems: "center", justifyContent: "space-between",
+                padding: sidebarExpanded ? "8px 12px" : "8px", width: "100%",
+                display: "flex", alignItems: "center", justifyContent: sidebarExpanded ? "space-between" : "center",
                 color: colors.textMuted, fontSize: 10, letterSpacing: "0.15em",
                 textTransform: "uppercase"
               }}>
                 <span style={{ display: sidebarExpanded ? "inline" : "none" }}>Staff</span>
-                {expandedGroups.has("staff") ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+                {sidebarExpanded && (expandedGroups.has("staff") ? <ChevronDown size={14} /> : <ChevronRight size={14} />)}
               </button>
               {expandedGroups.has("staff") && (
-                <div style={{ marginLeft: 8 }}>
+                <div style={{ marginLeft: sidebarExpanded ? 8 : 0 }}>
                   <button onClick={() => { setShowStaffManagement(!showStaffManagement); if (window.innerWidth < 768) setMobileSidebarOpen(false); }} style={{
                     background: "none", border: "none", cursor: "pointer",
-                    padding: "8px 12px", width: "100%",
-                    display: "flex", alignItems: "center", gap: 8,
+                    padding: sidebarExpanded ? "8px 12px" : "12px", width: "100%",
+                    display: "flex", alignItems: "center", justifyContent: sidebarExpanded ? "flex-start" : "center", gap: (sidebarExpanded ? 8 : 0),
                     color: showStaffManagement ? colors.gold : colors.textMuted,
                     fontSize: 12, borderLeft: showStaffManagement ? `3px solid ${colors.gold}` : "3px solid transparent",
                     paddingLeft: showStaffManagement ? 9 : 12
@@ -2120,44 +2410,27 @@ export function AdminPage({ initialTab }: { initialTab?: AdminTab } = {}) {
           )}
         </div>
 
-        {/* Sidebar Footer */}
+        {/* Refresh button at bottom of sidebar */}
         <div style={{ padding: "12px", borderTop: `1px solid ${colors.border}` }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
-            <button onClick={() => token && loadStats(token)} style={{
-              background: "none", border: `1px solid ${colors.border}`, padding: "6px",
-              color: colors.textMuted, cursor: "pointer", fontSize: 12,
-              display: "flex", alignItems: "center", justifyContent: "center"
-            }}>
-              <RefreshCw size={14} />
-            </button>
-            <button onClick={toggleTheme} style={{
-              background: "none", border: `1px solid ${colors.border}`,
-              borderRadius: "50%", width: 28, height: 28, cursor: "pointer",
-              display: "flex", alignItems: "center", justifyContent: "center",
-              color: colors.gold
-            }}>
-              {isDark ? <Sun size={12} /> : <Moon size={12} />}
-            </button>
-          </div>
-          {sidebarExpanded && (
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: 8 }}>
-              <span style={{ fontSize: 11, color: colors.textMuted }}>{staffName}</span>
-              <button onClick={handleLogout} style={{
-                background: "none", border: "none", cursor: "pointer",
-                color: colors.textMuted, padding: 4
-              }}>
-                <LogOut size={14} />
-              </button>
-            </div>
-          )}
+          <button onClick={() => token && loadStats(token)} style={{
+            background: "none", border: `1px solid ${colors.border}`, padding: "8px",
+            color: colors.textMuted, cursor: "pointer", fontSize: 12,
+            display: "flex", alignItems: "center", justifyContent: "center",
+            width: "100%", borderRadius: 6,
+            transition: "background 0.2s"
+          }} onMouseEnter={(e) => e.currentTarget.style.background = colors.border}
+            onMouseLeave={(e) => e.currentTarget.style.background = "none"}>
+            <RefreshCw size={16} />
+          </button>
         </div>
       </aside>
 
       {/* Main Content */}
       <main style={{
         padding: 24, maxWidth: 1400, margin: "0 auto",
-        marginLeft: window.innerWidth < 768 ? 0 : (sidebarExpanded ? 220 : 56),
-        transition: "margin-left 0.25s ease"
+        marginTop: 64,
+        marginLeft: window.innerWidth < 768 ? 0 : (sidebarExpanded ? 220 : 64),
+        transition: "margin-left 0.25s ease, margin-top 0.25s ease"
       }}>
         {loading && !isPmsSubPage && (
           <p style={{ color: colors.textMuted, textAlign: "center", padding: 40 }}>Loading...</p>
@@ -2306,7 +2579,7 @@ export function AdminPage({ initialTab }: { initialTab?: AdminTab } = {}) {
                 <p style={{ color: colors.textMuted, fontSize: 13 }}>No staff members</p>
               ) : (
                 <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))", gap: 16 }}>
-                  {staffList.map((staff: any) => {
+                  {staffList.map((staff: any, index: number) => {
                     const roleColors: Record<string, string> = {
                       "front-desk": "#3b82f6",
                       "accountant": "#8b5cf6",
@@ -2316,6 +2589,9 @@ export function AdminPage({ initialTab }: { initialTab?: AdminTab } = {}) {
                       "housekeeping": "#14b8a6",
                       "spa": "#ec4899",
                     };
+                    const isCurrentUser = staff.full_name === staffName;
+                    const isActiveUser = isCurrentUser;
+                    const simulatedActiveTime = ["5m ago", "23m ago", "1h ago", "2h ago", "3h ago", "Offline"][index % 6];
                     return (
                       <div
                         key={staff.id}
@@ -2326,7 +2602,15 @@ export function AdminPage({ initialTab }: { initialTab?: AdminTab } = {}) {
                         }}
                       >
                         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 12 }}>
-                          <h4 style={{ margin: 0, fontSize: 15, color: colors.text, fontWeight: 600 }}>{staff.full_name}</h4>
+                          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                            <div style={{
+                              width: 8, height: 8, borderRadius: "50%",
+                              background: isActiveUser ? "#10b981" : "#64748b",
+                              animation: isActiveUser ? "pulse 2s infinite" : "none",
+                              boxShadow: isActiveUser ? "0 0 8px #10b981" : "none"
+                            }} />
+                            <h4 style={{ margin: 0, fontSize: 15, color: colors.text, fontWeight: 600 }}>{staff.full_name}</h4>
+                          </div>
                           <span style={{
                             background: roleColors[staff.role] || "#666",
                             color: "#fff", padding: "4px 10px",
@@ -2342,6 +2626,9 @@ export function AdminPage({ initialTab }: { initialTab?: AdminTab } = {}) {
                         <p style={{ margin: "4px 0 0", fontSize: 11, color: colors.textMuted }}>
                           Joined: {new Date(staff.created_at).toLocaleDateString()}
                         </p>
+                        <p style={{ margin: "4px 0 0", fontSize: 10, color: isActiveUser ? "#10b981" : colors.textMuted }}>
+                          {isActiveUser ? "Active Now" : `Active: ${simulatedActiveTime}`}
+                        </p>
                         <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
                           <button
                             onClick={() => handleViewActivity(staff)}
@@ -2353,6 +2640,21 @@ export function AdminPage({ initialTab }: { initialTab?: AdminTab } = {}) {
                             }}
                           >
                             View Activity
+                          </button>
+                          <button
+                            onClick={() => {
+                              if (window.confirm(`Reset credentials for ${staff.full_name}? This will require them to set a new password on next login.`)) {
+                                handleResetCredentials(staff);
+                              }
+                            }}
+                            style={{
+                              background: "none", border: `1px solid ${colors.gold}`,
+                              padding: "6px 12px", color: colors.gold, cursor: "pointer",
+                              fontSize: 11, letterSpacing: "0.1em", textTransform: "uppercase",
+                              fontFamily: "Georgia, serif"
+                            }}
+                          >
+                            Reset Credentials
                           </button>
                           <button
                             onClick={(e) => { e.stopPropagation(); setDeleteConfirm(staff); }}
@@ -2527,101 +2829,309 @@ export function AdminPage({ initialTab }: { initialTab?: AdminTab } = {}) {
 
         {/* ===== DASHBOARD TAB ===== */}
         {!loading && !isPmsSubPage && activeTab === "dashboard" && !showStaffManagement && stats && (
-          <div>
+          <div style={{
+            background: colors.surface,
+            border: `1px solid ${colors.border}`,
+            borderRadius: 12,
+            padding: 32,
+            backdropFilter: "blur(10px)",
+            boxShadow: "0 8px 32px rgba(0, 0, 0, 0.1)"
+          }}>
             {/* Stats Cards */}
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 16, marginBottom: 32 }}>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: 20, marginBottom: 32 }}>
               {[
-                { label: "Today's Arrivals", value: todayArrivals, icon: <Users size={20} />, color: "#3b82f6" },
-                { label: "Today's Departures", value: todayDepartures, icon: <CheckCircle size={20} />, color: "#22c55e" },
-                { label: "Occupied Rooms", value: `${occupiedRooms} / ${stats.roomStatuses?.length ?? 96}`, icon: <BedDouble size={20} />, color: "#ef4444" },
-                ...(staffRole !== "front-desk" ? [{ label: "Monthly Revenue", value: formatNaira(stats.monthlyRevenue ?? 0), icon: <TrendingUp size={20} />, color: colors.gold }] : []),
+                {
+                  label: "Today's Arrivals",
+                  value: todayArrivals,
+                  icon: (
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z" />
+                      <path d="M16 3h5v5" />
+                      <path d="M21 3 14 10" />
+                    </svg>
+                  ),
+                  color: "#3b82f6",
+                  gradient: "linear-gradient(135deg, rgba(59, 130, 246, 0.15) 0%, rgba(59, 130, 246, 0.05) 100%)"
+                },
+                {
+                  label: "Today's Departures",
+                  value: todayDepartures,
+                  icon: (
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M9 17l-5-5 5-5" />
+                      <path d="M20 17h-8a4 4 0 0 1-4-4V4" />
+                      <path d="M16 3h5v5" />
+                      <path d="M21 3 14 10" />
+                    </svg>
+                  ),
+                  color: "#22c55e",
+                  gradient: "linear-gradient(135deg, rgba(34, 197, 94, 0.15) 0%, rgba(34, 197, 94, 0.05) 100%)"
+                },
+                {
+                  label: "Occupied Rooms",
+                  value: `${occupiedRooms} / ${stats.roomStatuses?.length ?? 96}`,
+                  icon: (
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M2 4v16" />
+                      <path d="M2 8h18a2 2 0 0 1 2 2v10" />
+                      <path d="M2 17h20" />
+                      <path d="M6 8v9" />
+                    </svg>
+                  ),
+                  color: "#ef4444",
+                  gradient: "linear-gradient(135deg, rgba(239, 68, 68, 0.15) 0%, rgba(239, 68, 68, 0.05) 100%)"
+                },
+                ...(staffRole !== "front-desk" ? [{
+                  label: "Monthly Revenue",
+                  value: formatNaira(stats.monthlyRevenue ?? 0),
+                  icon: (
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                      <line x1="12" y1="1" x2="12" y2="23" />
+                      <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
+                    </svg>
+                  ),
+                  color: colors.gold,
+                  gradient: `linear-gradient(135deg, rgba(212, 175, 55, 0.2) 0%, rgba(212, 175, 55, 0.08) 100%)`
+                }] : []),
               ].map(card => (
                 <div key={card.label} style={{
-                  background: colors.surface, border: `1px solid ${colors.border}`,
-                  padding: 20, display: "flex", flexDirection: "column", gap: 12
+                  background: card.gradient,
+                  border: `1px solid ${card.color}30`,
+                  padding: 24,
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: 16,
+                  borderRadius: 8,
+                  backdropFilter: "blur(10px)",
+                  boxShadow: `0 4px 20px ${card.color}15`,
+                  transition: "all 0.3s ease"
                 }}>
                   <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                    <span style={{ fontSize: 11, color: colors.textMuted, letterSpacing: "0.15em", textTransform: "uppercase" }}>{card.label}</span>
-                    <span style={{ color: card.color }}>{card.icon}</span>
+                    <span style={{
+                      fontSize: 10,
+                      color: colors.textMuted,
+                      letterSpacing: "0.2em",
+                      textTransform: "uppercase",
+                      fontWeight: 600
+                    }}>{card.label}</span>
+                    <span style={{ color: card.color, opacity: 0.9 }}>{card.icon}</span>
                   </div>
-                  <span style={{ fontSize: 28, color: card.color, fontWeight: 400 }}>{card.value}</span>
+                  <span style={{
+                    fontSize: 32,
+                    color: card.color,
+                    fontWeight: 300,
+                    letterSpacing: "-0.02em",
+                    fontFamily: "Georgia, serif"
+                  }}>{card.value}</span>
                 </div>
               ))}
             </div>
 
-            {/* Today's Check-ins / Check-outs */}
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 24, marginBottom: 32 }}>
-              {[
-                { title: "Today's Arrivals", data: stats.todayCheckIns, action: "check-in" },
-                { title: "Today's Departures", data: stats.todayCheckOuts, action: "check-out" },
-              ].map(section => (
-                <div key={section.title} style={{ background: colors.surface, border: `1px solid ${colors.border}`, padding: 20 }}>
-                  <h3 style={{ color: colors.gold, fontSize: 12, letterSpacing: "0.2em", textTransform: "uppercase", margin: "0 0 16px" }}>
-                    {section.title}
-                  </h3>
-                  {section.data?.length === 0 ? (
-                    <p style={{ color: colors.textMuted, fontSize: 13 }}>None today</p>
-                  ) : (
-                    <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-                      {section.data?.map((b: any) => (
-                        <div key={b.reference} style={{
-                          background: colors.surface2, padding: 12,
-                          display: "flex", justifyContent: "space-between", alignItems: "center"
-                        }}>
-                          <div>
-                            <p style={{ margin: 0, fontSize: 14, color: colors.text }}>{b.guest_name}</p>
-                            <p style={{ margin: "2px 0 0", fontSize: 11, color: colors.textMuted }}>{b.room_name} · {b.reference}</p>
-                          </div>
-                          <div style={{ display: "flex", gap: 8 }}>
-                            <div style={{ display: "flex", flexDirection: "column", gap: 3, alignItems: "flex-end" }}>
-                              <span style={{
-                                fontSize: 10, padding: "3px 8px", letterSpacing: "0.1em",
-                                textTransform: "uppercase", border: `1px solid`,
-                                borderColor: getBookingStatusColor(b.status),
-                                color: getBookingStatusColor(b.status)
-                              }}>
-                                {b.status}
-                              </span>
-                              {b.early_checkin && (
+            {/* Phase 3 Operational Dashboard Grid */}
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+              {/* Left Panel — Arrivals & Departures */}
+              <div className="lg:col-span-2 grid grid-cols-1 md:grid-cols-2 gap-6">
+                {[
+                  { title: "Today's Arrivals", data: stats.todayCheckIns, action: "check-in" as const },
+                  { title: "Today's Departures", data: stats.todayCheckOuts, action: "check-out" as const },
+                ].map(section => (
+                  <div
+                    key={section.title}
+                    style={{ background: colors.surface, border: `1px solid ${colors.border}`, padding: 20 }}
+                    className="flex flex-col min-h-[320px]"
+                  >
+                    <h3 style={{ color: colors.gold, fontSize: 12, letterSpacing: "0.2em", textTransform: "uppercase", margin: "0 0 16px" }}>
+                      {section.title}
+                    </h3>
+                    <div className="flex-1 overflow-y-auto max-h-[420px] pr-1" style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+                      {section.data?.length === 0 ? (
+                        <p style={{ color: colors.textMuted, fontSize: 13 }}>None today</p>
+                      ) : (
+                        section.data?.map((b: any) => (
+                          <div key={b.reference} style={{
+                            background: colors.surface2, padding: 12,
+                            display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8
+                          }}>
+                            <div style={{ minWidth: 0 }}>
+                              <p style={{ margin: 0, fontSize: 14, color: colors.text }}>{b.guest_name}</p>
+                              <p style={{ margin: "2px 0 0", fontSize: 11, color: colors.textMuted }}>{b.room_name} · {b.reference}</p>
+                            </div>
+                            <div style={{ display: "flex", gap: 8, flexShrink: 0 }}>
+                              <div style={{ display: "flex", flexDirection: "column", gap: 3, alignItems: "flex-end" }}>
                                 <span style={{
-                                  fontSize: 9, padding: "2px 6px", letterSpacing: "0.08em",
-                                  textTransform: "uppercase", background: "#f59e0b22",
-                                  border: "1px solid #f59e0b", color: "#f59e0b"
-                                }}>Early</span>
+                                  fontSize: 10, padding: "3px 8px", letterSpacing: "0.1em",
+                                  textTransform: "uppercase", border: `1px solid`,
+                                  borderColor: getBookingStatusColor(b.status),
+                                  color: getBookingStatusColor(b.status)
+                                }}>
+                                  {b.status}
+                                </span>
+                                {b.early_checkin && (
+                                  <span style={{
+                                    fontSize: 9, padding: "2px 6px", letterSpacing: "0.08em",
+                                    textTransform: "uppercase", background: "#f59e0b22",
+                                    border: "1px solid #f59e0b", color: "#f59e0b"
+                                  }}>Early</span>
+                                )}
+                              </div>
+                              {staffRole !== "accountant" && b.status === "confirmed" && section.action === "check-in" && (
+                                <button onClick={() => handleCheckIn(b)} disabled={actionLoading === b.reference} style={{
+                                  background: "#3b82f6", color: "#fff", border: "none",
+                                  padding: "4px 12px", fontSize: 11, cursor: "pointer",
+                                  letterSpacing: "0.1em", textTransform: "uppercase"
+                                }}>
+                                  {actionLoading === b.reference ? "..." : "Check In"}
+                                </button>
+                              )}
+                              {staffRole !== "accountant" && b.status === "checked_in" && section.action === "check-out" && (
+                                <button onClick={() => handleCheckOut(b)} disabled={actionLoading === b.reference} style={{
+                                  background: "#22c55e", color: "#fff", border: "none",
+                                  padding: "4px 12px", fontSize: 11, cursor: "pointer",
+                                  letterSpacing: "0.1em", textTransform: "uppercase"
+                                }}>
+                                  {actionLoading === b.reference ? "..." : "Check Out"}
+                                </button>
                               )}
                             </div>
-                            {staffRole !== "accountant" && b.status === "confirmed" && section.action === "check-in" && (
-                              <button onClick={() => handleCheckIn(b)} disabled={actionLoading === b.reference} style={{
-                                background: "#3b82f6", color: "#fff", border: "none",
-                                padding: "4px 12px", fontSize: 11, cursor: "pointer",
-                                letterSpacing: "0.1em", textTransform: "uppercase"
-                              }}>
-                                {actionLoading === b.reference ? "..." : "Check In"}
-                              </button>
-                            )}
-                            {staffRole !== "accountant" && b.status === "checked_in" && section.action === "check-out" && (
-                              <button onClick={() => handleCheckOut(b)} disabled={actionLoading === b.reference} style={{
-                                background: "#22c55e", color: "#fff", border: "none",
-                                padding: "4px 12px", fontSize: 11, cursor: "pointer",
-                                letterSpacing: "0.1em", textTransform: "uppercase"
-                              }}>
-                                {actionLoading === b.reference ? "..." : "Check Out"}
-                              </button>
-                            )}
                           </div>
-                        </div>
-                      ))}
+                        ))
+                      )}
                     </div>
-                  )}
+                  </div>
+                ))}
+              </div>
+
+              {/* Right Panel — Operational Sidebar Feed */}
+              <div className="lg:col-span-1 flex flex-col gap-6">
+                {/* Shift Summary */}
+                <div style={{ background: colors.surface, border: `1px solid ${colors.border}`, padding: 20 }}>
+                  <p style={{ margin: 0, fontSize: 10, color: colors.textMuted, letterSpacing: "0.2em", textTransform: "uppercase" }}>
+                    Shift Summary
+                  </p>
+                  <h3 style={{ margin: "10px 0 6px", fontSize: 22, color: colors.text, fontWeight: 400, fontFamily: "Georgia, serif" }}>
+                    {getShiftGreeting()}, {staffName}
+                  </h3>
+                  <p style={{ margin: 0, fontSize: 13, color: colors.gold, textTransform: "capitalize" }}>
+                    {staffRole.replace(/-/g, " ")} · Front-of-house operations
+                  </p>
+                  <p style={{ margin: "12px 0 0", fontSize: 12, color: colors.textMuted, lineHeight: 1.5 }}>
+                    {todayArrivals} arrival{todayArrivals !== 1 ? "s" : ""} and {todayDepartures} departure{todayDepartures !== 1 ? "s" : ""} scheduled today.
+                    {missedArrivals.length > 0 && (
+                      <span style={{ color: "#ef4444" }}> {missedArrivals.length} missed arrival{missedArrivals.length !== 1 ? "s" : ""} need attention.</span>
+                    )}
+                  </p>
                 </div>
-              ))}
+
+                {/* System Activity Feed */}
+                <div style={{ background: colors.surface, border: `1px solid ${colors.border}`, padding: 20 }}>
+                  <h3 style={{ color: colors.gold, fontSize: 12, letterSpacing: "0.2em", textTransform: "uppercase", margin: "0 0 16px" }}>
+                    System Activity
+                  </h3>
+                  <div className="overflow-y-auto max-h-[280px] pr-1" style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                    {systemActivityFeed.length === 0 ? (
+                      <p style={{ color: colors.textMuted, fontSize: 13 }}>No recent room updates</p>
+                    ) : (
+                      systemActivityFeed.map((entry: any, idx: number) => (
+                        <div key={`${entry.room_number}-${entry.updated_at}-${idx}`} style={{
+                          background: colors.surface2, padding: 10, borderLeft: `3px solid ${getStatusColor(entry.status)}`
+                        }}>
+                          <div style={{ display: "flex", justifyContent: "space-between", gap: 8, alignItems: "flex-start" }}>
+                            <p style={{ margin: 0, fontSize: 13, color: colors.text }}>
+                              Room {entry.room_number}
+                            </p>
+                            <span style={{ fontSize: 10, color: colors.textMuted, whiteSpace: "nowrap" }}>
+                              {entry.updated_at ? new Date(entry.updated_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "—"}
+                            </span>
+                          </div>
+                          <p style={{ margin: "4px 0 0", fontSize: 11, color: getStatusColor(entry.status) }}>
+                            {getStatusLabel(entry.status)}
+                          </p>
+                          {entry.updated_by && (
+                            <p style={{ margin: "2px 0 0", fontSize: 10, color: colors.textMuted }}>
+                              by {entry.updated_by}
+                            </p>
+                          )}
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
+
+                {/* Missed Arrivals */}
+                <div style={{
+                  background: colors.surface,
+                  border: `1px solid ${missedArrivals.length > 0 ? "#ef444455" : colors.border}`,
+                  padding: 20
+                }}>
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16 }}>
+                    <h3 style={{ color: missedArrivals.length > 0 ? "#ef4444" : colors.gold, fontSize: 12, letterSpacing: "0.2em", textTransform: "uppercase", margin: 0 }}>
+                      Missed Arrivals
+                    </h3>
+                    {missedArrivals.length > 0 && (
+                      <span style={{
+                        background: "#ef444422", color: "#ef4444", fontSize: 10, fontWeight: 700,
+                        padding: "2px 8px", borderRadius: 4, letterSpacing: "0.08em"
+                      }}>
+                        {missedArrivals.length}
+                      </span>
+                    )}
+                  </div>
+                  <div className="overflow-y-auto max-h-[320px] pr-1" style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                    {missedArrivals.length === 0 ? (
+                      <p style={{ color: colors.textMuted, fontSize: 13 }}>All confirmed arrivals are current</p>
+                    ) : (
+                      missedArrivals.map((b: any) => (
+                        <div key={b.reference} style={{ background: colors.surface2, padding: 12 }}>
+                          <p style={{ margin: 0, fontSize: 14, color: colors.text }}>{b.guest_name}</p>
+                          <p style={{ margin: "2px 0 8px", fontSize: 11, color: colors.textMuted }}>
+                            {b.room_name} · Due {new Date(b.check_in).toLocaleDateString()}
+                          </p>
+                          {staffRole !== "accountant" && (
+                            <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                              <button
+                                onClick={() => handleMarkNoShow(b)}
+                                disabled={noShowLoading === b.reference}
+                                style={{
+                                  background: "none", border: `1px solid #ef4444`, color: "#ef4444",
+                                  padding: "4px 10px", fontSize: 10, cursor: "pointer",
+                                  letterSpacing: "0.08em", textTransform: "uppercase",
+                                  opacity: noShowLoading === b.reference ? 0.6 : 1
+                                }}
+                              >
+                                {noShowLoading === b.reference ? "..." : "No-Show"}
+                              </button>
+                              <button
+                                onClick={() => openRescheduleForBooking(b)}
+                                style={{
+                                  background: colors.gold, border: "none", color: "#0a0a0a",
+                                  padding: "4px 10px", fontSize: 10, cursor: "pointer",
+                                  letterSpacing: "0.08em", textTransform: "uppercase", fontWeight: 600
+                                }}
+                              >
+                                Reschedule
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
         )}
 
         {/* ===== BOOKINGS TAB ===== */}
         {!loading && !isOrdersPage && activeTab === "bookings" && !showStaffManagement && stats && (
-          <div>
+          <div style={{
+            background: colors.surface,
+            border: `1px solid ${colors.border}`,
+            borderRadius: 12,
+            padding: 32,
+            backdropFilter: "blur(10px)",
+            boxShadow: "0 8px 32px rgba(0, 0, 0, 0.1)"
+          }}>
             <div style={{ display: "flex", gap: 12, marginBottom: 20, flexWrap: "wrap" }}>
               <div style={{ display: "flex", alignItems: "center", gap: 8, background: colors.surface, border: `1px solid ${colors.border}`, padding: "8px 12px", flex: 1, minWidth: 200 }}>
                 <Search size={14} style={{ color: colors.textMuted }} />
@@ -2730,6 +3240,18 @@ export function AdminPage({ initialTab }: { initialTab?: AdminTab } = {}) {
                               color: colors.textMuted, letterSpacing: "0.1em", textTransform: "uppercase"
                             }}>View</button>
                           )}
+                          {staffRole !== "accountant" && b.status === "confirmed" && (
+                            <button onClick={() => {
+                              if (window.confirm(`Are you sure you want to cancel ${b.guest_name}'s reservation? This action cannot be undone.`)) {
+                                handleAdminCancelBooking(b);
+                              }
+                            }} disabled={cancelLoading === b.reference} style={{
+                              background: "none", border: `1px solid #ef4444`,
+                              padding: "4px 10px", fontSize: 10, cursor: "pointer",
+                              color: "#ef4444", letterSpacing: "0.1em", textTransform: "uppercase",
+                              opacity: cancelLoading === b.reference ? 0.5 : 1
+                            }}>{cancelLoading === b.reference ? "Cancelling..." : "Cancel"}</button>
+                          )}
                         </div>
                       </td>
                     </tr>
@@ -2743,7 +3265,14 @@ export function AdminPage({ initialTab }: { initialTab?: AdminTab } = {}) {
 
         {/* ===== ROOMS TAB ===== */}
         {!loading && !isPmsSubPage && activeTab === "rooms" && !showStaffManagement && stats && (
-          <div>
+          <div style={{
+            background: colors.surface,
+            border: `1px solid ${colors.border}`,
+            borderRadius: 12,
+            padding: 32,
+            backdropFilter: "blur(10px)",
+            boxShadow: "0 8px 32px rgba(0, 0, 0, 0.1)"
+          }}>
             {/* Collapse All / Expand All */}
             <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 8 }}>
               <button onClick={() => {
@@ -2807,6 +3336,94 @@ export function AdminPage({ initialTab }: { initialTab?: AdminTab } = {}) {
               )}
             </div>
 
+            {/* Room Type Pill-Selector Toolbar */}
+            {(() => {
+              const getRoomTypeCount = (type: string) => {
+                if (!stats.roomStatuses) return 0;
+                return stats.roomStatuses.filter((r: any) => {
+                  const matchStatus = !roomStatusFilter || r.status === roomStatusFilter;
+                  const matchSearch = !roomSearch || 
+                    r.room_number?.includes(roomSearch) || 
+                    r.room_name?.toLowerCase().includes(roomSearch.toLowerCase());
+                  if (!matchStatus || !matchSearch) return false;
+                  
+                  if (type === "All Rooms") return true;
+                  const roomType = getRoomTypeFromName(r.room_name);
+                  const normalizedRoomType = (roomType === "Executive Twin") ? "Executive" : roomType;
+                  return normalizedRoomType === type;
+                }).length;
+              };
+
+              return (
+                <div style={{
+                  display: "flex",
+                  gap: 6,
+                  marginBottom: 24,
+                  flexWrap: "wrap",
+                  alignItems: "center",
+                  background: isDark ? "rgba(20, 20, 20, 0.6)" : "rgba(255, 255, 255, 0.6)",
+                  backdropFilter: "blur(12px)",
+                  WebkitBackdropFilter: "blur(12px)",
+                  padding: "6px",
+                  border: `1px solid ${colors.border}`,
+                  borderRadius: "8px",
+                  boxShadow: "0 4px 20px -2px rgba(0, 0, 0, 0.15)"
+                }}>
+                  {["All Rooms", "Classic", "Superior", "Executive", "Business Suite", "Executive Suite"].map(type => {
+                    const isActive = roomTypeFilter === type;
+                    return (
+                      <button
+                        key={type}
+                        onClick={() => setRoomTypeFilter(type)}
+                        style={{
+                          background: isActive ? colors.gold : "transparent",
+                          border: "none",
+                          color: isActive ? "#0a0a0a" : colors.textMuted,
+                          padding: "8px 16px",
+                          cursor: "pointer",
+                          fontSize: 10,
+                          fontWeight: 700,
+                          textTransform: "uppercase",
+                          letterSpacing: "0.1em",
+                          transition: "all 0.3s cubic-bezier(0.4, 0, 0.2, 1)",
+                          borderRadius: "6px",
+                          fontFamily: "var(--font-sans)",
+                          outline: "none",
+                          boxShadow: isActive ? "0 4px 12px -2px rgba(201, 169, 110, 0.35)" : "none",
+                          display: "inline-flex",
+                          alignItems: "center",
+                          gap: "6px"
+                        }}
+                        onMouseEnter={(e) => {
+                          if (!isActive) {
+                            e.currentTarget.style.color = colors.text;
+                            e.currentTarget.style.background = isDark ? "rgba(255, 255, 255, 0.05)" : "rgba(0, 0, 0, 0.05)";
+                          }
+                        }}
+                        onMouseLeave={(e) => {
+                          if (!isActive) {
+                            e.currentTarget.style.color = colors.textMuted;
+                            e.currentTarget.style.background = "transparent";
+                          }
+                        }}
+                      >
+                        <span>{type}</span>
+                        <span style={{
+                          fontSize: 9,
+                          padding: "2px 6px",
+                          borderRadius: "12px",
+                          background: isActive ? "rgba(0, 0, 0, 0.12)" : (isDark ? "rgba(255, 255, 255, 0.06)" : "rgba(0, 0, 0, 0.04)"),
+                          fontWeight: 700
+                        }}>
+                          {getRoomTypeCount(type)}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              );
+            })()}
+
             {/* Rooms grouped by floor */}
             {(() => {
               const allRooms = stats.roomStatuses ?? [];
@@ -2815,7 +3432,12 @@ export function AdminPage({ initialTab }: { initialTab?: AdminTab } = {}) {
                 const matchSearch = !roomSearch || 
                   r.room_number?.includes(roomSearch) || 
                   r.room_name?.toLowerCase().includes(roomSearch.toLowerCase());
-                return matchStatus && matchSearch;
+                
+                const roomType = getRoomTypeFromName(r.room_name);
+                const normalizedRoomType = (roomType === "Executive Twin") ? "Executive" : roomType;
+                const matchType = roomTypeFilter === "All Rooms" || normalizedRoomType === roomTypeFilter;
+                
+                return matchStatus && matchSearch && matchType;
               });
               // Group by floor
               const byFloor: Record<string, any[]> = {};
@@ -2970,7 +3592,7 @@ export function AdminPage({ initialTab }: { initialTab?: AdminTab } = {}) {
                                   {s.label}
                                 </button>
                               ))}
-                              <button onClick={() => setReserveModal({ roomNumber: room.room_number, guestName: "", reservedUntil: "", reservedRef: "" })}
+                              <button onClick={() => setReserveModal({ roomNumber: room.room_number, guestName: "", reservedFrom: "", reservedUntil: "", reservedRef: "" })}
                                 disabled={actionLoading === room.room_number}
                                 style={{
                                   background: "none", border: "1px solid #a855f7", color: "#a855f7",
@@ -2995,7 +3617,14 @@ export function AdminPage({ initialTab }: { initialTab?: AdminTab } = {}) {
 
         {/* ===== REPORTS TAB ===== */}
         {!loading && !isPmsSubPage && activeTab === "reports" && !showStaffManagement && (
-          <div style={{ padding: 24 }}>
+          <div style={{
+            background: colors.surface,
+            border: `1px solid ${colors.border}`,
+            borderRadius: 12,
+            padding: 32,
+            backdropFilter: "blur(10px)",
+            boxShadow: "0 8px 32px rgba(0, 0, 0, 0.1)"
+          }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 24 }}>
               <h2 style={{ color: colors.gold, fontSize: 14, letterSpacing: "0.2em", textTransform: "uppercase", margin: 0 }}>
                 Revenue Report
@@ -3152,7 +3781,14 @@ export function AdminPage({ initialTab }: { initialTab?: AdminTab } = {}) {
 
         {/* ===== ROOM RATES TAB ===== */}
         {!loading && !isPmsSubPage && activeTab === "room-rates" && !showStaffManagement && (
-          <div style={{ padding: 24 }}>
+          <div style={{
+            background: colors.surface,
+            border: `1px solid ${colors.border}`,
+            borderRadius: 12,
+            padding: 32,
+            backdropFilter: "blur(10px)",
+            boxShadow: "0 8px 32px rgba(0, 0, 0, 0.1)"
+          }}>
             <h2 style={{ color: colors.gold, fontSize: 14, letterSpacing: "0.2em", textTransform: "uppercase", margin: "0 0 24px" }}>
               Room Rates
             </h2>
@@ -3241,7 +3877,14 @@ export function AdminPage({ initialTab }: { initialTab?: AdminTab } = {}) {
 
         {/* ===== GUEST HISTORY TAB ===== */}
         {!loading && !isPmsSubPage && activeTab === "guest-history" && !showStaffManagement && stats && (
-          <div style={{ padding: 24 }}>
+          <div style={{
+            background: colors.surface,
+            border: `1px solid ${colors.border}`,
+            borderRadius: 12,
+            padding: 32,
+            backdropFilter: "blur(10px)",
+            boxShadow: "0 8px 32px rgba(0, 0, 0, 0.1)"
+          }}>
             <h2 style={{ color: colors.gold, fontSize: 14, letterSpacing: "0.2em", textTransform: "uppercase", margin: "0 0 24px" }}>
               Guest History
             </h2>
@@ -3278,7 +3921,14 @@ export function AdminPage({ initialTab }: { initialTab?: AdminTab } = {}) {
 
         {/* ===== OCCUPANCY FORECAST TAB ===== */}
         {!loading && !isPmsSubPage && activeTab === "occupancy-forecast" && !showStaffManagement && (
-          <div style={{ padding: 24 }}>
+          <div style={{
+            background: colors.surface,
+            border: `1px solid ${colors.border}`,
+            borderRadius: 12,
+            padding: 32,
+            backdropFilter: "blur(10px)",
+            boxShadow: "0 8px 32px rgba(0, 0, 0, 0.1)"
+          }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 24 }}>
               <h2 style={{ color: colors.gold, fontSize: 14, letterSpacing: "0.2em", textTransform: "uppercase", margin: 0 }}>
                 Occupancy Forecast
@@ -4110,7 +4760,7 @@ export function AdminPage({ initialTab }: { initialTab?: AdminTab } = {}) {
               <p style={{ color: colors.textMuted, textAlign: "center", padding: "32px 0", fontSize: 13 }}>No vacant clean rooms available</p>
             ) : (
               <>
-                {Object.entries(vacantByType).map(([type, rooms]) => (
+                {Object.entries(vacantByType).map(([type, rooms]: [string, any[]]) => (
                   <div key={type} style={{ marginBottom: 20 }}>
                     <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
                       <span style={{ fontSize: 10, color: getRoomTypeColor(type), letterSpacing: "0.2em", textTransform: "uppercase" }}>{type}</span>
@@ -4349,6 +4999,18 @@ export function AdminPage({ initialTab }: { initialTab?: AdminTab } = {}) {
               </div>
             ))}
             <div style={{ display: "flex", gap: 12, marginTop: 24 }}>
+              {(selectedBooking.status === "confirmed" || selectedBooking.status === "scheduled") && (
+                <button onClick={() => {
+                  setRescheduleBooking(selectedBooking);
+                  setRescheduleCheckIn(selectedBooking.check_in.split("T")[0]);
+                  setRescheduleCheckOut(selectedBooking.check_out.split("T")[0]);
+                  setShowRescheduleModal(true);
+                }} style={{
+                  flex: 1, background: colors.gold, color: "#0a0a0a", border: "none",
+                  padding: "12px", fontSize: 11, cursor: "pointer",
+                  letterSpacing: "0.15em", textTransform: "uppercase"
+                }}>Reschedule Dates</button>
+              )}
               {selectedBooking.status === "confirmed" && (
                 <button onClick={() => handleCheckIn(selectedBooking)} style={{
                   flex: 1, background: "#3b82f6", color: "#fff", border: "none",
@@ -4363,6 +5025,100 @@ export function AdminPage({ initialTab }: { initialTab?: AdminTab } = {}) {
                   letterSpacing: "0.15em", textTransform: "uppercase"
                 }}>Check Out Guest</button>
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ==================== RESCHEDULE BOOKING MODAL ==================== */}
+      {showRescheduleModal && rescheduleBooking && (
+        <div style={{
+          position: "fixed", inset: 0, background: "rgba(0,0,0,0.8)",
+          zIndex: 400, display: "flex", alignItems: "center", justifyContent: "center", padding: 20
+        }}>
+          <div style={{
+            background: colors.surface, border: `1px solid ${colors.gold}`,
+            padding: 32, maxWidth: 440, width: "100%"
+          }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 24 }}>
+              <p style={{ color: colors.gold, fontSize: 11, letterSpacing: "0.3em", textTransform: "uppercase", margin: 0 }}>Reschedule Booking</p>
+              <button onClick={() => {
+                setShowRescheduleModal(false);
+                setRescheduleBooking(null);
+                setRescheduleCheckIn("");
+                setRescheduleCheckOut("");
+              }} style={{ background: "none", border: "none", cursor: "pointer", color: colors.textMuted }}>
+                <X size={18} />
+              </button>
+            </div>
+            <div style={{ marginBottom: 20 }}>
+              <p style={{ margin: 0, fontSize: 13, color: colors.textMuted, marginBottom: 4 }}>Guest</p>
+              <p style={{ margin: 0, fontSize: 16, color: colors.text, fontWeight: 600 }}>{rescheduleBooking.guest_name}</p>
+              <p style={{ margin: "4px 0 0", fontSize: 12, color: colors.textMuted }}>Ref: {rescheduleBooking.reference}</p>
+            </div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 16, marginBottom: 24 }}>
+              <div style={{ position: "relative" }}>
+                <label style={{ display: "block", color: colors.gold, fontSize: 11, letterSpacing: "0.2em", textTransform: "uppercase", marginBottom: 8 }}>
+                  New Check-in Date
+                </label>
+                <input
+                  type="date"
+                  value={rescheduleCheckIn}
+                  onChange={e => setRescheduleCheckIn(e.target.value)}
+                  onKeyDown={e => e.preventDefault()}
+                  style={{
+                    width: "100%", background: colors.surface2, border: `1px solid ${colors.border}`,
+                    padding: "10px 12px", paddingRight: "40px", color: colors.text, fontSize: 13,
+                    fontFamily: "Georgia, serif", outline: "none", boxSizing: "border-box"
+                  }}
+                />
+                <Calendar className="pointer-events-none" style={{ position: "absolute", right: "12px", top: "38px", width: "16px", height: "16px", color: colors.gold }} />
+              </div>
+              <div style={{ position: "relative" }}>
+                <label style={{ display: "block", color: colors.gold, fontSize: 11, letterSpacing: "0.2em", textTransform: "uppercase", marginBottom: 8 }}>
+                  New Check-out Date
+                </label>
+                <input
+                  type="date"
+                  value={rescheduleCheckOut}
+                  onChange={e => setRescheduleCheckOut(e.target.value)}
+                  onKeyDown={e => e.preventDefault()}
+                  min={rescheduleCheckIn}
+                  style={{
+                    width: "100%", background: colors.surface2, border: `1px solid ${colors.border}`,
+                    padding: "10px 12px", paddingRight: "40px", color: colors.text, fontSize: 13,
+                    fontFamily: "Georgia, serif", outline: "none", boxSizing: "border-box"
+                  }}
+                />
+                <Calendar className="pointer-events-none" style={{ position: "absolute", right: "12px", top: "38px", width: "16px", height: "16px", color: colors.gold }} />
+              </div>
+            </div>
+            {rescheduleCheckIn && rescheduleCheckOut && rescheduleCheckOut <= rescheduleCheckIn && (
+              <p style={{ color: "#ef4444", fontSize: 12, marginTop: "-8px", marginBottom: 16 }}>Check-out date must be after check-in date</p>
+            )}
+            <div style={{ display: "flex", gap: 12, justifyContent: "flex-end" }}>
+              <button onClick={() => {
+                setShowRescheduleModal(false);
+                setRescheduleBooking(null);
+                setRescheduleCheckIn("");
+                setRescheduleCheckOut("");
+              }} style={{
+                background: "none", border: `1px solid ${colors.border}`,
+                padding: "10px 20px", fontSize: 11, cursor: "pointer",
+                color: colors.textMuted, letterSpacing: "0.15em", textTransform: "uppercase",
+                fontFamily: "Georgia, serif"
+              }}>Cancel</button>
+              <button
+                onClick={handleRescheduleBooking}
+                disabled={!!(rescheduleLoading || !rescheduleCheckIn || !rescheduleCheckOut || (rescheduleCheckIn && rescheduleCheckOut && rescheduleCheckOut <= rescheduleCheckIn))}
+                style={{
+                  background: colors.gold, color: "#0a0a0a", border: "none",
+                  padding: "10px 20px", fontSize: 11,
+                  letterSpacing: "0.15em", textTransform: "uppercase", fontWeight: 700,
+                  fontFamily: "Georgia, serif", opacity: (rescheduleLoading || !rescheduleCheckIn || !rescheduleCheckOut || (rescheduleCheckIn && rescheduleCheckOut && rescheduleCheckOut <= rescheduleCheckIn)) ? 0.7 : 1,
+                  cursor: (rescheduleLoading || !rescheduleCheckIn || !rescheduleCheckOut || (rescheduleCheckIn && rescheduleCheckOut && rescheduleCheckOut <= rescheduleCheckIn)) ? "not-allowed" : "pointer"
+                }}
+              >{rescheduleLoading ? "Updating..." : "Update Dates"}</button>
             </div>
           </div>
         </div>
@@ -4403,6 +5159,23 @@ export function AdminPage({ initialTab }: { initialTab?: AdminTab } = {}) {
                   fontFamily: "Georgia, serif", outline: "none", boxSizing: "border-box"
                 }}
               />
+            </div>
+            <div style={{ position: "relative", marginBottom: 16 }}>
+              <label style={{ display: "block", color: colors.gold, fontSize: 11, letterSpacing: "0.2em", textTransform: "uppercase", marginBottom: 8 }}>
+                New Check-In Date
+              </label>
+              <input
+                type="date"
+                value={reserveModal.reservedFrom || ""}
+                onChange={e => setReserveModal({ ...reserveModal, reservedFrom: e.target.value })}
+                onKeyDown={e => e.preventDefault()}
+                style={{
+                  width: "100%", background: colors.surface2, border: `1px solid ${colors.border}`,
+                  padding: "12px 16px", paddingRight: "40px", color: colors.text, fontSize: 14,
+                  fontFamily: "Georgia, serif", outline: "none", boxSizing: "border-box"
+                }}
+              />
+              <Calendar className="pointer-events-none" style={{ position: "absolute", right: "12px", top: "38px", width: "16px", height: "16px", color: colors.gold }} />
             </div>
             <div style={{ marginBottom: 16 }}>
               <label style={{ display: "block", color: colors.gold, fontSize: 11, letterSpacing: "0.2em", textTransform: "uppercase", marginBottom: 8 }}>

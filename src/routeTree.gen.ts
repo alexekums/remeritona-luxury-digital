@@ -32,6 +32,7 @@ import { Route as ApiOrdersAndRequestsRouteImport } from './routes/api/orders-an
 import { Route as ApiNewBookingsCountRouteImport } from './routes/api/new-bookings-count'
 import { Route as ApiMenuItemsRouteImport } from './routes/api/menu-items'
 import { Route as ApiBookingsRecentRouteImport } from './routes/api/bookings-recent'
+import { Route as ApiBookingsActiveCountRouteImport } from './routes/api/bookings-active-count'
 import { Route as ApiMessagesThreadRouteImport } from './routes/api/messages.thread'
 import { Route as ApiMessagesReplyRouteImport } from './routes/api/messages.reply'
 import { Route as ApiMessagesMessageRouteImport } from './routes/api/messages.message'
@@ -158,6 +159,11 @@ const ApiBookingsRecentRoute = ApiBookingsRecentRouteImport.update({
   path: '/api/bookings-recent',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiBookingsActiveCountRoute = ApiBookingsActiveCountRouteImport.update({
+  id: '/api/bookings-active-count',
+  path: '/api/bookings-active-count',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiMessagesThreadRoute = ApiMessagesThreadRouteImport.update({
   id: '/api/messages/thread',
   path: '/api/messages/thread',
@@ -227,6 +233,7 @@ export interface FileRoutesByFullPath {
   '/policies': typeof PoliciesRoute
   '/rooms': typeof RoomsRouteWithChildren
   '/spa-management': typeof SpaManagementRoute
+  '/api/bookings-active-count': typeof ApiBookingsActiveCountRoute
   '/api/bookings-recent': typeof ApiBookingsRecentRoute
   '/api/menu-items': typeof ApiMenuItemsRouteWithChildren
   '/api/new-bookings-count': typeof ApiNewBookingsCountRoute
@@ -262,6 +269,7 @@ export interface FileRoutesByTo {
   '/policies': typeof PoliciesRoute
   '/rooms': typeof RoomsRouteWithChildren
   '/spa-management': typeof SpaManagementRoute
+  '/api/bookings-active-count': typeof ApiBookingsActiveCountRoute
   '/api/bookings-recent': typeof ApiBookingsRecentRoute
   '/api/menu-items': typeof ApiMenuItemsRouteWithChildren
   '/api/new-bookings-count': typeof ApiNewBookingsCountRoute
@@ -298,6 +306,7 @@ export interface FileRoutesById {
   '/policies': typeof PoliciesRoute
   '/rooms': typeof RoomsRouteWithChildren
   '/spa-management': typeof SpaManagementRoute
+  '/api/bookings-active-count': typeof ApiBookingsActiveCountRoute
   '/api/bookings-recent': typeof ApiBookingsRecentRoute
   '/api/menu-items': typeof ApiMenuItemsRouteWithChildren
   '/api/new-bookings-count': typeof ApiNewBookingsCountRoute
@@ -335,6 +344,7 @@ export interface FileRouteTypes {
     | '/policies'
     | '/rooms'
     | '/spa-management'
+    | '/api/bookings-active-count'
     | '/api/bookings-recent'
     | '/api/menu-items'
     | '/api/new-bookings-count'
@@ -370,6 +380,7 @@ export interface FileRouteTypes {
     | '/policies'
     | '/rooms'
     | '/spa-management'
+    | '/api/bookings-active-count'
     | '/api/bookings-recent'
     | '/api/menu-items'
     | '/api/new-bookings-count'
@@ -405,6 +416,7 @@ export interface FileRouteTypes {
     | '/policies'
     | '/rooms'
     | '/spa-management'
+    | '/api/bookings-active-count'
     | '/api/bookings-recent'
     | '/api/menu-items'
     | '/api/new-bookings-count'
@@ -441,6 +453,7 @@ export interface RootRouteChildren {
   PoliciesRoute: typeof PoliciesRoute
   RoomsRoute: typeof RoomsRouteWithChildren
   SpaManagementRoute: typeof SpaManagementRoute
+  ApiBookingsActiveCountRoute: typeof ApiBookingsActiveCountRoute
   ApiBookingsRecentRoute: typeof ApiBookingsRecentRoute
   ApiMenuItemsRoute: typeof ApiMenuItemsRouteWithChildren
   ApiNewBookingsCountRoute: typeof ApiNewBookingsCountRoute
@@ -621,6 +634,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiBookingsRecentRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/bookings-active-count': {
+      id: '/api/bookings-active-count'
+      path: '/api/bookings-active-count'
+      fullPath: '/api/bookings-active-count'
+      preLoaderRoute: typeof ApiBookingsActiveCountRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/messages/thread': {
       id: '/api/messages/thread'
       path: '/api/messages/thread'
@@ -744,6 +764,7 @@ const rootRouteChildren: RootRouteChildren = {
   PoliciesRoute: PoliciesRoute,
   RoomsRoute: RoomsRouteWithChildren,
   SpaManagementRoute: SpaManagementRoute,
+  ApiBookingsActiveCountRoute: ApiBookingsActiveCountRoute,
   ApiBookingsRecentRoute: ApiBookingsRecentRoute,
   ApiMenuItemsRoute: ApiMenuItemsRouteWithChildren,
   ApiNewBookingsCountRoute: ApiNewBookingsCountRoute,

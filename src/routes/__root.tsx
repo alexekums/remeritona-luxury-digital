@@ -5,6 +5,7 @@ import { WhatsAppButton } from "@/components/WhatsAppButton";
 import { IntroAnimation } from "@/components/IntroAnimation";
 import "@/i18n";
 import logoUrl from "@/assets/logo.png";
+import { Toaster } from "@/components/ui/sonner";
 
 function NotFoundComponent() {
   return (
@@ -110,6 +111,7 @@ function RootComponent() {
     <>
       <IntroAnimation />
       <Outlet />
+      <Toaster />
       {!isAdminPage && <WhatsAppButton />}
     </>
   );

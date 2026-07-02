@@ -9,6 +9,109 @@ const cfEnv = () => env as unknown as {
 
 const LOYALTY_TIER_MULTIPLIER: Record<number, number> = { 1: 1, 2: 1.5, 3: 2, 4: 2.5, 5: 3 };
 
+export const ROOM_TIER_MAP: Record<string, { tier: number; roomType: string }> = {
+  // Classic → Tier 1
+  '102': { tier: 1, roomType: 'classic' }, '104': { tier: 1, roomType: 'classic' },
+  '105': { tier: 1, roomType: 'classic' }, '107': { tier: 1, roomType: 'classic' },
+  '108': { tier: 1, roomType: 'classic' }, '111': { tier: 1, roomType: 'classic' },
+  '113': { tier: 1, roomType: 'classic' }, '117': { tier: 1, roomType: 'classic' },
+  '118': { tier: 1, roomType: 'classic' }, '119': { tier: 1, roomType: 'classic' },
+  '121': { tier: 1, roomType: 'classic' }, '204': { tier: 1, roomType: 'classic' },
+  '207': { tier: 1, roomType: 'classic' }, '208': { tier: 1, roomType: 'classic' },
+  '209': { tier: 1, roomType: 'classic' }, '213': { tier: 1, roomType: 'classic' },
+  '217': { tier: 1, roomType: 'classic' }, '219': { tier: 1, roomType: 'classic' },
+  '221': { tier: 1, roomType: 'classic' }, '308': { tier: 1, roomType: 'classic' },
+  '309': { tier: 1, roomType: 'classic' }, '310': { tier: 1, roomType: 'classic' },
+  '402': { tier: 1, roomType: 'classic' },
+  // Superior → Tier 2
+  '101': { tier: 2, roomType: 'superior' }, '103': { tier: 2, roomType: 'superior' },
+  '109': { tier: 2, roomType: 'superior' }, '115': { tier: 2, roomType: 'superior' },
+  '120': { tier: 2, roomType: 'superior' }, '122': { tier: 2, roomType: 'superior' },
+  '123': { tier: 2, roomType: 'superior' }, '124': { tier: 2, roomType: 'superior' },
+  '202': { tier: 2, roomType: 'superior' }, '203': { tier: 2, roomType: 'superior' },
+  '205': { tier: 2, roomType: 'superior' }, '206': { tier: 2, roomType: 'superior' },
+  '211': { tier: 2, roomType: 'superior' }, '215': { tier: 2, roomType: 'superior' },
+  '218': { tier: 2, roomType: 'superior' }, '220': { tier: 2, roomType: 'superior' },
+  '222': { tier: 2, roomType: 'superior' }, '223': { tier: 2, roomType: 'superior' },
+  '224': { tier: 2, roomType: 'superior' }, '225': { tier: 2, roomType: 'superior' },
+  '226': { tier: 2, roomType: 'superior' }, '261': { tier: 2, roomType: 'superior' },
+  '301': { tier: 2, roomType: 'superior' }, '302': { tier: 2, roomType: 'superior' },
+  '303': { tier: 2, roomType: 'superior' }, '305': { tier: 2, roomType: 'superior' },
+  '306': { tier: 2, roomType: 'superior' }, '311': { tier: 2, roomType: 'superior' },
+  '312': { tier: 2, roomType: 'superior' }, '315': { tier: 2, roomType: 'superior' },
+  '317': { tier: 2, roomType: 'superior' }, '319': { tier: 2, roomType: 'superior' },
+  '321': { tier: 2, roomType: 'superior' }, '322': { tier: 2, roomType: 'superior' },
+  '323': { tier: 2, roomType: 'superior' }, '324': { tier: 2, roomType: 'superior' },
+  '325': { tier: 2, roomType: 'superior' }, '326': { tier: 2, roomType: 'superior' },
+  '401': { tier: 2, roomType: 'superior' }, '403': { tier: 2, roomType: 'superior' },
+  // Executive → Tier 3
+  '106': { tier: 3, roomType: 'executive' }, '110': { tier: 3, roomType: 'executive' },
+  '112': { tier: 3, roomType: 'executive' }, '114': { tier: 3, roomType: 'executive' },
+  '116': { tier: 3, roomType: 'executive' }, '210': { tier: 3, roomType: 'executive' },
+  '212': { tier: 3, roomType: 'executive' }, '214': { tier: 3, roomType: 'executive' },
+  '216': { tier: 3, roomType: 'executive' }, '304': { tier: 3, roomType: 'executive' },
+  '314': { tier: 3, roomType: 'executive' }, '316': { tier: 3, roomType: 'executive' },
+  '318': { tier: 3, roomType: 'executive' }, '327': { tier: 3, roomType: 'executive' },
+  '328': { tier: 3, roomType: 'executive' },
+  // Executive/Twin → Tier 3
+  '405': { tier: 3, roomType: 'executive' }, '417': { tier: 3, roomType: 'executive' },
+  '418': { tier: 3, roomType: 'executive' },
+  // Business Suites → Tier 4
+  '307': { tier: 4, roomType: 'business-suites' }, '313': { tier: 4, roomType: 'business-suites' },
+  '320': { tier: 4, roomType: 'business-suites' }, '407': { tier: 4, roomType: 'business-suites' },
+  '408': { tier: 4, roomType: 'business-suites' }, '409': { tier: 4, roomType: 'business-suites' },
+  '411': { tier: 4, roomType: 'business-suites' }, '412': { tier: 4, roomType: 'business-suites' },
+  '413': { tier: 4, roomType: 'business-suites' }, '415': { tier: 4, roomType: 'business-suites' },
+  '416': { tier: 4, roomType: 'business-suites' },
+  // Executive Suites → Tier 5
+  '404': { tier: 5, roomType: 'executive-suites' }, '406': { tier: 5, roomType: 'executive-suites' },
+  '410': { tier: 5, roomType: 'executive-suites' }, '414': { tier: 5, roomType: 'executive-suites' },
+};
+
+export function getRoomType(roomNumber: any, roomName?: string): string | null {
+  const roomKey = String(roomNumber ?? "").trim();
+
+  // 1. Explicit Executive Suites rooms (Floor 4 premium rooms)
+  if (["404", "406", "410", "414"].includes(roomKey)) {
+    return "executive-suites";
+  }
+
+  // 2. Explicit Business Suites rooms (Floor 3-4 premium rooms)
+  if (["307", "313", "320", "407", "408", "409", "411", "412", "413", "415", "416"].includes(roomKey)) {
+    return "business-suites";
+  }
+
+  // 3. Comprehensive lookup in ROOM_TIER_MAP (covers all other rooms)
+  const info = ROOM_TIER_MAP[roomKey];
+  if (info) {
+    // Ensure the roomType matches our exact keys
+    const normalizedType = info.roomType;
+    if (["classic", "superior", "executive", "business-suites", "executive-suites"].includes(normalizedType)) {
+      return normalizedType;
+    }
+  }
+
+  // 4. Fallback to room name parsing (last resort)
+  const name = String(roomName ?? "").toLowerCase().trim();
+  if (name?.includes("executive suite") || name?.includes("executive-suite")) {
+    return "executive-suites";
+  }
+  if (name?.includes("business suite") || name?.includes("business-suite")) {
+    return "business-suites";
+  }
+  if (name?.includes("executive")) {
+    return "executive";
+  }
+  if (name?.includes("superior")) {
+    return "superior";
+  }
+  if (name?.includes("classic")) {
+    return "classic";
+  }
+
+  return null;
+}
+
 async function ensureGuestPortalAccessTable(db: D1Database) {
   await db.prepare(`
     CREATE TABLE IF NOT EXISTS guest_portal_access (
@@ -314,7 +417,7 @@ export const getDashboardStats = createServerFn({ method: "POST" })
     const auth = await validateToken(data.token, db);
     if (!auth) return { success: false, error: "Unauthorized" };
     const today = new Date().toISOString().split("T")[0];
-    const [checkIns, checkOuts, allBookings, roomStatuses, revenueResult, returningGuests, pendingRequests, pendingOrders] = await Promise.all([
+    const [checkIns, checkOuts, allBookings, roomStatuses, revenueResult, returningGuests, pendingRequests, pendingOrders, missedArrivals, recentRoomActivity] = await Promise.all([
       db.prepare(`SELECT * FROM bookings WHERE hotel_id = 'remeritona' AND check_in = ? AND status != 'cancelled' ORDER BY created_at DESC`).bind(today).all(),
       db.prepare(`SELECT * FROM bookings WHERE hotel_id = 'remeritona' AND check_out = ? AND status != 'cancelled' ORDER BY created_at DESC`).bind(today).all(),
       db.prepare(`SELECT * FROM bookings WHERE hotel_id = 'remeritona' ORDER BY created_at DESC LIMIT 100`).all(),
@@ -323,6 +426,21 @@ export const getDashboardStats = createServerFn({ method: "POST" })
       db.prepare(`SELECT guest_email, guest_name, COUNT(*) as visit_count, SUM(total) as total_spent, MAX(created_at) as last_visit FROM bookings WHERE hotel_id = 'remeritona' AND status != 'cancelled' GROUP BY guest_email HAVING visit_count > 1 ORDER BY visit_count DESC LIMIT 20`).all(),
       db.prepare(`SELECT * FROM guest_requests WHERE status = 'pending' AND hotel_id = 'remeritona' ORDER BY created_at DESC`).all(),
       db.prepare(`SELECT * FROM room_orders WHERE status = 'pending' AND hotel_id = 'remeritona' ORDER BY created_at DESC`).all(),
+      db.prepare(`
+        SELECT * FROM bookings
+        WHERE hotel_id = 'remeritona'
+          AND status = 'confirmed'
+          AND date(check_in) < date(?)
+        ORDER BY check_in ASC
+        LIMIT 50
+      `).bind(today).all(),
+      db.prepare(`
+        SELECT room_number, room_name, status, updated_at, updated_by
+        FROM room_status
+        WHERE hotel_id = 'remeritona' AND updated_at IS NOT NULL
+        ORDER BY datetime(updated_at) DESC
+        LIMIT 25
+      `).all(),
     ]);
     return {
       success: true,
@@ -334,6 +452,8 @@ export const getDashboardStats = createServerFn({ method: "POST" })
       returningGuests: returningGuests.results ?? [],
       pendingRequests: pendingRequests.results ?? [],
       pendingOrders: pendingOrders.results ?? [],
+      missedArrivals: missedArrivals.results ?? [],
+      recentRoomActivity: recentRoomActivity.results ?? [],
     };
   });
 
@@ -426,65 +546,6 @@ export const checkInGuest = createServerFn({ method: "POST" })
     ).bind(data.roomNumber).run();
 
     // 4. Auto-detect tier from actual room number (explicit lookup map)
-    const ROOM_TIER_MAP: Record<string, { tier: number; roomType: string }> = {
-      // Classic → Tier 1
-      '102': { tier: 1, roomType: 'classic' }, '104': { tier: 1, roomType: 'classic' },
-      '105': { tier: 1, roomType: 'classic' }, '107': { tier: 1, roomType: 'classic' },
-      '108': { tier: 1, roomType: 'classic' }, '111': { tier: 1, roomType: 'classic' },
-      '113': { tier: 1, roomType: 'classic' }, '117': { tier: 1, roomType: 'classic' },
-      '118': { tier: 1, roomType: 'classic' }, '119': { tier: 1, roomType: 'classic' },
-      '121': { tier: 1, roomType: 'classic' }, '204': { tier: 1, roomType: 'classic' },
-      '207': { tier: 1, roomType: 'classic' }, '208': { tier: 1, roomType: 'classic' },
-      '209': { tier: 1, roomType: 'classic' }, '213': { tier: 1, roomType: 'classic' },
-      '217': { tier: 1, roomType: 'classic' }, '219': { tier: 1, roomType: 'classic' },
-      '221': { tier: 1, roomType: 'classic' }, '308': { tier: 1, roomType: 'classic' },
-      '309': { tier: 1, roomType: 'classic' }, '310': { tier: 1, roomType: 'classic' },
-      '402': { tier: 1, roomType: 'classic' },
-      // Superior → Tier 2
-      '101': { tier: 2, roomType: 'superior' }, '103': { tier: 2, roomType: 'superior' },
-      '109': { tier: 2, roomType: 'superior' }, '115': { tier: 2, roomType: 'superior' },
-      '120': { tier: 2, roomType: 'superior' }, '122': { tier: 2, roomType: 'superior' },
-      '123': { tier: 2, roomType: 'superior' }, '124': { tier: 2, roomType: 'superior' },
-      '202': { tier: 2, roomType: 'superior' }, '203': { tier: 2, roomType: 'superior' },
-      '205': { tier: 2, roomType: 'superior' }, '206': { tier: 2, roomType: 'superior' },
-      '211': { tier: 2, roomType: 'superior' }, '215': { tier: 2, roomType: 'superior' },
-      '218': { tier: 2, roomType: 'superior' }, '220': { tier: 2, roomType: 'superior' },
-      '222': { tier: 2, roomType: 'superior' }, '223': { tier: 2, roomType: 'superior' },
-      '224': { tier: 2, roomType: 'superior' }, '225': { tier: 2, roomType: 'superior' },
-      '226': { tier: 2, roomType: 'superior' }, '261': { tier: 2, roomType: 'superior' },
-      '301': { tier: 2, roomType: 'superior' }, '302': { tier: 2, roomType: 'superior' },
-      '303': { tier: 2, roomType: 'superior' }, '305': { tier: 2, roomType: 'superior' },
-      '306': { tier: 2, roomType: 'superior' }, '311': { tier: 2, roomType: 'superior' },
-      '312': { tier: 2, roomType: 'superior' }, '315': { tier: 2, roomType: 'superior' },
-      '317': { tier: 2, roomType: 'superior' }, '319': { tier: 2, roomType: 'superior' },
-      '321': { tier: 2, roomType: 'superior' }, '322': { tier: 2, roomType: 'superior' },
-      '323': { tier: 2, roomType: 'superior' }, '324': { tier: 2, roomType: 'superior' },
-      '325': { tier: 2, roomType: 'superior' }, '326': { tier: 2, roomType: 'superior' },
-      '401': { tier: 2, roomType: 'superior' }, '403': { tier: 2, roomType: 'superior' },
-      // Executive → Tier 3
-      '106': { tier: 3, roomType: 'executive' }, '110': { tier: 3, roomType: 'executive' },
-      '112': { tier: 3, roomType: 'executive' }, '114': { tier: 3, roomType: 'executive' },
-      '116': { tier: 3, roomType: 'executive' }, '210': { tier: 3, roomType: 'executive' },
-      '212': { tier: 3, roomType: 'executive' }, '214': { tier: 3, roomType: 'executive' },
-      '216': { tier: 3, roomType: 'executive' }, '304': { tier: 3, roomType: 'executive' },
-      '314': { tier: 3, roomType: 'executive' }, '316': { tier: 3, roomType: 'executive' },
-      '318': { tier: 3, roomType: 'executive' }, '327': { tier: 3, roomType: 'executive' },
-      '328': { tier: 3, roomType: 'executive' },
-      // Executive/Twin → Tier 3
-      '405': { tier: 3, roomType: 'executive' }, '417': { tier: 3, roomType: 'executive' },
-      '418': { tier: 3, roomType: 'executive' },
-      // Business Suites → Tier 4
-      '307': { tier: 4, roomType: 'business-suites' }, '313': { tier: 4, roomType: 'business-suites' },
-      '320': { tier: 4, roomType: 'business-suites' }, '407': { tier: 4, roomType: 'business-suites' },
-      '408': { tier: 4, roomType: 'business-suites' }, '409': { tier: 4, roomType: 'business-suites' },
-      '411': { tier: 4, roomType: 'business-suites' }, '412': { tier: 4, roomType: 'business-suites' },
-      '413': { tier: 4, roomType: 'business-suites' }, '415': { tier: 4, roomType: 'business-suites' },
-      '416': { tier: 4, roomType: 'business-suites' },
-      // Executive Suites → Tier 5
-      '404': { tier: 5, roomType: 'executive-suites' }, '406': { tier: 5, roomType: 'executive-suites' },
-      '410': { tier: 5, roomType: 'executive-suites' }, '414': { tier: 5, roomType: 'executive-suites' },
-    };
-
     const tierInfo = ROOM_TIER_MAP[data.roomNumber] ?? { tier: 1, roomType: 'classic' };
     const tier = tierInfo.tier;
     const roomType = tierInfo.roomType;
@@ -666,17 +727,18 @@ export const checkOutGuest = createServerFn({ method: "POST" })
 
 // ── Capacity-based availability for guest booking engine ───────────────────
 const ROOM_TYPE_CAPACITIES: Record<string, number> = {
-  classic: 23,
-  superior: 38,
-  executive: 18,        // 15 executive + 3 executive-twin
+  "classic": 23,
+  "superior": 38,
+  "executive": 18,        // 15 executive + 3 executive-twin
   "business-suites": 11,
   "executive-suites": 4,
 };
 
 const ROOM_TYPE_KEY_ALIASES: Record<string, string> = {
-  standard: "classic",
-  deluxe: "superior",
-  "executive-suite": "executive",
+  "standard": "classic",
+  "deluxe": "superior",
+  "executive-suite": "executive-suites",
+  "executive-suites": "executive-suites",
   "executive-twin": "executive",
   "presidential-deluxe": "business-suites",
   "presidential-executive": "executive-suites",
@@ -684,107 +746,229 @@ const ROOM_TYPE_KEY_ALIASES: Record<string, string> = {
 };
 
 function normalizeRoomTypeKey(raw: string): string {
-  const key = raw.toLowerCase().trim().replace(/\s+/g, "-");
+  const str = String(raw ?? "").toLowerCase().trim();
+
+  // Exact matches for frontend slugs
+  if (str === "classic") return "classic";
+  if (str === "superior") return "superior";
+  if (str === "executive") return "executive";
+  if (str === "business-suites") return "business-suites";
+  if (str === "executive-suites") return "executive-suites";
+
+  // Alias mappings
+  if (str?.includes("presidential-executive")) return "executive-suites";
+  if (str?.includes("presidential-deluxe")) return "business-suites";
+  if (str?.includes("executive-suite") || str?.includes("executive suite")) return "executive-suites";
+  if (str?.includes("business-suite") || str?.includes("business suite")) return "business-suites";
+  if (str?.includes("executive twin") || str?.includes("executive-twin")) return "executive";
+  if (str?.includes("executive")) return "executive";
+  if (str?.includes("superior")) return "superior";
+  if (str?.includes("classic")) return "classic";
+
+  // Fallback alias lookup with hyphen normalization
+  const key = str?.replace(/\s+/g, "-") ?? "";
   return ROOM_TYPE_KEY_ALIASES[key] ?? key;
 }
 
 export const checkRoomAvailability = createServerFn({ method: "POST" })
   .inputValidator((data: { checkIn: string; checkOut: string }) => data)
   .handler(async ({ data }): Promise<any> => {
-    const db = cfEnv().remeritona_bookings;
+    try {
+      const db = cfEnv().remeritona_bookings;
 
-    if (!data.checkIn || !data.checkOut || data.checkOut <= data.checkIn) {
-      return { success: false, error: "Invalid date range" };
-    }
+      if (!data.checkIn || !data.checkOut || data.checkOut <= data.checkIn) {
+        return { success: false, error: "Invalid date range" };
+      }
 
-    // Count total rooms per type from room_status table
-    const totalRoomsByType = await db.prepare(`
-      SELECT room_slug, room_name, room_number
-      FROM room_status
-      WHERE hotel_id = 'remeritona'
-    `).all();
+      // 1. Count physical inventory directly from room_status rows, grouped by type.
+      const activeRoomsResult = await db.prepare(`
+        SELECT room_number, room_slug, room_name, status
+        FROM room_status
+        WHERE hotel_id = 'remeritona'
+      `).all();
 
-    const roomsList = totalRoomsByType.results ?? [];
-    const roomsByType: Record<string, number> = {};
+      const roomsList = activeRoomsResult.results ?? [];
 
-    for (const room of roomsList as any) {
-      const typeKey = normalizeRoomTypeKey(room.room_slug ?? "");
-      if (!typeKey) continue;
-      roomsByType[typeKey] = (roomsByType[typeKey] ?? 0) + 1;
-    }
-
-    // Count unavailable rooms (occupied, maintenance, reserved) per type
-    const unavailableRoomsByType = await db.prepare(`
-      SELECT room_slug
-      FROM room_status
-      WHERE hotel_id = 'remeritona'
-      AND status IN ('occupied', 'maintenance', 'reserved')
-    `).all();
-
-    const unavailableList = unavailableRoomsByType.results ?? [];
-    const unavailableByType: Record<string, number> = {};
-
-    for (const room of unavailableList as any) {
-      const typeKey = normalizeRoomTypeKey(room.room_slug ?? "");
-      if (!typeKey) continue;
-      unavailableByType[typeKey] = (unavailableByType[typeKey] ?? 0) + 1;
-    }
-
-    // Count active bookings per type
-    const bookedRows = await db.prepare(`
-      SELECT COALESCE(NULLIF(room_type_key, ''), room_slug) AS type_key,
-             COALESCE(SUM(num_rooms), 0) AS booked
-      FROM bookings
-      WHERE status IN ('confirmed', 'checked_in')
-        AND NOT (date(check_out) <= date(?) OR date(check_in) >= date(?))
-      GROUP BY type_key
-    `).bind(data.checkIn, data.checkOut).all();
-
-    const bookedByType: Record<string, number> = {};
-    for (const row of bookedRows.results as Array<{ type_key: string; booked: number }>) {
-      const key = normalizeRoomTypeKey(row.type_key ?? "");
-      if (!key) continue;
-      bookedByType[key] = (bookedByType[key] ?? 0) + Number(row.booked ?? 0);
-    }
-
-    const availability: Record<string, {
-      total: number;
-      booked: number;
-      available: number;
-      fullyBooked: boolean;
-    }> = {};
-
-    // Calculate availability for each room type
-    for (const [typeKey, total] of Object.entries(roomsByType)) {
-      const unavailable = unavailableByType[typeKey] ?? 0;
-      const booked = bookedByType[typeKey] ?? 0;
-      const available = Math.max(0, total - unavailable - booked);
-      availability[typeKey] = {
-        total,
-        booked: booked + unavailable,
-        available,
-        fullyBooked: available === 0,
+      const physicalInventoryByType: Record<string, number> = {
+        "classic": 0,
+        "superior": 0,
+        "executive": 0,
+        "business-suites": 0,
+        "executive-suites": 0,
       };
-    }
 
-    // Also include types from ROOM_TYPE_CAPACITIES that might not have rooms yet
-    for (const [typeKey, total] of Object.entries(ROOM_TYPE_CAPACITIES)) {
-      if (!availability[typeKey]) {
+      const maintenanceByType: Record<string, number> = {
+        "classic": 0,
+        "superior": 0,
+        "executive": 0,
+        "business-suites": 0,
+        "executive-suites": 0,
+      };
+
+      const todayStr = new Date().toISOString().split("T")[0];
+      const coversToday = data.checkIn <= todayStr && data.checkOut > todayStr;
+
+      for (const room of roomsList as any) {
+        const roomType = getRoomType(room?.room_number, room?.room_name);
+        if (!roomType) continue;
+
+        const normalized = normalizeRoomTypeKey(roomType);
+        if (!(normalized in physicalInventoryByType)) continue;
+
+        physicalInventoryByType[normalized]++;
+
+        const currentStatus = room?.status ? String(room.status).trim().toLowerCase() : "";
+        if (coversToday && currentStatus.includes("maintain")) {
+          maintenanceByType[normalized]++;
+        }
+      }
+
+      // Safety net: if room_status table is completely empty/unseeded, fallback to standard capacities
+      const totalCountedRooms = Object.values(physicalInventoryByType).reduce((a, b) => a + b, 0);
+      if (totalCountedRooms === 0) {
+        for (const [typeKey, cap] of Object.entries(ROOM_TYPE_CAPACITIES)) {
+          physicalInventoryByType[typeKey] = cap;
+        }
+      }
+
+      // Sellable pool = physical rows minus maintenance (maintenance is permanently un-bookable if covers today)
+      const sellableInventoryByType: Record<string, number> = {};
+      for (const typeKey of Object.keys(physicalInventoryByType)) {
+        sellableInventoryByType[typeKey] = Math.max(
+          0,
+          (physicalInventoryByType[typeKey] ?? 0) - (maintenanceByType[typeKey] ?? 0)
+        );
+      }
+
+      // 2. Count overlapping reservations from bookings only (avoids double-counting occupied room_status rows)
+      const bookedByType: Record<string, number> = {
+        "classic": 0,
+        "superior": 0,
+        "executive": 0,
+        "business-suites": 0,
+        "executive-suites": 0,
+      };
+
+      const overlappingBookingsResult = await db.prepare(`
+        SELECT COALESCE(NULLIF(room_type_key, ''), room_slug) AS type_key, room_number, num_rooms
+        FROM bookings
+        WHERE status IN ('confirmed', 'checked_in', 'scheduled')
+          AND NOT (date(check_out) <= date(?) OR date(check_in) >= date(?))
+      `).bind(data.checkIn, data.checkOut).all();
+
+      const bookedList = overlappingBookingsResult.results ?? [];
+
+      const getRoomTypeFromRow = (row: any): string | null => {
+        const rawKey = row?.type_key || "";
+        const normalized = normalizeRoomTypeKey(rawKey);
+        if (normalized in bookedByType) {
+          return normalized;
+        }
+        let roomNum = row?.room_number || "";
+        if (!roomNum && rawKey?.startsWith("room-")) {
+          roomNum = rawKey?.substring(5) ?? "";
+        }
+        if (roomNum) {
+          const roomType = getRoomType(roomNum);
+          return roomType ? normalizeRoomTypeKey(roomType) : null;
+        }
+        return null;
+      };
+
+      for (const booking of bookedList as any) {
+        const typeKey = getRoomTypeFromRow(booking);
+        if (typeKey && typeKey in bookedByType) {
+          bookedByType[typeKey] += Number(booking.num_rooms ?? 1);
+        }
+      }
+
+      // 3. Available = sellable inventory (post-maintenance) minus date-range bookings and manual blocks
+      const availability: Record<string, {
+        total: number;
+        booked: number;
+        available: number;
+        fullyBooked: boolean;
+        maintenanceBlocked?: number;
+        physicalTotal?: number;
+      }> = {};
+
+      const bookedRoomNumbers = new Set<string>();
+      for (const booking of bookedList as any) {
+        if (booking.room_number) {
+          bookedRoomNumbers.add(String(booking.room_number).trim());
+        }
+      }
+
+      for (const typeKey of ["classic", "superior", "executive", "business-suites", "executive-suites"] as const) {
+        const physicalTotal = physicalInventoryByType[typeKey] ?? 0;
+        const maintenanceBlocked = maintenanceByType[typeKey] ?? 0;
+        const total = sellableInventoryByType[typeKey] ?? 0;
         const booked = bookedByType[typeKey] ?? 0;
+        let available = Math.max(0, total - booked);
+
+        if (coversToday) {
+          let manualDeductions = 0;
+          for (const room of roomsList as any) {
+            const roomType = getRoomType(room?.room_number, room?.room_name);
+            if (!roomType) continue;
+            const normalized = normalizeRoomTypeKey(roomType);
+            if (normalized !== typeKey) continue;
+
+            const status = room?.status ? String(room.status).trim().toLowerCase() : "";
+            if (status === "occupied" || status === "reserved" || status.includes("maintain")) {
+              const isBooked = room.room_number && bookedRoomNumbers.has(String(room.room_number).trim());
+              if (!isBooked) {
+                // If it is maintenance, it is already deducted via maintenanceBlocked (which reduced total, thus reducing available).
+                if (status === "occupied" || status === "reserved") {
+                  manualDeductions++;
+                }
+              }
+            }
+          }
+          available = Math.max(0, available - manualDeductions);
+        }
+
         availability[typeKey] = {
+          physicalTotal,
+          maintenanceBlocked,
           total,
           booked,
-          available: Math.max(0, total - booked),
-          fullyBooked: total === 0 || total - booked === 0,
+          available,
+          fullyBooked: available === 0,
         };
       }
-    }
 
-    return {
-      success: true,
-      checkIn: data.checkIn,
-      availability,
-    };
+      return {
+        success: true,
+        checkIn: data.checkIn,
+        availability,
+      };
+    } catch (error) {
+      // Catch-all fallback: return maximum physical capacities if any operation fails
+      console.error("checkRoomAvailability error, falling back to max capacities:", error);
+      const fallbackAvailability: Record<string, {
+        total: number;
+        booked: number;
+        available: number;
+        fullyBooked: boolean;
+      }> = {};
+
+      for (const typeKey of ["classic", "superior", "executive", "business-suites", "executive-suites"] as const) {
+        const total = ROOM_TYPE_CAPACITIES[typeKey] ?? 0;
+        fallbackAvailability[typeKey] = {
+          total,
+          booked: 0,
+          available: total,
+          fullyBooked: false,
+        };
+      }
+
+      return {
+        success: true,
+        checkIn: data.checkIn,
+        availability: fallbackAvailability,
+      };
+    }
   });
 
 export const getRevenueReport = createServerFn({ method: "POST" })
@@ -1015,4 +1199,81 @@ export const markOrderDone = createServerFn({ method: "POST" })
     ).bind(data.orderId).run();
 
     return { success: true };
+  });
+
+export const updateBookingDates = createServerFn({ method: "POST" })
+  .inputValidator((data: { reference: string; newCheckIn: string; newCheckOut: string; requestedBy: 'staff' | 'guest' }) => data)
+  .handler(async ({ data }): Promise<any> => {
+    const db = cfEnv().remeritona_bookings;
+
+    // 1. Fetch the booking row using the reference code
+    const booking = await db.prepare(
+      `SELECT * FROM bookings WHERE reference = ? LIMIT 1`
+    ).bind(data.reference).first() as any;
+
+    if (!booking) {
+      return { success: false, error: "Booking not found" };
+    }
+
+    // 2. Verify the status is 'confirmed' or 'scheduled'
+    if (booking.status !== 'confirmed' && booking.status !== 'scheduled') {
+      return { success: false, error: "Cannot modify dates for bookings that are already checked out or cancelled" };
+    }
+
+    // Validate date range
+    if (!data.newCheckIn || !data.newCheckOut || data.newCheckOut <= data.newCheckIn) {
+      return { success: false, error: "Invalid date range" };
+    }
+
+    // 3. Run availability checks for the booking's room type over the new range
+    const availabilityResult = await checkRoomAvailability({ data: { checkIn: data.newCheckIn, checkOut: data.newCheckOut } });
+    
+    if (!availabilityResult.success) {
+      return { success: false, error: "Failed to check availability" };
+    }
+
+    // Determine the room type key from the booking
+    const roomTypeKey = booking.room_type_key || booking.room_slug || '';
+    const normalizedTypeKey = normalizeRoomTypeKey(roomTypeKey);
+    
+    // Check if the room type has availability
+    const availability = availabilityResult.availability;
+    if (!availability || !availability[normalizedTypeKey]) {
+      return { success: false, error: "Unable to determine room type availability" };
+    }
+
+    const typeAvailability = availability[normalizedTypeKey];
+    if (typeAvailability.available <= 0) {
+      return { success: false, error: "Selected dates are fully booked" };
+    }
+
+    // 4. Update the check_in and check_out columns in the bookings table
+    await db.prepare(
+      `UPDATE bookings SET check_in = ?, check_out = ? WHERE reference = ?`
+    ).bind(data.newCheckIn, data.newCheckOut, data.reference).run();
+
+    return { success: true, reference: data.reference, newCheckIn: data.newCheckIn, newCheckOut: data.newCheckOut };
+  });
+
+export const markBookingNoShow = createServerFn({ method: "POST" })
+  .inputValidator((data: { token: string; reference: string }) => data)
+  .handler(async ({ data }): Promise<any> => {
+    const db = cfEnv().remeritona_bookings;
+    const auth = await validateToken(data.token, db);
+    if (!auth) return { success: false, error: "Unauthorized" };
+
+    const booking = await db.prepare(
+      `SELECT reference, status FROM bookings WHERE reference = ? AND hotel_id = 'remeritona' LIMIT 1`
+    ).bind(data.reference).first() as any;
+
+    if (!booking) return { success: false, error: "Booking not found" };
+    if (booking.status !== "confirmed") {
+      return { success: false, error: "Only confirmed bookings can be marked as no-show" };
+    }
+
+    await db.prepare(
+      `UPDATE bookings SET status = 'cancelled', cancelled_at = datetime('now') WHERE reference = ?`
+    ).bind(data.reference).run();
+
+    return { success: true, reference: data.reference };
   });

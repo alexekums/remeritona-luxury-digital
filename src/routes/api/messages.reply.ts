@@ -15,7 +15,7 @@ export const Route = createFileRoute("/api/messages/reply")({
             return jsonResponse({ success: false, error: "Unauthorized" }, 401);
           }
 
-          const body = (await request.json()) as { room_number?: string; message?: string };
+          const body = (await request.json()) as { room_number?: string; message?: string; guest_id?: string };
           if (!body.room_number || !body.message?.trim()) {
             return jsonResponse({ success: false, error: "room_number and message are required" }, 400);
           }
@@ -24,8 +24,8 @@ export const Route = createFileRoute("/api/messages/reply")({
           await db.prepare(
             `INSERT INTO messages
           (id, hotel_id, guest_id, room_number, sender, message, read, created_at)
-         VALUES (?, 'remeritona', '', ?, 'staff', ?, 1, datetime('now'))`
-          ).bind(id, body.room_number, body.message.trim()).run();
+         VALUES (?, 'remeritona', ?, ?, 'staff', ?, 1, datetime('now'))`
+          ).bind(id, body.guest_id || '', body.room_number, body.message.trim()).run();
 
           const row = await db.prepare(`SELECT * FROM messages WHERE id = ?`).bind(id).first();
           return jsonResponse({ success: true, message: row });
