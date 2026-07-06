@@ -9,6 +9,7 @@ import { cancelBooking } from "@/functions/cancelBooking";
 import { OrdersRequestsView } from "@/components/OrdersRequestsView";
 import { SpaManagementView } from "@/components/SpaManagementView";
 import { MenuManagementView } from "@/components/MenuManagementView";
+import { ChatManagementView } from "@/components/ChatManagementView";
 import { fetchOrdersAndRequests, patchItemStatus } from "@/lib/orders-api-client";
 import {
   formatOrderItemsSummary,
@@ -228,7 +229,7 @@ export function AdminPage({ initialTab }: { initialTab?: AdminTab } = {}) {
   const isSpaPage = pathname === "/spa-management" || activeTab === "spa-management";
   const isMenuPage = pathname === "/menu-management" || activeTab === "menu-management";
   const isChatPage = pathname === "/chat-management" || activeTab === "chat-management";
-  const isPmsSubPage = isOrdersPage || isSpaPage || isMenuPage;
+  const isPmsSubPage = isOrdersPage || isSpaPage || isMenuPage || isChatPage;
 
   const navigateToTab = (tab: AdminTab) => {
     setActiveTab(tab);
@@ -237,7 +238,7 @@ export function AdminPage({ initialTab }: { initialTab?: AdminTab } = {}) {
     const targetRoute = PMS_ROUTE_MAP[tab];
     if (targetRoute && pathname !== targetRoute) {
       router.navigate({ to: targetRoute });
-    } else if (!targetRoute && (pathname === "/orders-requests" || pathname === "/spa-management" || pathname === "/menu-management")) {
+    } else if (!targetRoute && (pathname === "/orders-requests" || pathname === "/spa-management" || pathname === "/menu-management" || pathname === "/chat-management")) {
       router.navigate({ to: "/hotel-admin" });
     }
   };
@@ -1672,7 +1673,11 @@ export function AdminPage({ initialTab }: { initialTab?: AdminTab } = {}) {
         </div>
 
         {/* Right Side - Portal Workspace */}
-        <div className="lg:col-span-4 flex items-center justify-center p-8" style={{ background: isDark ? "#0a0a0a" : "#f5f5f0" }}>
+        <div className="lg:col-span-4 flex items-center justify-center p-8" style={{
+          background: isDark ? "#0a0a0a" : "#FBFBFA",
+          backdropFilter: isDark ? "none" : "blur(20px)",
+          borderLeft: isDark ? "none" : "1px solid #EFECE6"
+        }}>
           <div style={{ position: "absolute", top: 20, right: 20 }}>
             <button onClick={toggleTheme} style={{
               background: "none", border: `1px solid ${colors.border}`,
@@ -1684,15 +1689,17 @@ export function AdminPage({ initialTab }: { initialTab?: AdminTab } = {}) {
             </button>
           </div>
           <div style={{
-            background: colors.surface, border: `1px solid ${colors.border}`,
-            padding: "48px", maxWidth: 400, width: "100%"
+            background: isDark ? colors.surface : "#FFFFFF",
+            border: `1px solid ${colors.border}`,
+            padding: "48px", maxWidth: 400, width: "100%",
+            boxShadow: isDark ? "none" : "0 4px 24px rgba(0, 0, 0, 0.08)"
           }}>
             <div style={{ textAlign: "center", marginBottom: 32 }}>
               <p style={{ color: colors.gold, fontSize: 11, letterSpacing: "0.4em", textTransform: "uppercase", marginBottom: 8 }}>
                 Staff Portal
               </p>
-              <h1 style={{ color: colors.text, fontSize: 28, fontWeight: 400, margin: 0 }}>Remeritona</h1>
-              <p style={{ color: colors.textMuted, fontSize: 13, marginTop: 8 }}>Hotel Management System</p>
+              <h1 style={{ color: isDark ? colors.text : "#1A1A1F", fontSize: 28, fontWeight: 400, margin: 0 }}>Remeritona</h1>
+              <p style={{ color: isDark ? colors.textMuted : "#1A1A1F", fontSize: 13, marginTop: 8, opacity: isDark ? 1 : 0.7 }}>Hotel Management System</p>
             </div>
 
             <form onSubmit={handleStaffLogin}>
@@ -1707,7 +1714,7 @@ export function AdminPage({ initialTab }: { initialTab?: AdminTab } = {}) {
                   placeholder="Enter your username"
                   style={{
                     width: "100%", background: colors.surface2, border: `1px solid ${colors.border}`,
-                    padding: "12px 16px", color: colors.text, fontSize: 16,
+                    padding: "12px 16px", color: isDark ? colors.text : "#1A1A1F", fontSize: 16,
                     fontFamily: "Georgia, serif", outline: "none", boxSizing: "border-box"
                   }}
                   required
@@ -1724,7 +1731,7 @@ export function AdminPage({ initialTab }: { initialTab?: AdminTab } = {}) {
                   placeholder="Enter your password"
                   style={{
                     width: "100%", background: colors.surface2, border: `1px solid ${colors.border}`,
-                    padding: "12px 16px", color: colors.text, fontSize: 16,
+                    padding: "12px 16px", color: isDark ? colors.text : "#1A1A1F", fontSize: 16,
                     fontFamily: "Georgia, serif", outline: "none", boxSizing: "border-box"
                   }}
                   required
@@ -1935,7 +1942,8 @@ export function AdminPage({ initialTab }: { initialTab?: AdminTab } = {}) {
         display: "flex", alignItems: "center", justifyContent: "space-between",
         padding: "0 24px",
         paddingLeft: window.innerWidth < 768 ? 16 : (sidebarExpanded ? 244 : 80),
-        transition: "padding-left 0.25s ease"
+        transition: "padding-left 0.25s ease",
+        margin: 0
       }}>
         {/* Left Side: Logo + Hamburger */}
         <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
@@ -2067,7 +2075,7 @@ export function AdminPage({ initialTab }: { initialTab?: AdminTab } = {}) {
       }}>
 
         {/* Navigation Groups */}
-        <div style={{ flex: 1, overflowY: "auto", padding: "8px 0" }}>
+        <div style={{ flex: 1, overflowY: "auto", overflowX: "hidden", padding: "8px 0" }}>
           {/* FRONT DESK Group */}
           {staffRole !== "spa" && (
             <div>
@@ -2469,6 +2477,17 @@ export function AdminPage({ initialTab }: { initialTab?: AdminTab } = {}) {
           </p>
         )}
 
+        {/* ===== CHAT MANAGEMENT ===== */}
+        {isChatPage && staffRole !== "accountant" && staffRole !== "kitchen" && staffRole !== "housekeeping" && staffRole !== "spa" && token && (
+          <ChatManagementView token={token} colors={colors} onToast={showToast} />
+        )}
+
+        {isChatPage && (staffRole === "accountant" || staffRole === "kitchen" || staffRole === "housekeeping" || staffRole === "spa") && (
+          <p style={{ color: colors.textMuted, textAlign: "center", padding: 40 }}>
+            You do not have access to Guest Messages.
+          </p>
+        )}
+
         {/* ===== STAFF MANAGEMENT TAB ===== */}
         {!loading && !isPmsSubPage && showStaffManagement && (staffRole === "admin" || staffRole === "manager") && (
           <div>
@@ -2841,33 +2860,6 @@ export function AdminPage({ initialTab }: { initialTab?: AdminTab } = {}) {
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: 20, marginBottom: 32 }}>
               {[
                 {
-                  label: "Today's Arrivals",
-                  value: todayArrivals,
-                  icon: (
-                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                      <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z" />
-                      <path d="M16 3h5v5" />
-                      <path d="M21 3 14 10" />
-                    </svg>
-                  ),
-                  color: "#3b82f6",
-                  gradient: "linear-gradient(135deg, rgba(59, 130, 246, 0.15) 0%, rgba(59, 130, 246, 0.05) 100%)"
-                },
-                {
-                  label: "Today's Departures",
-                  value: todayDepartures,
-                  icon: (
-                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                      <path d="M9 17l-5-5 5-5" />
-                      <path d="M20 17h-8a4 4 0 0 1-4-4V4" />
-                      <path d="M16 3h5v5" />
-                      <path d="M21 3 14 10" />
-                    </svg>
-                  ),
-                  color: "#22c55e",
-                  gradient: "linear-gradient(135deg, rgba(34, 197, 94, 0.15) 0%, rgba(34, 197, 94, 0.05) 100%)"
-                },
-                {
                   label: "Occupied Rooms",
                   value: `${occupiedRooms} / ${stats.roomStatuses?.length ?? 96}`,
                   icon: (
@@ -2927,42 +2919,62 @@ export function AdminPage({ initialTab }: { initialTab?: AdminTab } = {}) {
               ))}
             </div>
 
+            {/* Shift Summary - Moved up to be adjacent to revenue card */}
+            <div style={{ background: colors.surface, border: `1px solid ${colors.border}`, padding: 20, marginBottom: 32 }}>
+              <p style={{ margin: 0, fontSize: 10, color: colors.textMuted, letterSpacing: "0.2em", textTransform: "uppercase" }}>
+                Shift Summary
+              </p>
+              <h3 style={{ margin: "10px 0 6px", fontSize: 22, color: colors.text, fontWeight: 400, fontFamily: "Georgia, serif" }}>
+                {getShiftGreeting()}, {staffName}
+              </h3>
+              <p style={{ margin: 0, fontSize: 13, color: colors.gold, textTransform: "capitalize" }}>
+                {staffRole.replace(/-/g, " ")} · Front-of-house operations
+              </p>
+              <p style={{ margin: "12px 0 0", fontSize: 12, color: colors.textMuted, lineHeight: 1.5 }}>
+                {todayArrivals} arrival{todayArrivals !== 1 ? "s" : ""} and {todayDepartures} departure{todayDepartures !== 1 ? "s" : ""} scheduled today.
+                {missedArrivals.length > 0 && (
+                  <span style={{ color: "#ef4444", marginLeft: 8 }}>
+                    {missedArrivals.length} missed arrival{missedArrivals.length !== 1 ? "s" : ""}.
+                  </span>
+                )}
+              </p>
+            </div>
+
             {/* Phase 3 Operational Dashboard Grid */}
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
               {/* Left Panel — Arrivals & Departures */}
-              <div className="lg:col-span-2 grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div style={{ display: "flex", flexDirection: "column", gap: 24 }}>
                 {[
                   { title: "Today's Arrivals", data: stats.todayCheckIns, action: "check-in" as const },
                   { title: "Today's Departures", data: stats.todayCheckOuts, action: "check-out" as const },
                 ].map(section => (
                   <div
                     key={section.title}
-                    style={{ background: colors.surface, border: `1px solid ${colors.border}`, padding: 20 }}
-                    className="flex flex-col min-h-[320px]"
+                    style={{ background: colors.surface, border: `1px solid ${colors.border}`, padding: 24, borderRadius: 8 }}
                   >
                     <h3 style={{ color: colors.gold, fontSize: 12, letterSpacing: "0.2em", textTransform: "uppercase", margin: "0 0 16px" }}>
                       {section.title}
                     </h3>
-                    <div className="flex-1 overflow-y-auto max-h-[420px] pr-1" style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+                    <div style={{ display: "flex", flexDirection: "column", gap: 12, maxHeight: 400, overflowY: "auto" }}>
                       {section.data?.length === 0 ? (
                         <p style={{ color: colors.textMuted, fontSize: 13 }}>None today</p>
                       ) : (
                         section.data?.map((b: any) => (
                           <div key={b.reference} style={{
-                            background: colors.surface2, padding: 12,
-                            display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8
+                            background: colors.surface2, padding: 16, borderRadius: 6,
+                            display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12
                           }}>
-                            <div style={{ minWidth: 0 }}>
-                              <p style={{ margin: 0, fontSize: 14, color: colors.text }}>{b.guest_name}</p>
-                              <p style={{ margin: "2px 0 0", fontSize: 11, color: colors.textMuted }}>{b.room_name} · {b.reference}</p>
+                            <div style={{ minWidth: 0, flex: 1 }}>
+                              <p style={{ margin: 0, fontSize: 14, color: colors.text, fontWeight: 500 }}>{b.guest_name}</p>
+                              <p style={{ margin: "4px 0 0", fontSize: 12, color: colors.textMuted }}>{b.room_name} · {b.reference}</p>
                             </div>
-                            <div style={{ display: "flex", gap: 8, flexShrink: 0 }}>
-                              <div style={{ display: "flex", flexDirection: "column", gap: 3, alignItems: "flex-end" }}>
+                            <div style={{ display: "flex", gap: 12, alignItems: "center", flexShrink: 0 }}>
+                              <div style={{ display: "flex", flexDirection: "column", gap: 4, alignItems: "flex-end" }}>
                                 <span style={{
-                                  fontSize: 10, padding: "3px 8px", letterSpacing: "0.1em",
+                                  fontSize: 10, padding: "4px 10px", letterSpacing: "0.1em",
                                   textTransform: "uppercase", border: `1px solid`,
                                   borderColor: getBookingStatusColor(b.status),
-                                  color: getBookingStatusColor(b.status)
+                                  color: getBookingStatusColor(b.status), borderRadius: 4, fontWeight: 600
                                 }}>
                                   {b.status}
                                 </span>
@@ -2970,15 +2982,15 @@ export function AdminPage({ initialTab }: { initialTab?: AdminTab } = {}) {
                                   <span style={{
                                     fontSize: 9, padding: "2px 6px", letterSpacing: "0.08em",
                                     textTransform: "uppercase", background: "#f59e0b22",
-                                    border: "1px solid #f59e0b", color: "#f59e0b"
+                                    border: "1px solid #f59e0b", color: "#f59e0b", borderRadius: 3
                                   }}>Early</span>
                                 )}
                               </div>
                               {staffRole !== "accountant" && b.status === "confirmed" && section.action === "check-in" && (
                                 <button onClick={() => handleCheckIn(b)} disabled={actionLoading === b.reference} style={{
                                   background: "#3b82f6", color: "#fff", border: "none",
-                                  padding: "4px 12px", fontSize: 11, cursor: "pointer",
-                                  letterSpacing: "0.1em", textTransform: "uppercase"
+                                  padding: "6px 14px", fontSize: 11, cursor: "pointer",
+                                  letterSpacing: "0.1em", textTransform: "uppercase", borderRadius: 4, fontWeight: 600
                                 }}>
                                   {actionLoading === b.reference ? "..." : "Check In"}
                                 </button>
@@ -2986,8 +2998,8 @@ export function AdminPage({ initialTab }: { initialTab?: AdminTab } = {}) {
                               {staffRole !== "accountant" && b.status === "checked_in" && section.action === "check-out" && (
                                 <button onClick={() => handleCheckOut(b)} disabled={actionLoading === b.reference} style={{
                                   background: "#22c55e", color: "#fff", border: "none",
-                                  padding: "4px 12px", fontSize: 11, cursor: "pointer",
-                                  letterSpacing: "0.1em", textTransform: "uppercase"
+                                  padding: "6px 14px", fontSize: 11, cursor: "pointer",
+                                  letterSpacing: "0.1em", textTransform: "uppercase", borderRadius: 4, fontWeight: 600
                                 }}>
                                   {actionLoading === b.reference ? "..." : "Check Out"}
                                 </button>
@@ -3002,25 +3014,7 @@ export function AdminPage({ initialTab }: { initialTab?: AdminTab } = {}) {
               </div>
 
               {/* Right Panel — Operational Sidebar Feed */}
-              <div className="lg:col-span-1 flex flex-col gap-6">
-                {/* Shift Summary */}
-                <div style={{ background: colors.surface, border: `1px solid ${colors.border}`, padding: 20 }}>
-                  <p style={{ margin: 0, fontSize: 10, color: colors.textMuted, letterSpacing: "0.2em", textTransform: "uppercase" }}>
-                    Shift Summary
-                  </p>
-                  <h3 style={{ margin: "10px 0 6px", fontSize: 22, color: colors.text, fontWeight: 400, fontFamily: "Georgia, serif" }}>
-                    {getShiftGreeting()}, {staffName}
-                  </h3>
-                  <p style={{ margin: 0, fontSize: 13, color: colors.gold, textTransform: "capitalize" }}>
-                    {staffRole.replace(/-/g, " ")} · Front-of-house operations
-                  </p>
-                  <p style={{ margin: "12px 0 0", fontSize: 12, color: colors.textMuted, lineHeight: 1.5 }}>
-                    {todayArrivals} arrival{todayArrivals !== 1 ? "s" : ""} and {todayDepartures} departure{todayDepartures !== 1 ? "s" : ""} scheduled today.
-                    {missedArrivals.length > 0 && (
-                      <span style={{ color: "#ef4444" }}> {missedArrivals.length} missed arrival{missedArrivals.length !== 1 ? "s" : ""} need attention.</span>
-                    )}
-                  </p>
-                </div>
+              <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
 
                 {/* System Activity Feed */}
                 <div style={{ background: colors.surface, border: `1px solid ${colors.border}`, padding: 20 }}>
