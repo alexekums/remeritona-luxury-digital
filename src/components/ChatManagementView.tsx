@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from "react";
+import { Link } from "@tanstack/react-router";
 import {
   fetchConversations,
   fetchThread,
@@ -268,8 +269,37 @@ export function ChatManagementView({ token, colors, onToast }: Props) {
           <>
             {/* HEADER */}
             <div style={{ flexShrink: 0, padding: 16, borderBottom: `1px solid ${colors.border}`, display: "flex", alignItems: "center", justifyContent: "space-between", background: colors.surface }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-                <span style={{ fontWeight: 600, color: colors.text }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 12, minWidth: 0, width: "100%" }}>
+                <Link
+                  to="/hotel-admin"
+                  style={{
+                    display: "inline-flex",
+                    flexShrink: 0,
+                    alignItems: "center",
+                    gap: 8,
+                    padding: "6px 12px",
+                    background: "rgba(201, 169, 110, 0.1)",
+                    border: `1px solid ${colors.gold}`,
+                    borderRadius: "4px",
+                    color: colors.gold,
+                    fontSize: 12,
+                    fontWeight: 600,
+                    letterSpacing: "0.1em",
+                    textTransform: "uppercase",
+                    textDecoration: "none",
+                    marginRight: 24,
+                    transition: "all 0.2s ease"
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.background = "rgba(201, 169, 110, 0.25)";
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.background = "rgba(201, 169, 110, 0.1)";
+                  }}
+                >
+                  ← Back to Dashboard
+                </Link>
+                <span style={{ fontWeight: 600, color: colors.text, display: "inline-block", whiteSpace: "nowrap", flexShrink: 1, overflow: "hidden", textOverflow: "ellipsis", minWidth: 0 }}>
                   Room {selectedRoom} — {selectedGuest}
                 </span>
               </div>

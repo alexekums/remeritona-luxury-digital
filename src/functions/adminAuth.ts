@@ -569,23 +569,9 @@ export const checkInGuest = createServerFn({ method: "POST" })
     await upsertGuestPortalAccess(db, data.reference, data.roomNumber, primaryPortalToken);
 
     // Loyalty points — once per booking on first check-in call only
+    // Forced to exactly 0 per Phase 1 re-architecture; calculations disabled
     let loyaltyAwarded = false;
     let loyaltyPoints = 0;
-    const shouldAwardLoyalty = !wasAlreadyCheckedIn && !data.additionalRooms?.length;
-    if (shouldAwardLoyalty) {
-      const primaryGuest = await db.prepare(
-        `SELECT id, tier FROM guests WHERE booking_ref = ? AND room_number = ? LIMIT 1`
-      ).bind(data.reference, data.roomNumber).first() as any;
-      const bookingTotal = Number(originalBooking?.total ?? 0);
-      const mult = LOYALTY_TIER_MULTIPLIER[primaryGuest?.tier ?? tier] ?? 1;
-      loyaltyPoints = Math.floor((bookingTotal / 1000) * mult);
-      if (primaryGuest && loyaltyPoints > 0) {
-        await db.prepare(
-          `UPDATE guests SET loyalty_points = COALESCE(loyalty_points, 0) + ? WHERE id = ?`
-        ).bind(loyaltyPoints, primaryGuest.id).run();
-        loyaltyAwarded = true;
-      }
-    }
 
     // 6. Additional rooms for multi-room bookings
     if (data.additionalRooms?.length) {
@@ -643,7 +629,7 @@ export const checkInGuest = createServerFn({ method: "POST" })
     // 7. Send welcome email (first check-in only)
     const apiKey = cfEnv().MAILERSEND_API_KEY;
     if (!wasAlreadyCheckedIn && apiKey && data.guestEmail) {
-      const portalUrl = "https://remeritona-guest-portal.remeritona.workers.dev";
+      const portalUrl = `https://remeritona-guest-portal.remeritona.workers.dev/?room=${data.roomNumber}&ref=${data.reference}`;
       const roomTypeLabel = roomType.replace(/-/g, " ").replace(/\b\w/g, (l: string) => l.toUpperCase());
       const earlyNote = isEarlyCheckIn ? '<p style="color:#f59e0b;font-size:12px;text-align:center;margin:0;">Early check-in — original date adjusted</p>' : '';
       const welcomeHtml = [
@@ -1094,22 +1080,29 @@ export const getRoomRates = createServerFn({ method: "POST" })
       `SELECT * FROM room_rates ORDER BY room_type`
     ).all();
 
-    // Default rates if table is empty
-    const defaultRates = [
-      { room_type: "Classic", price_per_night: 35000 },
-      { room_type: "Superior", price_per_night: 50000 },
-      { room_type: "Executive", price_per_night: 65000 },
-      { room_type: "Executive Twin", price_per_night: 70000 },
-      { room_type: "Business Suite", price_per_night: 85000 },
-      { room_type: "Executive Suite", price_per_night: 120000 },
+    // Complete room types from booking page (src/data/rooms.ts)
+    const allRoomTypes = [
+      { slug: "classic", name: "Classic", defaultPrice: 60000 },
+      { slug: "superior", name: "Superior", defaultPrice: 70000 },
+      { slug: "executive", name: "Executive", defaultPrice: 80000 },
+      { slug: "business-suites", name: "Business Suite", defaultPrice: 140000 },
+      { slug: "executive-suites", name: "Executive Suite", defaultPrice: 170000 },
     ];
 
     const existingRates = rates.results ?? [];
-    if (existingRates.length === 0) {
-      return { success: true, rates: defaultRates };
-    }
+    
+    // Merge database rates with complete room types list
+    const mergedRates = allRoomTypes.map(roomType => {
+      const dbRate = existingRates.find((r: any) => 
+        r.room_type.toLowerCase() === roomType.name.toLowerCase()
+      );
+      return {
+        room_type: roomType.name,
+        price_per_night: dbRate?.price_per_night ?? roomType.defaultPrice
+      };
+    });
 
-    return { success: true, rates: existingRates };
+    return { success: true, rates: mergedRates };
   });
 
 export const updateRoomRate = createServerFn({ method: "POST" })
@@ -1132,6 +1125,18 @@ export const updateRoomRate = createServerFn({ method: "POST" })
     ).bind(data.roomType, data.price, auth.staff.full_name, data.price, auth.staff.full_name).run();
 
     return { success: true };
+  });
+
+// ── Public Room Rates (no auth required for guest booking page) ─────────────
+export const getPublicRoomRates = createServerFn({ method: "POST" })
+  .inputValidator((data: {}) => data)
+  .handler(async (): Promise<any> => {
+    const db = cfEnv().remeritona_bookings;
+    const rates = await db.prepare(
+      `SELECT room_type, price_per_night FROM room_rates ORDER BY room_type`
+    ).all();
+
+    return { success: true, rates: rates.results ?? [] };
   });
 
 // ── Occupancy Forecast ───────────────────────────────────────────────────────
@@ -1276,4 +1281,39 @@ export const markBookingNoShow = createServerFn({ method: "POST" })
     ).bind(data.reference).run();
 
     return { success: true, reference: data.reference };
+  });
+
+export const changeStaffPassword = createServerFn({ method: "POST" })
+  .inputValidator((data: { token: string; currentPassword: string; newPassword: string }) => data)
+  .handler(async ({ data }): Promise<any> => {
+    const db = cfEnv().remeritona_bookings;
+
+    // 1. Validate session
+    const auth = await validateToken(data.token, db);
+    if (!auth || auth.type !== "staff" || !auth.staff) {
+      return { success: false, error: "Unauthorized" };
+    }
+
+    const username = auth.staff.username;
+
+    // 2. Fetch current user row
+    const userRow = await db.prepare(
+      `SELECT password_hash FROM staff_users WHERE username = ? LIMIT 1`
+    ).bind(username).first() as any;
+
+    if (!userRow) return { success: false, error: "User not found" };
+
+    // 3. Verify current password
+    const currentHash = await hashPassword(data.currentPassword);
+    if (currentHash !== userRow.password_hash) {
+      return { success: false, error: "Current password is incorrect" };
+    }
+
+    // 4. Hash and update new password
+    const newHash = await hashPassword(data.newPassword);
+    await db.prepare(
+      `UPDATE staff_users SET password_hash = ? WHERE username = ?`
+    ).bind(newHash, username).run();
+
+    return { success: true };
   });

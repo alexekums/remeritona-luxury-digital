@@ -9,7 +9,7 @@ import { z } from "zod";
 import { saveBooking, type StoredBooking } from "@/data/bookings-store";
 import { sendBookingEmail } from "@/functions/sendBookingEmail";
 import { saveBookingToDb } from "@/functions/saveBookingToDb";
-import { checkRoomAvailability } from "@/functions/adminAuth";
+import { checkRoomAvailability, getPublicRoomRates } from "@/functions/adminAuth";
 import logoUrl from "@/assets/logo.png";
 import { toast } from "sonner";
 
@@ -105,11 +105,47 @@ function BookingPage() {
   const [availability, setAvailability] = useState<Record<string, RoomAvailability>>({});
   const [availabilityLoaded, setAvailabilityLoaded] = useState(false);
 
+  // Live room rates from database — fetched on component mount
+  const [publicRates, setPublicRates] = useState<Record<string, number>>({});
+
   // Synchronize state when URL search parameters change on navigation
   useEffect(() => {
     if (sp.checkIn) setCheckIn(sp.checkIn);
     if (sp.checkOut) setCheckOut(sp.checkOut);
   }, [sp.checkIn, sp.checkOut]);
+
+  // Fetch public room rates from database on component mount
+  useEffect(() => {
+    const fetchPublicRates = async () => {
+      try {
+        const result = await getPublicRoomRates({ data: {} }) as {
+          success?: boolean;
+          rates?: Array<{ room_type: string; price_per_night: number }>;
+        };
+        if (result.success && result.rates) {
+          // Normalize dashboard names to booking slugs
+          const rateMap: Record<string, number> = {};
+          const slugMapping: Record<string, string> = {
+            "Classic": "classic",
+            "Superior": "superior",
+            "Executive": "executive",
+            "Business Suite": "business-suites",
+            "Executive Suite": "executive-suites",
+          };
+          result.rates.forEach(rate => {
+            const slug = slugMapping[rate.room_type];
+            if (slug) {
+              rateMap[slug] = rate.price_per_night;
+            }
+          });
+          setPublicRates(rateMap);
+        }
+      } catch (e) {
+        console.error("Failed to fetch public room rates:", e);
+      }
+    };
+    fetchPublicRates();
+  }, []);
 
   useEffect(() => {
     if (!checkIn || !checkOut || checkOut <= checkIn) {
@@ -355,7 +391,8 @@ const scrollToSummary = () => {
   }, [checkIn, checkOut]);
 
   const room = getRoom(selectedSlug)!;
-  const subtotal = room.price * nights * numRooms;
+  const livePrice = publicRates[selectedSlug] ?? room.price;
+  const subtotal = livePrice * nights * numRooms;
 
   const discount = couponResult && couponResult.valid ? couponResult.discount : 0;
   const taxableBase = Math.max(0, subtotal - discount);
@@ -438,7 +475,7 @@ const sendBookingEmails = async (reference: string) => {
       guest: { ...guest },
       roomSlug: room.slug,
       roomName: room.name,
-      roomPrice: room.price,
+      roomPrice: livePrice,
       checkIn,
       checkOut,
       nights,
@@ -890,7 +927,7 @@ const sendBookingEmails = async (reference: string) => {
                             <p className="text-xs text-muted-foreground">{r.size} · {r.beds} · {r.occupancy}</p>
                           </div>
                           <p className="text-gold font-serif text-xl">
-                            {formatNaira(r.price)}<span className="text-xs text-muted-foreground">/night</span>
+                            {formatNaira(publicRates[r.slug] ?? r.price)}<span className="text-xs text-muted-foreground">/night</span>
                           </p>
                         </div>
                       </button>
@@ -1116,7 +1153,7 @@ const sendBookingEmails = async (reference: string) => {
                 <Row label="Booking type" value={bookingType === "self" ? "Myself" : bookingType === "family" ? "Family & friends" : "Corporate team"} />
               </div>
               <div className="border-t border-border mt-4 pt-4 space-y-2 text-sm">
-                <Row label={`${formatNaira(room.price)} × ${nights} nights × ${numRooms} ${numRooms === 1 ? "room" : "rooms"}`} value={formatNaira(subtotal)} />
+                <Row label={`${formatNaira(livePrice)} × ${nights} nights × ${numRooms} ${numRooms === 1 ? "room" : "rooms"}`} value={formatNaira(subtotal)} />
                 {discount > 0 && couponResult && couponResult.valid && (
                   <Row label={couponResult.label} value={`− ${formatNaira(discount)}`} />
                 )}

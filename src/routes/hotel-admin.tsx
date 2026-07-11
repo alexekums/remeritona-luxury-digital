@@ -10,6 +10,8 @@ import { OrdersRequestsView } from "@/components/OrdersRequestsView";
 import { SpaManagementView } from "@/components/SpaManagementView";
 import { MenuManagementView } from "@/components/MenuManagementView";
 import { ChatManagementView } from "@/components/ChatManagementView";
+import { SystemSettingsView } from "@/components/SystemSettingsView";
+import { StaffProfileView } from "@/components/StaffProfileView";
 import { fetchOrdersAndRequests, patchItemStatus } from "@/lib/orders-api-client";
 import {
   formatOrderItemsSummary,
@@ -23,7 +25,7 @@ import {
   LogOut, Moon, Sun, Users, Hotel, TrendingUp,
   CheckCircle, XCircle, Clock, Search, RefreshCw,
   BedDouble, Sparkles, AlertCircle, ChevronDown, ChevronRight, X,
-  LayoutDashboard, Calendar, Plus, Menu, Bell, MessageCircle, DollarSign, History, BarChart3
+  LayoutDashboard, Calendar, Plus, Menu, Bell, MessageCircle, DollarSign, History, BarChart3, Settings
 } from "lucide-react";
 import logo from "@/assets/logo.png";
 import lobbyImage from "@/assets/lobby.jpg";
@@ -205,7 +207,7 @@ body { margin: 0; padding: 0; font-family: Arial, sans-serif; font-size: 11px; c
 
 type AdminTab =
   | "dashboard" | "bookings" | "rooms" | "reports" | "room-rates" | "guest-history"
-  | "occupancy-forecast" | "orders-requests" | "spa-management" | "menu-management" | "chat-management";
+  | "occupancy-forecast" | "orders-requests" | "spa-management" | "menu-management" | "chat-management" | "settings";
 
 const PMS_ROUTE_MAP: Partial<Record<AdminTab, string>> = {
   "orders-requests": "/orders-requests",
@@ -269,7 +271,7 @@ export function AdminPage({ initialTab }: { initialTab?: AdminTab } = {}) {
   // Sidebar state
   const [sidebarExpanded, setSidebarExpanded] = useState(true);
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
-  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set(["front-desk", "rooms", "finance", "staff"]));
+  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set(["front-desk", "rooms", "finance", "staff", "system"]));
   const [activityLoading, setActivityLoading] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState<any>(null);
   const [deleteLoading, setDeleteLoading] = useState(false);
@@ -386,6 +388,7 @@ export function AdminPage({ initialTab }: { initialTab?: AdminTab } = {}) {
   // Notifications panel state
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [notificationItems, setNotificationItems] = useState<any[]>([]);
+  const [systemSettings, setSystemSettings] = useState<any>(null);
   const [notificationPendingCount, setNotificationPendingCount] = useState(0);
   const lastCountRef = useRef<number>(0);
   const isFirstPollRef = useRef<boolean>(true);
@@ -441,12 +444,12 @@ export function AdminPage({ initialTab }: { initialTab?: AdminTab } = {}) {
   const colors = {
     bg: isDark
       ? "linear-gradient(135deg, #0A0A0F 0%, #0D0D12 50%, #12121A 100%), radial-gradient(ellipse at top right, rgba(201, 169, 110, 0.08) 0%, transparent 50%)"
-      : "linear-gradient(135deg, #FBFBFA 0%, #F7F5F0 50%, #EFECE6 100%), radial-gradient(ellipse at top right, rgba(201, 169, 110, 0.12) 0%, transparent 50%)",
-    surface: isDark ? "rgba(20, 20, 20, 0.6)" : "rgba(255, 255, 255, 0.7)",
+      : "linear-gradient(135deg, #f8f7f4 0%, #f5f3f0 50%, #f0ede8 100%), radial-gradient(ellipse at top right, rgba(201, 169, 110, 0.08) 0%, transparent 50%)",
+    surface: isDark ? "rgba(20, 20, 20, 0.6)" : "#ffffff",
     surface2: isDark ? "rgba(26, 26, 26, 0.4)" : "rgba(240, 237, 232, 0.5)",
-    border: isDark ? "rgba(201, 169, 110, 0.2)" : "rgba(201, 169, 110, 0.25)",
+    border: isDark ? "rgba(201, 169, 110, 0.2)" : "#cbd5e1",
     text: isDark ? "#e8e0d0" : "#1a1a1a",
-    textMuted: isDark ? "#888" : "#666",
+    textMuted: isDark ? "#888" : "#4a4a4a",
     gold: "#d4af37",
     goldSoft: "#c9a84c",
   };
@@ -540,8 +543,9 @@ export function AdminPage({ initialTab }: { initialTab?: AdminTab } = {}) {
         });
         if (!res.ok) return;
 
-        const data = await res.json() as { results: any[] };
+        const data = await res.json() as { results: any[], settings?: any };
         const items = data.results || [];
+        if (data.settings) setSystemSettings(data.settings);
         const pendingCount = items.filter((i: any) => i.status === "pending").length;
 
         setNotificationItems(items);
@@ -1220,6 +1224,7 @@ export function AdminPage({ initialTab }: { initialTab?: AdminTab } = {}) {
         if (refreshed.success) {
           const items = refreshed.items ?? refreshed.results ?? [];
           setNotificationItems(items);
+          if (refreshed.settings) setSystemSettings(refreshed.settings);
           const pendingCount = items.filter((i: any) => i.status === "pending").length;
           setNotificationPendingCount(pendingCount);
           lastCountRef.current = pendingCount;
@@ -1674,7 +1679,9 @@ export function AdminPage({ initialTab }: { initialTab?: AdminTab } = {}) {
 
         {/* Right Side - Portal Workspace */}
         <div className="lg:col-span-4 flex items-center justify-center p-8" style={{
-          background: isDark ? "#0a0a0a" : "#FBFBFA",
+          background: isDark 
+            ? `repeating-linear-gradient(0deg, rgba(212, 175, 55, 0.04) 0px, rgba(212, 175, 55, 0.04) 1px, transparent 1px, transparent 20px), repeating-linear-gradient(90deg, rgba(212, 175, 55, 0.04) 0px, rgba(212, 175, 55, 0.04) 1px, transparent 1px, transparent 20px), linear-gradient(135deg, #121212 0%, #1e1e1e 100%)`
+            : "#FBFBFA",
           backdropFilter: isDark ? "none" : "blur(20px)",
           borderLeft: isDark ? "none" : "1px solid #EFECE6"
         }}>
@@ -1689,10 +1696,11 @@ export function AdminPage({ initialTab }: { initialTab?: AdminTab } = {}) {
             </button>
           </div>
           <div style={{
-            background: isDark ? colors.surface : "#FFFFFF",
+            background: isDark ? "rgba(18, 18, 18, 0.85)" : "#FFFFFF",
             border: `1px solid ${colors.border}`,
             padding: "48px", maxWidth: 400, width: "100%",
-            boxShadow: isDark ? "none" : "0 4px 24px rgba(0, 0, 0, 0.08)"
+            boxShadow: isDark ? "0 8px 32px rgba(0, 0, 0, 0.5)" : "0 4px 24px rgba(0, 0, 0, 0.08)",
+            backdropFilter: isDark ? "blur(20px)" : "none"
           }}>
             <div style={{ textAlign: "center", marginBottom: 32 }}>
               <p style={{ color: colors.gold, fontSize: 11, letterSpacing: "0.4em", textTransform: "uppercase", marginBottom: 8 }}>
@@ -1759,11 +1767,14 @@ export function AdminPage({ initialTab }: { initialTab?: AdminTab } = {}) {
   // ==================== MAIN DASHBOARD ====================
   return (
     <div style={{
-      minHeight: "100vh",
+      height: "100vh",
+      overflow: "hidden",
       backgroundImage: colors.bg,
       fontFamily: "Georgia, serif",
       color: colors.text,
-      backdropFilter: "blur(10px)"
+      backdropFilter: "blur(10px)",
+      margin: 0,
+      padding: 0
     }}>
 
       {/* Toast */}
@@ -1798,11 +1809,11 @@ export function AdminPage({ initialTab }: { initialTab?: AdminTab } = {}) {
           padding: 20, maxWidth: 420, width: "90%", maxHeight: "80vh",
           overflowY: "auto", boxShadow: "0 4px 20px rgba(0,0,0,0.3)"
         }}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
-            <h3 style={{ color: colors.gold, fontSize: 12, letterSpacing: "0.2em", textTransform: "uppercase", margin: 0 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 16, marginBottom: 16 }}>
+            <h3 style={{ color: colors.gold, fontSize: 12, letterSpacing: "0.2em", textTransform: "uppercase", margin: 0, whiteSpace: "nowrap" }}>
               Notifications
             </h3>
-            <button onClick={() => setNotificationsOpen(false)} style={{ background: "none", border: "none", cursor: "pointer", color: colors.textMuted }}>
+            <button onClick={() => setNotificationsOpen(false)} style={{ background: "none", border: "none", cursor: "pointer", color: colors.textMuted, flexShrink: 0 }}>
               <X size={16} />
             </button>
           </div>
@@ -1814,6 +1825,17 @@ export function AdminPage({ initialTab }: { initialTab?: AdminTab } = {}) {
           {bellPanelItems.map((item: any) => {
             const itemKey = `${item.type}-${item.id}`;
             const isBooking = item.type === "booking";
+            
+            const warningLimit = systemSettings?.escalation_warning_mins || 10;
+            const criticalLimit = systemSettings?.escalation_critical_mins || 20;
+            
+            const ageMs = Date.now() - new Date(item.created_at).getTime();
+            const ageMinutes = ageMs / 60000;
+            const isPendingOrAccepted = item.status === 'pending' || item.status === 'accepted';
+            
+            const isWarning = isPendingOrAccepted && ageMinutes >= warningLimit && ageMinutes < criticalLimit;
+            const isCritical = isPendingOrAccepted && ageMinutes >= criticalLimit;
+
             const summary =
               item.type === "dining"
                 ? formatOrderItemsSummary(item.items)
@@ -1829,8 +1851,9 @@ export function AdminPage({ initialTab }: { initialTab?: AdminTab } = {}) {
                 onMouseEnter={() => setHoveredNotifId(itemKey)}
                 onMouseLeave={() => setHoveredNotifId(null)}
                 style={{
-                  background: colors.surface2, padding: 12,
+                  background: isCritical ? "rgba(239, 68, 68, 0.05)" : isWarning ? "rgba(245, 158, 11, 0.05)" : colors.surface2, padding: 12,
                   marginBottom: 8, border: `1px solid ${colors.border}`,
+                  borderLeft: isCritical ? "3px solid #ef4444" : isWarning ? "3px solid #f59e0b" : `1px solid ${colors.border}`,
                   position: "relative",
                 }}
               >
@@ -1846,7 +1869,7 @@ export function AdminPage({ initialTab }: { initialTab?: AdminTab } = {}) {
                       }
                     </p>
                     <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-                      <span style={{ fontSize: 10, color: colors.textMuted }}>{timeAgo(item.created_at)}</span>
+                      <span style={{ fontSize: 10, color: isCritical ? "#ef4444" : isWarning ? "#f59e0b" : colors.textMuted, fontWeight: isCritical || isWarning ? 600 : "normal" }}>{timeAgo(item.created_at)}</span>
                       {!isBooking && (
                         <span style={{
                           fontSize: 9, padding: "2px 6px",
@@ -1934,14 +1957,19 @@ export function AdminPage({ initialTab }: { initialTab?: AdminTab } = {}) {
 
       {/* Top Header Navbar */}
       <header style={{
-        position: "fixed", top: 0, left: 0, right: 0,
-        height: 64,
+        position: "fixed",
+        top: 0,
+        left: 0,
+        width: "100%",
+        height: "64px",
+        zIndex: 50,
         background: colors.surface,
         borderBottom: `1px solid ${colors.gold}33`,
-        zIndex: 400,
-        display: "flex", alignItems: "center", justifyContent: "space-between",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "space-between",
         padding: "0 24px",
-        paddingLeft: window.innerWidth < 768 ? 16 : (sidebarExpanded ? 244 : 80),
+        paddingLeft: window.innerWidth < 768 ? 16 : (sidebarExpanded ? 284 : 80),
         transition: "padding-left 0.25s ease",
         margin: 0
       }}>
@@ -1996,7 +2024,7 @@ export function AdminPage({ initialTab }: { initialTab?: AdminTab } = {}) {
           </button>
 
           {/* Guest Messages */}
-          <Link to="/chat-management" style={{
+          <button onClick={() => navigateToTab("chat-management")} style={{
             background: "none", border: "none", cursor: "pointer",
             color: colors.textMuted, padding: 8, borderRadius: 8,
             position: "relative", textDecoration: "none",
@@ -2014,7 +2042,7 @@ export function AdminPage({ initialTab }: { initialTab?: AdminTab } = {}) {
                 {messageUnreadCount}
               </span>
             )}
-          </Link>
+          </button>
 
           {/* Theme Toggle */}
           <button onClick={toggleTheme} style={{
@@ -2065,17 +2093,18 @@ export function AdminPage({ initialTab }: { initialTab?: AdminTab } = {}) {
 
       {/* Sidebar */}
       <aside style={{
-        position: "fixed", left: 0, top: 64, height: "calc(100vh - 64px)",
+        position: "fixed", left: 0, top: "64px", height: "calc(100vh - 64px)",
         background: colors.surface, borderRight: `1px solid ${colors.border}`,
-        width: sidebarExpanded ? 220 : 64,
+        width: sidebarExpanded ? 260 : 64,
         transition: "width 0.25s ease",
         zIndex: 300,
         display: "flex", flexDirection: "column",
         overflow: "hidden"
       }}>
-
-        {/* Navigation Groups */}
-        <div style={{ flex: 1, overflowY: "auto", overflowX: "hidden", padding: "8px 0" }}>
+        {/* Scrollable inner container wrapping links and refresh button */}
+        <div style={{ flex: 1, overflowY: "auto", overflowX: "hidden", display: "flex", flexDirection: "column", justifyContent: "space-between" }}>
+          {/* Navigation Groups */}
+          <div style={{ padding: "8px 0" }}>
           {/* FRONT DESK Group */}
           {staffRole !== "spa" && (
             <div>
@@ -2201,22 +2230,22 @@ export function AdminPage({ initialTab }: { initialTab?: AdminTab } = {}) {
                   )}
                   {/* Guest Messages (not for accountant, kitchen, housekeeping, spa) */}
                   {staffRole !== "accountant" && staffRole !== "kitchen" && staffRole !== "housekeeping" && staffRole !== "spa" && (
-                    <Link
-                      to="/chat-management"
+                    <button
+                      onClick={() => navigateToTab("chat-management")}
                       style={{
                         display: "flex", alignItems: "center", justifyContent: sidebarExpanded ? "flex-start" : "center", gap: (sidebarExpanded ? 8 : 0),
                         padding: sidebarExpanded ? "8px 12px" : "12px", width: "100%",
-                        textDecoration: "none",
-                        color: isChatPage ? colors.gold : colors.textMuted,
+                        background: "none", border: "none", cursor: "pointer",
+                        color: activeTab === "chat-management" ? colors.gold : colors.textMuted,
                         fontSize: 12,
-                        borderLeft: isChatPage ? `3px solid ${colors.gold}` : "3px solid transparent",
-                        paddingLeft: isChatPage ? 9 : 12,
+                        borderLeft: activeTab === "chat-management" ? `3px solid ${colors.gold}` : "3px solid transparent",
+                        paddingLeft: activeTab === "chat-management" ? 9 : 12,
                         boxSizing: "border-box",
                       }}
                     >
                       <span style={{ fontSize: 16, lineHeight: 1 }}>💬</span>
                       {sidebarExpanded && <span>Guest Messages</span>}
-                    </Link>
+                    </button>
                   )}
                 </div>
               )}
@@ -2416,29 +2445,71 @@ export function AdminPage({ initialTab }: { initialTab?: AdminTab } = {}) {
               )}
             </div>
           )}
-        </div>
 
-        {/* Refresh button at bottom of sidebar */}
-        <div style={{ padding: "12px", borderTop: `1px solid ${colors.border}` }}>
-          <button onClick={() => token && loadStats(token)} style={{
-            background: "none", border: `1px solid ${colors.border}`, padding: "8px",
-            color: colors.textMuted, cursor: "pointer", fontSize: 12,
-            display: "flex", alignItems: "center", justifyContent: "center",
-            width: "100%", borderRadius: 6,
-            transition: "background 0.2s"
-          }} onMouseEnter={(e) => e.currentTarget.style.background = colors.border}
-            onMouseLeave={(e) => e.currentTarget.style.background = "none"}>
-            <RefreshCw size={16} />
-          </button>
+          {/* SETTINGS Group (visible to all logged-in staff) */}
+          {staffRole && staffRole !== "" && (
+            <div>
+              <button onClick={() => {
+                const newGroups = new Set(expandedGroups);
+                if (newGroups.has("settings")) newGroups.delete("settings");
+                else newGroups.add("settings");
+                setExpandedGroups(newGroups);
+              }} style={{
+                background: "none", border: "none", cursor: "pointer",
+                padding: sidebarExpanded ? "8px 12px" : "8px", width: "100%",
+                display: "flex", alignItems: "center", justifyContent: sidebarExpanded ? "space-between" : "center",
+                color: colors.textMuted, fontSize: 10, letterSpacing: "0.15em",
+                textTransform: "uppercase"
+              }}>
+                <span style={{ display: sidebarExpanded ? "inline" : "none" }}>Settings</span>
+                {sidebarExpanded && (expandedGroups.has("settings") ? <ChevronDown size={14} /> : <ChevronRight size={14} />)}
+              </button>
+              {expandedGroups.has("settings") && (
+                <div style={{ marginLeft: sidebarExpanded ? 8 : 0 }}>
+                  <button onClick={() => navigateToTab("settings")} style={{
+                    background: "none", border: "none", cursor: "pointer",
+                    padding: sidebarExpanded ? "8px 12px" : "12px", width: "100%",
+                    display: "flex", alignItems: "center", justifyContent: sidebarExpanded ? "flex-start" : "center", gap: (sidebarExpanded ? 8 : 0),
+                    color: activeTab === "settings" ? colors.gold : colors.textMuted,
+                    fontSize: 12, borderLeft: activeTab === "settings" ? `3px solid ${colors.gold}` : "3px solid transparent",
+                    paddingLeft: activeTab === "settings" ? 9 : 12
+                  }}>
+                    <Settings size={16} />
+                    {sidebarExpanded && <span>{staffRole === "admin" ? "System & Security" : "Profile & Security"}</span>}
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
+          </div>
+
+          {/* Refresh button at bottom of sidebar */}
+          <div style={{ padding: "12px", borderTop: `1px solid ${colors.border}`, flexShrink: 0 }}>
+            <button onClick={() => token && loadStats(token)} style={{
+              background: "none", border: `1px solid ${colors.border}`, padding: "8px",
+              color: colors.textMuted, cursor: "pointer", fontSize: 12,
+              display: "flex", alignItems: "center", justifyContent: "center",
+              width: "100%", borderRadius: 6,
+              transition: "background 0.2s"
+            }} onMouseEnter={(e) => e.currentTarget.style.background = colors.border}
+              onMouseLeave={(e) => e.currentTarget.style.background = "none"}>
+              <RefreshCw size={16} />
+            </button>
+          </div>
         </div>
       </aside>
 
       {/* Main Content */}
       <main style={{
-        padding: 24, maxWidth: 1400, margin: "0 auto",
-        marginTop: 64,
-        marginLeft: window.innerWidth < 768 ? 0 : (sidebarExpanded ? 220 : 64),
-        transition: "margin-left 0.25s ease, margin-top 0.25s ease"
+        padding: 24,
+        paddingTop: "64px",
+        boxSizing: "border-box",
+        maxWidth: 1400,
+        margin: "0 auto",
+        marginLeft: window.innerWidth < 768 ? 0 : (sidebarExpanded ? "260px" : "64px"),
+        transition: "margin-left 0.25s ease",
+        overflowY: "auto",
+        height: "calc(100vh - 64px)"
       }}>
         {loading && !isPmsSubPage && (
           <p style={{ color: colors.textMuted, textAlign: "center", padding: 40 }}>Loading...</p>
@@ -2478,14 +2549,28 @@ export function AdminPage({ initialTab }: { initialTab?: AdminTab } = {}) {
         )}
 
         {/* ===== CHAT MANAGEMENT ===== */}
-        {isChatPage && staffRole !== "accountant" && staffRole !== "kitchen" && staffRole !== "housekeeping" && staffRole !== "spa" && token && (
+        {activeTab === "chat-management" && staffRole !== "accountant" && staffRole !== "kitchen" && staffRole !== "housekeeping" && staffRole !== "spa" && token && (
           <ChatManagementView token={token} colors={colors} onToast={showToast} />
         )}
 
-        {isChatPage && (staffRole === "accountant" || staffRole === "kitchen" || staffRole === "housekeeping" || staffRole === "spa") && (
+        {activeTab === "chat-management" && (staffRole === "accountant" || staffRole === "kitchen" || staffRole === "housekeeping" || staffRole === "spa") && (
           <p style={{ color: colors.textMuted, textAlign: "center", padding: 40 }}>
             You do not have access to Guest Messages.
           </p>
+        )}
+
+        {/* ===== SYSTEM SETTINGS ===== */}
+        {activeTab === "settings" && staffRole === "admin" && token && (
+          <div>
+            <SystemSettingsView token={token} colors={colors} onToast={showToast} initialSettings={systemSettings} />
+            <div style={{ borderTop: `1px solid ${colors.border}`, margin: "40px 0" }} />
+            <StaffProfileView token={token} colors={colors} onToast={showToast} />
+          </div>
+        )}
+
+        {/* ===== STAFF PROFILE ===== */}
+        {activeTab === "settings" && staffRole !== "admin" && token && (
+          <StaffProfileView token={token} colors={colors} onToast={showToast} />
         )}
 
         {/* ===== STAFF MANAGEMENT TAB ===== */}
@@ -2856,106 +2941,136 @@ export function AdminPage({ initialTab }: { initialTab?: AdminTab } = {}) {
             backdropFilter: "blur(10px)",
             boxShadow: "0 8px 32px rgba(0, 0, 0, 0.1)"
           }}>
-            {/* Stats Cards */}
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: 20, marginBottom: 32 }}>
-              {[
-                {
-                  label: "Occupied Rooms",
-                  value: `${occupiedRooms} / ${stats.roomStatuses?.length ?? 96}`,
-                  icon: (
-                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                      <path d="M2 4v16" />
-                      <path d="M2 8h18a2 2 0 0 1 2 2v10" />
-                      <path d="M2 17h20" />
-                      <path d="M6 8v9" />
-                    </svg>
-                  ),
-                  color: "#ef4444",
-                  gradient: "linear-gradient(135deg, rgba(239, 68, 68, 0.15) 0%, rgba(239, 68, 68, 0.05) 100%)"
-                },
-                ...(staffRole !== "front-desk" ? [{
-                  label: "Monthly Revenue",
-                  value: formatNaira(stats.monthlyRevenue ?? 0),
-                  icon: (
-                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                      <line x1="12" y1="1" x2="12" y2="23" />
-                      <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
-                    </svg>
-                  ),
-                  color: colors.gold,
-                  gradient: `linear-gradient(135deg, rgba(212, 175, 55, 0.2) 0%, rgba(212, 175, 55, 0.08) 100%)`
-                }] : []),
-              ].map(card => (
-                <div key={card.label} style={{
-                  background: card.gradient,
-                  border: `1px solid ${card.color}30`,
-                  padding: 24,
-                  display: "flex",
-                  flexDirection: "column",
-                  gap: 16,
-                  borderRadius: 8,
-                  backdropFilter: "blur(10px)",
-                  boxShadow: `0 4px 20px ${card.color}15`,
-                  transition: "all 0.3s ease"
-                }}>
-                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+            {/* Top Layout Grid: Metrics Cards (Left) + Shift Summary (Right) */}
+            <div style={{ display: "grid", gridTemplateColumns: "2.5fr 1fr", gap: 20, marginBottom: 32 }}>
+              {/* Stats Cards */}
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: 20 }}>
+                {[
+                  {
+                    label: "Today's Arrivals",
+                    value: `${todayArrivals}`,
+                    icon: (
+                      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+                        <circle cx="8.5" cy="7" r="4" />
+                        <line x1="20" y1="8" x2="20" y2="14" />
+                        <line x1="23" y1="11" x2="17" y2="11" />
+                      </svg>
+                    ),
+                    color: "#3b82f6",
+                    gradient: "linear-gradient(135deg, rgba(59, 130, 246, 0.15) 0%, rgba(59, 130, 246, 0.05) 100%)"
+                  },
+                  {
+                    label: "Today's Departures",
+                    value: `${todayDepartures}`,
+                    icon: (
+                      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+                        <polyline points="16 17 21 12 16 7" />
+                        <line x1="21" y1="12" x2="9" y2="12" />
+                      </svg>
+                    ),
+                    color: "#22c55e",
+                    gradient: "linear-gradient(135deg, rgba(34, 197, 94, 0.15) 0%, rgba(34, 197, 94, 0.05) 100%)"
+                  },
+                  {
+                    label: "Occupied Rooms",
+                    value: `${occupiedRooms} / ${stats.roomStatuses?.length ?? 96}`,
+                    icon: (
+                      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M2 4v16" />
+                        <path d="M2 8h18a2 2 0 0 1 2 2v10" />
+                        <path d="M2 17h20" />
+                        <path d="M6 8v9" />
+                      </svg>
+                    ),
+                    color: "#ef4444",
+                    gradient: "linear-gradient(135deg, rgba(239, 68, 68, 0.15) 0%, rgba(239, 68, 68, 0.05) 100%)"
+                  },
+                  ...(staffRole !== "front-desk" ? [{
+                    label: "Monthly Revenue",
+                    value: formatNaira(stats.monthlyRevenue ?? 0),
+                    icon: (
+                      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                        <line x1="12" y1="1" x2="12" y2="23" />
+                        <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
+                      </svg>
+                    ),
+                    color: colors.gold,
+                    gradient: `linear-gradient(135deg, rgba(212, 175, 55, 0.2) 0%, rgba(212, 175, 55, 0.08) 100%)`
+                  }] : []),
+                ].map(card => (
+                  <div key={card.label} style={{
+                    background: card.gradient,
+                    border: `1px solid ${card.color}30`,
+                    padding: 24,
+                    display: "flex",
+                    flexDirection: "column",
+                    gap: 16,
+                    borderRadius: 8,
+                    backdropFilter: "blur(10px)",
+                    boxShadow: `0 4px 20px ${card.color}15`,
+                    transition: "all 0.3s ease"
+                  }}>
+                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                      <span style={{
+                        fontSize: 10,
+                        color: colors.textMuted,
+                        letterSpacing: "0.2em",
+                        textTransform: "uppercase",
+                        fontWeight: 600
+                      }}>{card.label}</span>
+                      <span style={{ color: card.color, opacity: 0.9 }}>{card.icon}</span>
+                    </div>
                     <span style={{
-                      fontSize: 10,
-                      color: colors.textMuted,
-                      letterSpacing: "0.2em",
-                      textTransform: "uppercase",
-                      fontWeight: 600
-                    }}>{card.label}</span>
-                    <span style={{ color: card.color, opacity: 0.9 }}>{card.icon}</span>
+                      fontSize: 32,
+                      color: card.color,
+                      fontWeight: 300,
+                      letterSpacing: "-0.02em",
+                      fontFamily: "Georgia, serif"
+                    }}>{card.value}</span>
                   </div>
-                  <span style={{
-                    fontSize: 32,
-                    color: card.color,
-                    fontWeight: 300,
-                    letterSpacing: "-0.02em",
-                    fontFamily: "Georgia, serif"
-                  }}>{card.value}</span>
-                </div>
-              ))}
-            </div>
+                ))}
+              </div>
 
-            {/* Shift Summary - Moved up to be adjacent to revenue card */}
-            <div style={{ background: colors.surface, border: `1px solid ${colors.border}`, padding: 20, marginBottom: 32 }}>
-              <p style={{ margin: 0, fontSize: 10, color: colors.textMuted, letterSpacing: "0.2em", textTransform: "uppercase" }}>
-                Shift Summary
-              </p>
-              <h3 style={{ margin: "10px 0 6px", fontSize: 22, color: colors.text, fontWeight: 400, fontFamily: "Georgia, serif" }}>
-                {getShiftGreeting()}, {staffName}
-              </h3>
-              <p style={{ margin: 0, fontSize: 13, color: colors.gold, textTransform: "capitalize" }}>
-                {staffRole.replace(/-/g, " ")} · Front-of-house operations
-              </p>
-              <p style={{ margin: "12px 0 0", fontSize: 12, color: colors.textMuted, lineHeight: 1.5 }}>
-                {todayArrivals} arrival{todayArrivals !== 1 ? "s" : ""} and {todayDepartures} departure{todayDepartures !== 1 ? "s" : ""} scheduled today.
-                {missedArrivals.length > 0 && (
-                  <span style={{ color: "#ef4444", marginLeft: 8 }}>
-                    {missedArrivals.length} missed arrival{missedArrivals.length !== 1 ? "s" : ""}.
-                  </span>
-                )}
-              </p>
+              {/* Shift Summary */}
+              <div style={{ background: colors.surface, border: `1px solid ${colors.border}`, padding: 20, borderRadius: 8, display: "flex", flexDirection: "column", justifyContent: "center" }}>
+                <p style={{ margin: 0, fontSize: 10, color: colors.textMuted, letterSpacing: "0.2em", textTransform: "uppercase" }}>
+                  Shift Summary
+                </p>
+                <h3 style={{ margin: "10px 0 6px", fontSize: 22, color: colors.text, fontWeight: 400, fontFamily: "Georgia, serif" }}>
+                  {getShiftGreeting()}, {staffName}
+                </h3>
+                <p style={{ margin: 0, fontSize: 13, color: colors.gold, textTransform: "capitalize" }}>
+                  {staffRole.replace(/-/g, " ")} · Front-of-house operations
+                </p>
+                <p style={{ margin: "12px 0 0", fontSize: 12, color: colors.textMuted, lineHeight: 1.5 }}>
+                  {todayArrivals} arrival{todayArrivals !== 1 ? "s" : ""} and {todayDepartures} departure{todayDepartures !== 1 ? "s" : ""} scheduled today.
+                  {missedArrivals.length > 0 && (
+                    <span style={{ color: "#ef4444", marginLeft: 8 }}>
+                      {missedArrivals.length} missed arrival{missedArrivals.length !== 1 ? "s" : ""}.
+                    </span>
+                  )}
+                </p>
+              </div>
             </div>
 
             {/* Phase 3 Operational Dashboard Grid */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              {/* Left Panel — Arrivals & Departures */}
-              <div style={{ display: "flex", flexDirection: "column", gap: 24 }}>
+            {/* Row 1: Arrivals & Departures (Side-by-Side Horizontal Scroll) */}
+            <>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20, width: "100%", marginBottom: 24 }}>
                 {[
                   { title: "Today's Arrivals", data: stats.todayCheckIns, action: "check-in" as const },
                   { title: "Today's Departures", data: stats.todayCheckOuts, action: "check-out" as const },
                 ].map(section => (
                   <div
                     key={section.title}
-                    style={{ background: colors.surface, border: `1px solid ${colors.border}`, padding: 24, borderRadius: 8 }}
+                    style={{ background: colors.surface, border: `1px solid ${colors.border}`, padding: 24, borderRadius: 8, minWidth: 400, flexShrink: 0 }}
                   >
                     <h3 style={{ color: colors.gold, fontSize: 12, letterSpacing: "0.2em", textTransform: "uppercase", margin: "0 0 16px" }}>
                       {section.title}
                     </h3>
-                    <div style={{ display: "flex", flexDirection: "column", gap: 12, maxHeight: 400, overflowY: "auto" }}>
+                    <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
                       {section.data?.length === 0 ? (
                         <p style={{ color: colors.textMuted, fontSize: 13 }}>None today</p>
                       ) : (
@@ -3013,15 +3128,19 @@ export function AdminPage({ initialTab }: { initialTab?: AdminTab } = {}) {
                 ))}
               </div>
 
-              {/* Right Panel — Operational Sidebar Feed */}
-              <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+              {/* Row 2: System Activity & Missed Arrivals (Dynamic Grid) */}
+              <div style={{
+                display: missedArrivals.length > 0 ? "grid" : "block",
+                gridTemplateColumns: missedArrivals.length > 0 ? "1fr 1fr" : "1fr",
+                gap: missedArrivals.length > 0 ? 20 : 0
+              }}>
 
                 {/* System Activity Feed */}
                 <div style={{ background: colors.surface, border: `1px solid ${colors.border}`, padding: 20 }}>
                   <h3 style={{ color: colors.gold, fontSize: 12, letterSpacing: "0.2em", textTransform: "uppercase", margin: "0 0 16px" }}>
                     System Activity
                   </h3>
-                  <div className="overflow-y-auto max-h-[280px] pr-1" style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                  <div className="pr-1" style={{ display: "flex", flexDirection: "column", gap: 10 }}>
                     {systemActivityFeed.length === 0 ? (
                       <p style={{ color: colors.textMuted, fontSize: 13 }}>No recent room updates</p>
                     ) : (
@@ -3052,17 +3171,18 @@ export function AdminPage({ initialTab }: { initialTab?: AdminTab } = {}) {
                 </div>
 
                 {/* Missed Arrivals */}
-                <div style={{
-                  background: colors.surface,
-                  border: `1px solid ${missedArrivals.length > 0 ? "#ef444455" : colors.border}`,
-                  padding: 20
-                }}>
-                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16 }}>
-                    <h3 style={{ color: missedArrivals.length > 0 ? "#ef4444" : colors.gold, fontSize: 12, letterSpacing: "0.2em", textTransform: "uppercase", margin: 0 }}>
+                {missedArrivals.length > 0 && (
+                  <div style={{
+                    background: colors.surface,
+                    border: `1px solid ${missedArrivals.length > 0 ? "#ef444455" : colors.border}`,
+                    padding: 20
+                  }}>
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16, marginBottom: 16 }}>
+                    <h3 style={{ color: missedArrivals.length > 0 ? "#ef4444" : colors.gold, fontSize: 12, letterSpacing: "0.2em", textTransform: "uppercase", margin: 0, whiteSpace: "nowrap" }}>
                       Missed Arrivals
                     </h3>
                     {missedArrivals.length > 0 && (
-                      <span style={{
+                      <span style={{ flexShrink: 0,
                         background: "#ef444422", color: "#ef4444", fontSize: 10, fontWeight: 700,
                         padding: "2px 8px", borderRadius: 4, letterSpacing: "0.08em"
                       }}>
@@ -3070,7 +3190,7 @@ export function AdminPage({ initialTab }: { initialTab?: AdminTab } = {}) {
                       </span>
                     )}
                   </div>
-                  <div className="overflow-y-auto max-h-[320px] pr-1" style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                  <div className="pr-1" style={{ display: "flex", flexDirection: "column", gap: 10 }}>
                     {missedArrivals.length === 0 ? (
                       <p style={{ color: colors.textMuted, fontSize: 13 }}>All confirmed arrivals are current</p>
                     ) : (
@@ -3111,8 +3231,9 @@ export function AdminPage({ initialTab }: { initialTab?: AdminTab } = {}) {
                     )}
                   </div>
                 </div>
+                )}
               </div>
-            </div>
+            </>
           </div>
         )}
 
@@ -3619,12 +3740,12 @@ export function AdminPage({ initialTab }: { initialTab?: AdminTab } = {}) {
             backdropFilter: "blur(10px)",
             boxShadow: "0 8px 32px rgba(0, 0, 0, 0.1)"
           }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 24 }}>
-              <h2 style={{ color: colors.gold, fontSize: 14, letterSpacing: "0.2em", textTransform: "uppercase", margin: 0 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 16, marginBottom: 24 }}>
+              <h2 style={{ color: colors.gold, fontSize: 14, letterSpacing: "0.2em", textTransform: "uppercase", margin: 0, whiteSpace: "nowrap" }}>
                 Revenue Report
               </h2>
               {reportData && (
-                <button onClick={handlePrintReport} style={{
+                <button onClick={handlePrintReport} style={{ flexShrink: 0,
                   background: colors.gold, color: "#0a0a0a", border: "none",
                   padding: "8px 16px", fontSize: 11, cursor: "pointer",
                   letterSpacing: "0.1em", textTransform: "uppercase", fontWeight: 600
@@ -3923,11 +4044,11 @@ export function AdminPage({ initialTab }: { initialTab?: AdminTab } = {}) {
             backdropFilter: "blur(10px)",
             boxShadow: "0 8px 32px rgba(0, 0, 0, 0.1)"
           }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 24 }}>
-              <h2 style={{ color: colors.gold, fontSize: 14, letterSpacing: "0.2em", textTransform: "uppercase", margin: 0 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 16, marginBottom: 24 }}>
+              <h2 style={{ color: colors.gold, fontSize: 14, letterSpacing: "0.2em", textTransform: "uppercase", margin: 0, whiteSpace: "nowrap" }}>
                 Occupancy Forecast
               </h2>
-              <div style={{ display: "flex", gap: 8 }}>
+              <div style={{ display: "flex", gap: 8, flexShrink: 0 }}>
                 {[7, 14, 30].map(days => (
                   <button
                     key={days}
@@ -4541,12 +4662,12 @@ export function AdminPage({ initialTab }: { initialTab?: AdminTab } = {}) {
             background: colors.surface, border: `1px solid ${colors.gold}`,
             padding: 32, maxWidth: 560, width: "100%", maxHeight: "92vh", overflowY: "auto"
           }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 24 }}>
-              <div>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 16, marginBottom: 24 }}>
+              <div style={{ whiteSpace: "nowrap" }}>
                 <p style={{ color: colors.gold, fontSize: 11, letterSpacing: "0.3em", textTransform: "uppercase", margin: "0 0 4px" }}>Front Desk</p>
-                <h2 style={{ color: colors.text, fontSize: 22, fontWeight: 400, margin: 0 }}>Walk-in Booking</h2>
+                <h2 style={{ color: colors.text, fontSize: 22, fontWeight: 400, margin: 0, whiteSpace: "nowrap" }}>Walk-in Booking</h2>
               </div>
-              <button onClick={() => setShowWalkIn(false)} style={{ background: "none", border: "none", cursor: "pointer", color: colors.textMuted }}><X size={20} /></button>
+              <button onClick={() => setShowWalkIn(false)} style={{ background: "none", border: "none", cursor: "pointer", color: colors.textMuted, flexShrink: 0 }}><X size={20} /></button>
             </div>
 
             {/* Guest Info */}

@@ -43,6 +43,7 @@ const STATUS_FILTERS = [
 export function OrdersRequestsView({ token, colors, onToast, staffRole }: Props) {
   const defaultTab = staffRole === "housekeeping" ? "service" : staffRole === "kitchen" ? "dining" : "dining";
   const [activeTab, setActiveTab] = useState<"dining" | "service">(defaultTab);
+  const [serviceFilter, setServiceFilter] = useState<"all" | "amenities" | "laundry">("all");
   const [statusFilter, setStatusFilter] = useState("all");
   const [roomSearch, setRoomSearch] = useState("");
   const [items, setItems] = useState<any[]>([]);
@@ -125,7 +126,20 @@ export function OrdersRequestsView({ token, colors, onToast, staffRole }: Props)
   };
 
   const diningItems = sortOrders(items.filter((i) => i.type === "dining"));
-  const serviceItems = sortRequests(items.filter((i) => i.type === "service"));
+  let serviceItems = sortRequests(items.filter((i) => i.type === "service"));
+
+  if (serviceFilter === "amenities") {
+    serviceItems = serviceItems.filter((i) => {
+      const txt = `${i.request_type || ""} ${i.title || ""} ${i.notes || ""}`.toLowerCase();
+      return txt.includes("towel") || txt.includes("amenity") || txt.includes("pillow") || txt.includes("blanket") || txt.includes("toiletries");
+    });
+  } else if (serviceFilter === "laundry") {
+    serviceItems = serviceItems.filter((i) => {
+      const txt = `${i.request_type || ""} ${i.title || ""} ${i.notes || ""}`.toLowerCase();
+      return txt.includes("laundry") || txt.includes("dry clean") || txt.includes("iron") || txt.includes("pressing");
+    });
+  }
+
   const displayItems = activeTab === "dining" ? diningItems : serviceItems;
 
   const mapFilterLabel = (f: typeof STATUS_FILTERS[number]) => {
@@ -226,6 +240,47 @@ export function OrdersRequestsView({ token, colors, onToast, staffRole }: Props)
 
       {!loading && displayItems.length === 0 && (
         <p style={{ color: colors.textMuted, textAlign: "center", padding: 40 }}>No items found</p>
+      )}
+
+      {activeTab === "service" && (
+        <div style={{ display: "flex", gap: 0, marginBottom: 16, borderBottom: `1px solid ${colors.border}` }}>
+          <button
+            onClick={() => setServiceFilter("all")}
+            style={{
+              background: "none", border: "none",
+              borderBottom: serviceFilter === "all" ? `2px solid ${colors.gold}` : "2px solid transparent",
+              padding: "8px 16px", cursor: "pointer",
+              color: serviceFilter === "all" ? colors.gold : colors.textMuted,
+              fontSize: 12, letterSpacing: "0.05em", fontFamily: "Georgia, serif",
+            }}
+          >
+            All Requests
+          </button>
+          <button
+            onClick={() => setServiceFilter("amenities")}
+            style={{
+              background: "none", border: "none",
+              borderBottom: serviceFilter === "amenities" ? `2px solid ${colors.gold}` : "2px solid transparent",
+              padding: "8px 16px", cursor: "pointer",
+              color: serviceFilter === "amenities" ? colors.gold : colors.textMuted,
+              fontSize: 12, letterSpacing: "0.05em", fontFamily: "Georgia, serif",
+            }}
+          >
+            Towels & Amenities
+          </button>
+          <button
+            onClick={() => setServiceFilter("laundry")}
+            style={{
+              background: "none", border: "none",
+              borderBottom: serviceFilter === "laundry" ? `2px solid ${colors.gold}` : "2px solid transparent",
+              padding: "8px 16px", cursor: "pointer",
+              color: serviceFilter === "laundry" ? colors.gold : colors.textMuted,
+              fontSize: 12, letterSpacing: "0.05em", fontFamily: "Georgia, serif",
+            }}
+          >
+            Laundry
+          </button>
+        </div>
       )}
 
       <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>

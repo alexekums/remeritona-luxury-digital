@@ -8,14 +8,14 @@ function authHeaders(token: string): HeadersInit {
 export async function fetchOrdersAndRequests(
   token: string,
   params?: { status?: string; type?: string; room?: string }
-): Promise<{ success: boolean; items?: any[]; results?: any[]; error?: string }> {
+): Promise<{ success: boolean; items?: any[]; results?: any[]; error?: string; settings?: any }> {
   const res = await fetch("/api/orders-and-requests", {
     headers: {
       ...authHeaders(token),
       "X-Admin-Token": token,
     },
   });
-  const data = await res.json();
+  const data = await res.json() as any;
   let items: any[] = data.results ?? data.items ?? [];
 
   if (params?.status) {

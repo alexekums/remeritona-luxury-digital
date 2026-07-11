@@ -91,8 +91,16 @@ export const Route = createFileRoute("/api/orders-and-requests")({
             new Date(b.created_at).getTime() -
             new Date(a.created_at).getTime()
           );
+          const settingsRows = await db.prepare(
+            `SELECT key, value FROM system_settings WHERE key IN ('escalation_warning_mins', 'escalation_critical_mins')`
+          ).all();
+          
+          const configMap = (settingsRows.results || []).reduce((acc: any, row: any) => {
+            acc[row.key] = parseInt(row.value, 10);
+            return acc;
+          }, { escalation_warning_mins: 10, escalation_critical_mins: 20 });
 
-          return Response.json({ results: combined });
+          return Response.json({ results: combined, settings: configMap });
         } catch (error) {
           return Response.json(
             { error: String(error) },
