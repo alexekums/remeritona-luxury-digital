@@ -51,6 +51,48 @@ export const COUPONS: Coupon[] = [
       };
     },
   },
+  {
+    code: "EXTENDED-STAY",
+    description: "15% discount for stays of 5 nights or more.",
+    validate: (ctx) => {
+      if (ctx.nights < 5) {
+        return {
+          valid: false,
+          reason: "Stays must be 5 nights or longer to qualify.",
+        };
+      }
+      return {
+        valid: true,
+        discount: Math.round(ctx.subtotal * 0.15),
+        label: "EXTENDED-STAY (15% off)",
+        message: "Long-stay coupon applied — 15% off room subtotal.",
+      };
+    },
+  },
+  {
+    code: "REM-WED-2026",
+    description: "Complimentary honeymoon champagne and room upgrade.",
+    validate: (ctx) => {
+      return {
+        valid: true,
+        discount: 0,
+        label: "REM-WED-2026",
+        message: "🎉 Wedding Venue Booking Verified! A complimentary honeymoon upgrade & bottle of champagne has been added to your stay!",
+      };
+    },
+  },
+  {
+    code: "LEXGOLD-HALL",
+    description: "Complimentary honeymoon champagne and room upgrade.",
+    validate: (ctx) => {
+      return {
+        valid: true,
+        discount: 0,
+        label: "LEXGOLD-HALL",
+        message: "🎉 Wedding Venue Booking Verified! A complimentary honeymoon upgrade & bottle of champagne has been added to your stay!",
+      };
+    },
+  },
 ];
 
 export function applyCoupon(code: string, ctx: CouponContext): CouponResult {

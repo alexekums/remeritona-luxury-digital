@@ -4,7 +4,15 @@ import json
 def read_files():
     with open('public/gallery_files.txt', 'r', encoding='utf-8') as f:
         lines = [line.strip() for line in f if line.strip()]
-    return ["/" + line for line in lines]
+    res = []
+    for line in lines:
+        path = line
+        if path.lower().endswith('.jpg') or path.lower().endswith('.jpeg'):
+            path = path[:-4] + '.webp'
+        elif path.lower().endswith('.png'):
+            path = path[:-4] + '.webp'
+        res.append("/" + path)
+    return res
 
 files = read_files()
 
@@ -15,7 +23,28 @@ def get_images(folder_prefixes):
     for f in files:
         for pref in folder_prefixes:
             if f.startswith(pref):
-                res.append(f)
+                path = f.replace('/Remeritona Hotel Gallery/Superior/', '/Remeritona Hotel Gallery/Classic/')
+                res.append(path)
+    return res
+
+def sort_business(images):
+    img_39 = next((i for i in images if 'IMG_7139' in i), None)
+    img_24 = next((i for i in images if 'IMG_7124' in i), None)
+    rest = [i for i in images if i != img_39 and i != img_24]
+    res = []
+    if img_39: res.append(img_39)
+    if img_24: res.append(img_24)
+    res.extend(rest)
+    return res
+
+def sort_executive(images):
+    img_72 = next((i for i in images if 'IMG_7172' in i), None)
+    img_57 = next((i for i in images if 'IMG_7157' in i), None)
+    rest = [i for i in images if i != img_72 and i != img_57]
+    res = []
+    if img_72: res.append(img_72)
+    if img_57: res.append(img_57)
+    res.extend(rest)
     return res
 
 rooms_data = f"""export type Room = {{
@@ -47,7 +76,7 @@ export const rooms: Room[] = [
     occupancy: "Max 2 Adults + 1 Extra Bed + 1 Child",
     image: "{get_images('/Remeritona Hotel Gallery/Classic/')[0]}",
     gallery: {json.dumps(get_images('/Remeritona Hotel Gallery/Classic/'), indent=6)},
-    amenities: ["Free Wi-Fi", "Air Conditioning", "Smart TV", "Mini Bar", "En-suite Bathroom", "Daily Housekeeping"],
+    amenities: ["Free Wi-Fi", "Air Conditioning", "Smart TV", "En-suite Bathroom", "Daily Housekeeping"],
   }},
   {{
     slug: "superior",
@@ -62,14 +91,14 @@ export const rooms: Room[] = [
     occupancy: "Max 2 Adults + 1 Extra Bed + 1 Child",
     image: "{get_images('/Remeritona Hotel Gallery/Superior/')[0]}",
     gallery: {json.dumps(get_images('/Remeritona Hotel Gallery/Superior/'), indent=6)},
-    amenities: ["Free Wi-Fi", "Air Conditioning", "Smart TV", "Mini Bar", "Bathtub / Rain Shower", "Workspace"],
+    amenities: ["Free Wi-Fi", "Air Conditioning", "Smart TV", "Bathtub / Rain Shower", "Workspace"],
   }},
   {{
     slug: "executive",
     name: "Executive",
     tagline: "The pinnacle of Abakaliki luxury",
     description:
-      "Our flagship Executive room features a generous living area, premium furnishings, and bespoke service — an iconic stay for discerning guests and visiting dignitaries.",
+      "Our flagship Executive room features premium furnishings and bespoke service — an iconic stay for discerning guests and visiting dignitaries.",
     price: 80000,
     size: "62 m²",
     beds: "1 King Bed + Lounge",
@@ -77,7 +106,7 @@ export const rooms: Room[] = [
     occupancy: "Max 2 Adults + 1 Extra Bed + Child",
     image: "{get_images(['/Remeritona Hotel Gallery/Executive/', '/Remeritona Hotel Gallery/Executive Room/'])[0]}",
     gallery: {json.dumps(get_images(['/Remeritona Hotel Gallery/Executive/', '/Remeritona Hotel Gallery/Executive Room/']), indent=6)},
-    amenities: ["Free Wi-Fi", "Air Conditioning", "Separate Living Area", "Premium Mini Bar", "Spa Bath", "Concierge Service"],
+    amenities: ["Free Wi-Fi", "Air Conditioning", "Concierge Service"],
   }},
   {{
     slug: "business-suites",
@@ -90,9 +119,9 @@ export const rooms: Room[] = [
     beds: "1 King Bed",
     capacity: 3,
     occupancy: "Max 2 Adults + 1 Extra Bed + 1 Child",
-    image: "{get_images('/Remeritona Hotel Gallery/Business Suite/')[0]}",
-    gallery: {json.dumps(get_images('/Remeritona Hotel Gallery/Business Suite/'), indent=6)},
-    amenities: ["Free Wi-Fi", "Air Conditioning", "Marble Bathroom", "Premium Mini Bar", "Lounge Seating", "Concierge Service"],
+    image: "{sort_business(get_images('/Remeritona Hotel Gallery/Business Suite/'))[0]}",
+    gallery: {json.dumps(sort_business(get_images('/Remeritona Hotel Gallery/Business Suite/')), indent=6)},
+    amenities: ["Free Wi-Fi", "Air Conditioning", "Marble Bathroom", "Separate Living Area (Parlor)", "Smart Mirror", "Concierge Service"],
   }},
   {{
     slug: "executive-suites",
@@ -105,9 +134,9 @@ export const rooms: Room[] = [
     beds: "1 King Bed + Grand Lounge",
     capacity: 3,
     occupancy: "Max 2 Adults + 1 Extra Bed + 1 Child",
-    image: "{get_images('/Remeritona Hotel Gallery/Executive Suite/')[0]}",
-    gallery: {json.dumps(get_images('/Remeritona Hotel Gallery/Executive Suite/'), indent=6)},
-    amenities: ["Free Wi-Fi", "Air Conditioning", "Grand Lounge", "Premium Mini Bar", "Spa Bath", "24/7 Concierge", "Panoramic View"],
+    image: "{sort_executive(get_images('/Remeritona Hotel Gallery/Executive Suite/'))[0]}",
+    gallery: {json.dumps(sort_executive(get_images('/Remeritona Hotel Gallery/Executive Suite/')), indent=6)},
+    amenities: ["Free Wi-Fi", "Air Conditioning", "Separate Living Area (Parlor)", "Premium Mini Bar", "Smart Mirror", "Two toilets (one luxury ensuite bathroom inside the bedroom with a bathtub, toilet, and smart mirror, plus one separate guest half-bath toilet)", "24/7 Concierge", "Panoramic View"],
   }},
 ];
 

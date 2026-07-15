@@ -12,14 +12,15 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as VenueBookingRouteImport } from './routes/venue-booking'
 import { Route as SalonManagementRouteImport } from './routes/salon-management'
 import { Route as RoomsRouteImport } from './routes/rooms'
-import { Route as RestaurantRouteImport } from './routes/restaurant'
 import { Route as PoliciesRouteImport } from './routes/policies'
 import { Route as OrdersRequestsRouteImport } from './routes/orders-requests'
 import { Route as OffersRouteImport } from './routes/offers'
 import { Route as MyBookingsRouteImport } from './routes/my-bookings'
 import { Route as MenuManagementRouteImport } from './routes/menu-management'
 import { Route as HotelAdminRouteImport } from './routes/hotel-admin'
+import { Route as HallsRouteImport } from './routes/halls'
 import { Route as GalleryRouteImport } from './routes/gallery'
+import { Route as FacilitiesRouteImport } from './routes/facilities'
 import { Route as ContactRouteImport } from './routes/contact'
 import { Route as BookingRouteImport } from './routes/booking'
 import { Route as AboutRouteImport } from './routes/about'
@@ -64,11 +65,6 @@ const RoomsRoute = RoomsRouteImport.update({
   path: '/rooms',
   getParentRoute: () => rootRouteImport,
 } as any)
-const RestaurantRoute = RestaurantRouteImport.update({
-  id: '/restaurant',
-  path: '/restaurant',
-  getParentRoute: () => rootRouteImport,
-} as any)
 const PoliciesRoute = PoliciesRouteImport.update({
   id: '/policies',
   path: '/policies',
@@ -99,9 +95,19 @@ const HotelAdminRoute = HotelAdminRouteImport.update({
   path: '/hotel-admin',
   getParentRoute: () => rootRouteImport,
 } as any)
+const HallsRoute = HallsRouteImport.update({
+  id: '/halls',
+  path: '/halls',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const GalleryRoute = GalleryRouteImport.update({
   id: '/gallery',
   path: '/gallery',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const FacilitiesRoute = FacilitiesRouteImport.update({
+  id: '/facilities',
+  path: '/facilities',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ContactRoute = ContactRouteImport.update({
@@ -253,14 +259,15 @@ export interface FileRoutesByFullPath {
   '/about': typeof AboutRoute
   '/booking': typeof BookingRoute
   '/contact': typeof ContactRoute
+  '/facilities': typeof FacilitiesRoute
   '/gallery': typeof GalleryRoute
+  '/halls': typeof HallsRoute
   '/hotel-admin': typeof HotelAdminRoute
   '/menu-management': typeof MenuManagementRoute
   '/my-bookings': typeof MyBookingsRoute
   '/offers': typeof OffersRoute
   '/orders-requests': typeof OrdersRequestsRoute
   '/policies': typeof PoliciesRoute
-  '/restaurant': typeof RestaurantRoute
   '/rooms': typeof RoomsRouteWithChildren
   '/salon-management': typeof SalonManagementRoute
   '/venue-booking': typeof VenueBookingRoute
@@ -294,14 +301,15 @@ export interface FileRoutesByTo {
   '/about': typeof AboutRoute
   '/booking': typeof BookingRoute
   '/contact': typeof ContactRoute
+  '/facilities': typeof FacilitiesRoute
   '/gallery': typeof GalleryRoute
+  '/halls': typeof HallsRoute
   '/hotel-admin': typeof HotelAdminRoute
   '/menu-management': typeof MenuManagementRoute
   '/my-bookings': typeof MyBookingsRoute
   '/offers': typeof OffersRoute
   '/orders-requests': typeof OrdersRequestsRoute
   '/policies': typeof PoliciesRoute
-  '/restaurant': typeof RestaurantRoute
   '/rooms': typeof RoomsRouteWithChildren
   '/salon-management': typeof SalonManagementRoute
   '/venue-booking': typeof VenueBookingRoute
@@ -336,14 +344,15 @@ export interface FileRoutesById {
   '/about': typeof AboutRoute
   '/booking': typeof BookingRoute
   '/contact': typeof ContactRoute
+  '/facilities': typeof FacilitiesRoute
   '/gallery': typeof GalleryRoute
+  '/halls': typeof HallsRoute
   '/hotel-admin': typeof HotelAdminRoute
   '/menu-management': typeof MenuManagementRoute
   '/my-bookings': typeof MyBookingsRoute
   '/offers': typeof OffersRoute
   '/orders-requests': typeof OrdersRequestsRoute
   '/policies': typeof PoliciesRoute
-  '/restaurant': typeof RestaurantRoute
   '/rooms': typeof RoomsRouteWithChildren
   '/salon-management': typeof SalonManagementRoute
   '/venue-booking': typeof VenueBookingRoute
@@ -379,14 +388,15 @@ export interface FileRouteTypes {
     | '/about'
     | '/booking'
     | '/contact'
+    | '/facilities'
     | '/gallery'
+    | '/halls'
     | '/hotel-admin'
     | '/menu-management'
     | '/my-bookings'
     | '/offers'
     | '/orders-requests'
     | '/policies'
-    | '/restaurant'
     | '/rooms'
     | '/salon-management'
     | '/venue-booking'
@@ -420,14 +430,15 @@ export interface FileRouteTypes {
     | '/about'
     | '/booking'
     | '/contact'
+    | '/facilities'
     | '/gallery'
+    | '/halls'
     | '/hotel-admin'
     | '/menu-management'
     | '/my-bookings'
     | '/offers'
     | '/orders-requests'
     | '/policies'
-    | '/restaurant'
     | '/rooms'
     | '/salon-management'
     | '/venue-booking'
@@ -461,14 +472,15 @@ export interface FileRouteTypes {
     | '/about'
     | '/booking'
     | '/contact'
+    | '/facilities'
     | '/gallery'
+    | '/halls'
     | '/hotel-admin'
     | '/menu-management'
     | '/my-bookings'
     | '/offers'
     | '/orders-requests'
     | '/policies'
-    | '/restaurant'
     | '/rooms'
     | '/salon-management'
     | '/venue-booking'
@@ -503,14 +515,15 @@ export interface RootRouteChildren {
   AboutRoute: typeof AboutRoute
   BookingRoute: typeof BookingRoute
   ContactRoute: typeof ContactRoute
+  FacilitiesRoute: typeof FacilitiesRoute
   GalleryRoute: typeof GalleryRoute
+  HallsRoute: typeof HallsRoute
   HotelAdminRoute: typeof HotelAdminRoute
   MenuManagementRoute: typeof MenuManagementRoute
   MyBookingsRoute: typeof MyBookingsRoute
   OffersRoute: typeof OffersRoute
   OrdersRequestsRoute: typeof OrdersRequestsRoute
   PoliciesRoute: typeof PoliciesRoute
-  RestaurantRoute: typeof RestaurantRoute
   RoomsRoute: typeof RoomsRouteWithChildren
   SalonManagementRoute: typeof SalonManagementRoute
   VenueBookingRoute: typeof VenueBookingRoute
@@ -560,13 +573,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof RoomsRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/restaurant': {
-      id: '/restaurant'
-      path: '/restaurant'
-      fullPath: '/restaurant'
-      preLoaderRoute: typeof RestaurantRouteImport
-      parentRoute: typeof rootRouteImport
-    }
     '/policies': {
       id: '/policies'
       path: '/policies'
@@ -609,11 +615,25 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof HotelAdminRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/halls': {
+      id: '/halls'
+      path: '/halls'
+      fullPath: '/halls'
+      preLoaderRoute: typeof HallsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/gallery': {
       id: '/gallery'
       path: '/gallery'
       fullPath: '/gallery'
       preLoaderRoute: typeof GalleryRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/facilities': {
+      id: '/facilities'
+      path: '/facilities'
+      fullPath: '/facilities'
+      preLoaderRoute: typeof FacilitiesRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/contact': {
@@ -853,14 +873,15 @@ const rootRouteChildren: RootRouteChildren = {
   AboutRoute: AboutRoute,
   BookingRoute: BookingRoute,
   ContactRoute: ContactRoute,
+  FacilitiesRoute: FacilitiesRoute,
   GalleryRoute: GalleryRoute,
+  HallsRoute: HallsRoute,
   HotelAdminRoute: HotelAdminRoute,
   MenuManagementRoute: MenuManagementRoute,
   MyBookingsRoute: MyBookingsRoute,
   OffersRoute: OffersRoute,
   OrdersRequestsRoute: OrdersRequestsRoute,
   PoliciesRoute: PoliciesRoute,
-  RestaurantRoute: RestaurantRoute,
   RoomsRoute: RoomsRouteWithChildren,
   SalonManagementRoute: SalonManagementRoute,
   VenueBookingRoute: VenueBookingRoute,

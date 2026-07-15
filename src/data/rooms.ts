@@ -32,8 +32,8 @@ export const rooms: Room[] = [
       "/Remeritona Hotel Gallery/Classic/IMG_7037.webp",
       "/Remeritona Hotel Gallery/Classic/IMG_7039.webp",
       "/Remeritona Hotel Gallery/Classic/IMG_7041.webp"
-    ],
-    amenities: ["Free Wi-Fi", "Air Conditioning", "Smart TV", "Mini Bar", "En-suite Bathroom", "Daily Housekeeping"],
+],
+    amenities: ["Free Wi-Fi", "Air Conditioning", "Smart TV", "En-suite Bathroom", "Daily Housekeeping"],
   },
   {
     slug: "superior",
@@ -50,15 +50,15 @@ export const rooms: Room[] = [
     gallery: [
       "/Remeritona Hotel Gallery/Classic/IMG_7040.webp",
       "/Remeritona Hotel Gallery/Classic/IMG_7043.webp"
-    ],
-    amenities: ["Free Wi-Fi", "Air Conditioning", "Smart TV", "Mini Bar", "Bathtub / Rain Shower", "Workspace"],
+],
+    amenities: ["Free Wi-Fi", "Air Conditioning", "Smart TV", "Bathtub / Rain Shower", "Workspace"],
   },
   {
     slug: "executive",
     name: "Executive",
     tagline: "The pinnacle of Abakaliki luxury",
     description:
-      "Our flagship Executive room features a generous living area, premium furnishings, and bespoke service — an iconic stay for discerning guests and visiting dignitaries.",
+      "Our flagship Executive room features premium furnishings and bespoke service — an iconic stay for discerning guests and visiting dignitaries.",
     price: 80000,
     size: "62 m²",
     beds: "1 King Bed + Lounge",
@@ -83,8 +83,8 @@ export const rooms: Room[] = [
       "/Remeritona Hotel Gallery/Executive Room/IMG_6998.webp",
       "/Remeritona Hotel Gallery/Executive Room/IMG_6999.webp",
       "/Remeritona Hotel Gallery/Executive Room/IMG_7000.webp"
-    ],
-    amenities: ["Free Wi-Fi", "Air Conditioning", "Separate Living Area", "Premium Mini Bar", "Spa Bath", "Concierge Service"],
+],
+    amenities: ["Free Wi-Fi", "Air Conditioning", "Concierge Service"],
   },
   {
     slug: "business-suites",
@@ -97,8 +97,9 @@ export const rooms: Room[] = [
     beds: "1 King Bed",
     capacity: 3,
     occupancy: "Max 2 Adults + 1 Extra Bed + 1 Child",
-    image: "/Remeritona Hotel Gallery/Business Suite/IMG_7124.webp",
+    image: "/Remeritona Hotel Gallery/Business Suite/IMG_7139.webp",
     gallery: [
+      "/Remeritona Hotel Gallery/Business Suite/IMG_7139.webp",
       "/Remeritona Hotel Gallery/Business Suite/IMG_7124.webp",
       "/Remeritona Hotel Gallery/Business Suite/IMG_7126.webp",
       "/Remeritona Hotel Gallery/Business Suite/IMG_7129.webp",
@@ -107,7 +108,6 @@ export const rooms: Room[] = [
       "/Remeritona Hotel Gallery/Business Suite/IMG_7136.webp",
       "/Remeritona Hotel Gallery/Business Suite/IMG_7137.webp",
       "/Remeritona Hotel Gallery/Business Suite/IMG_7138.webp",
-      "/Remeritona Hotel Gallery/Business Suite/IMG_7139.webp",
       "/Remeritona Hotel Gallery/Business Suite/IMG_7141.webp",
       "/Remeritona Hotel Gallery/Business Suite/IMG_7146.webp",
       "/Remeritona Hotel Gallery/Business Suite/IMG_7147.webp",
@@ -117,8 +117,8 @@ export const rooms: Room[] = [
       "/Remeritona Hotel Gallery/Business Suite/IMG_7152.webp",
       "/Remeritona Hotel Gallery/Business Suite/IMG_7153.webp",
       "/Remeritona Hotel Gallery/Business Suite/IMG_7154.webp"
-    ],
-    amenities: ["Free Wi-Fi", "Air Conditioning", "Marble Bathroom", "Premium Mini Bar", "Lounge Seating", "Concierge Service"],
+],
+    amenities: ["Free Wi-Fi", "Air Conditioning", "Marble Bathroom", "Separate Living Area (Parlor)", "Smart Mirror", "Concierge Service"],
   },
   {
     slug: "executive-suites",
@@ -131,8 +131,9 @@ export const rooms: Room[] = [
     beds: "1 King Bed + Grand Lounge",
     capacity: 3,
     occupancy: "Max 2 Adults + 1 Extra Bed + 1 Child",
-    image: "/Remeritona Hotel Gallery/Executive Suite/IMG_7157.webp",
+    image: "/Remeritona Hotel Gallery/Executive Suite/IMG_7172.webp",
     gallery: [
+      "/Remeritona Hotel Gallery/Executive Suite/IMG_7172.webp",
       "/Remeritona Hotel Gallery/Executive Suite/IMG_7157.webp",
       "/Remeritona Hotel Gallery/Executive Suite/IMG_7158.webp",
       "/Remeritona Hotel Gallery/Executive Suite/IMG_7160.webp",
@@ -141,11 +142,10 @@ export const rooms: Room[] = [
       "/Remeritona Hotel Gallery/Executive Suite/IMG_7165.webp",
       "/Remeritona Hotel Gallery/Executive Suite/IMG_7166.webp",
       "/Remeritona Hotel Gallery/Executive Suite/IMG_7168.webp",
-      "/Remeritona Hotel Gallery/Executive Suite/IMG_7172.webp",
       "/Remeritona Hotel Gallery/Executive Suite/IMG_7173.webp",
       "/Remeritona Hotel Gallery/Executive Suite/IMG_7176.webp"
 ],
-    amenities: ["Free Wi-Fi", "Air Conditioning", "Grand Lounge", "Premium Mini Bar", "Spa Bath", "24/7 Concierge", "Panoramic View"],
+    amenities: ["Free Wi-Fi", "Air Conditioning", "Separate Living Area (Parlor)", "Premium Mini Bar", "Smart Mirror", "Two toilets (one luxury ensuite bathroom inside the bedroom with a bathtub, toilet, and smart mirror, plus one separate guest half-bath toilet)", "24/7 Concierge", "Panoramic View"],
   },
 ];
 

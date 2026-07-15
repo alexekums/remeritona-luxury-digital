@@ -132,122 +132,122 @@ export const galleryImages = [
   {
     "src": "/Remeritona Hotel Gallery/Restaurant/IMG_7177.webp",
     "alt": "Restaurant",
-    "category": "Restaurant"
+    "category": "Dining"
   },
   {
     "src": "/Remeritona Hotel Gallery/Restaurant/IMG_7178.webp",
     "alt": "Restaurant",
-    "category": "Restaurant"
+    "category": "Dining"
   },
   {
     "src": "/Remeritona Hotel Gallery/Restaurant/IMG_7179.webp",
     "alt": "Restaurant",
-    "category": "Restaurant"
+    "category": "Dining"
   },
   {
     "src": "/Remeritona Hotel Gallery/Restaurant/IMG_7180.webp",
     "alt": "Restaurant",
-    "category": "Restaurant"
+    "category": "Dining"
   },
   {
     "src": "/Remeritona Hotel Gallery/Restaurant/IMG_7181.webp",
     "alt": "Restaurant",
-    "category": "Restaurant"
+    "category": "Dining"
   },
   {
     "src": "/Remeritona Hotel Gallery/Restaurant/IMG_7182.webp",
     "alt": "Restaurant",
-    "category": "Restaurant"
+    "category": "Dining"
   },
   {
     "src": "/Remeritona Hotel Gallery/Restaurant/IMG_7183.webp",
     "alt": "Restaurant",
-    "category": "Restaurant"
+    "category": "Dining"
   },
   {
     "src": "/Remeritona Hotel Gallery/Restaurant/IMG_7184.webp",
     "alt": "Restaurant",
-    "category": "Restaurant"
+    "category": "Dining"
   },
   {
     "src": "/Remeritona Hotel Gallery/Restaurant/IMG_7185.webp",
     "alt": "Restaurant",
-    "category": "Restaurant"
+    "category": "Dining"
   },
   {
     "src": "/Remeritona Hotel Gallery/Restaurant/IMG_7186.webp",
     "alt": "Restaurant",
-    "category": "Restaurant"
+    "category": "Dining"
   },
   {
     "src": "/Remeritona Hotel Gallery/Restaurant/IMG_7188.webp",
     "alt": "Restaurant",
-    "category": "Restaurant"
+    "category": "Dining"
   },
   {
     "src": "/Remeritona Hotel Gallery/Restaurant/IMG_7191.webp",
     "alt": "Restaurant",
-    "category": "Restaurant"
+    "category": "Dining"
   },
   {
     "src": "/Remeritona Hotel Gallery/Restaurant/IMG_7193.webp",
     "alt": "Restaurant",
-    "category": "Restaurant"
+    "category": "Dining"
   },
   {
     "src": "/Remeritona Hotel Gallery/Restaurant/IMG_7195.webp",
     "alt": "Restaurant",
-    "category": "Restaurant"
+    "category": "Dining"
   },
   {
     "src": "/Remeritona Hotel Gallery/VIP Bar/IMG_6844.webp",
     "alt": "VIP Bar",
-    "category": "Restaurant"
+    "category": "Dining"
   },
   {
     "src": "/Remeritona Hotel Gallery/VIP Bar/IMG_6848.webp",
     "alt": "VIP Bar",
-    "category": "Restaurant"
+    "category": "Dining"
   },
   {
     "src": "/Remeritona Hotel Gallery/VIP Bar/IMG_6853.webp",
     "alt": "VIP Bar",
-    "category": "Restaurant"
+    "category": "Dining"
   },
   {
     "src": "/Remeritona Hotel Gallery/VIP Bar/IMG_6856.webp",
     "alt": "VIP Bar",
-    "category": "Restaurant"
+    "category": "Dining"
   },
   {
     "src": "/Remeritona Hotel Gallery/VIP Bar/IMG_6860.webp",
     "alt": "VIP Bar",
-    "category": "Restaurant"
+    "category": "Dining"
   },
   {
     "src": "/Remeritona Hotel Gallery/VIP Bar/IMG_6862.webp",
     "alt": "VIP Bar",
-    "category": "Restaurant"
+    "category": "Dining"
   },
   {
     "src": "/Remeritona Hotel Gallery/VIP Bar/IMG_6864.webp",
     "alt": "VIP Bar",
-    "category": "Restaurant"
+    "category": "Dining"
   },
   {
     "src": "/Remeritona Hotel Gallery/VIP Bar/IMG_6872.webp",
     "alt": "VIP Bar",
-    "category": "Restaurant"
+    "category": "Dining"
   },
   {
     "src": "/Remeritona Hotel Gallery/VIP Bar/IMG_6873.webp",
     "alt": "VIP Bar",
-    "category": "Restaurant"
+    "category": "Dining"
   },
   {
     "src": "/Remeritona Hotel Gallery/VIP Bar/IMG_6874.webp",
     "alt": "VIP Bar",
-    "category": "Restaurant"
+    "category": "Dining"
   },
   {
     "src": "/Remeritona Hotel Gallery/Pool/IMG_6956.webp",
@@ -452,82 +452,82 @@ export const galleryImages = [
   {
     "src": "/Remeritona Hotel Gallery/Conference hall/IMG_7044.webp",
     "alt": "Event Space",
-    "category": "Events"
+    "category": "Venues"
   },
   {
     "src": "/Remeritona Hotel Gallery/Conference hall/IMG_7046.webp",
     "alt": "Event Space",
-    "category": "Events"
+    "category": "Venues"
   },
   {
     "src": "/Remeritona Hotel Gallery/Conference hall/IMG_7047.webp",
     "alt": "Event Space",
-    "category": "Events"
+    "category": "Venues"
   },
   {
     "src": "/Remeritona Hotel Gallery/Conference hall/IMG_7048.webp",
     "alt": "Event Space",
-    "category": "Events"
+    "category": "Venues"
   },
   {
     "src": "/Remeritona Hotel Gallery/Conference hall/IMG_7049.webp",
     "alt": "Event Space",
-    "category": "Events"
+    "category": "Venues"
   },
   {
     "src": "/Remeritona Hotel Gallery/Conference hall/IMG_7050.webp",
     "alt": "Event Space",
-    "category": "Events"
+    "category": "Venues"
   },
   {
     "src": "/Remeritona Hotel Gallery/Conference hall/IMG_7051.webp",
     "alt": "Event Space",
-    "category": "Events"
+    "category": "Venues"
   },
   {
     "src": "/Remeritona Hotel Gallery/Conference room/IMG_6889.webp",
     "alt": "Event Space",
-    "category": "Events"
+    "category": "Venues"
   },
   {
     "src": "/Remeritona Hotel Gallery/Conference room/IMG_6890.webp",
     "alt": "Event Space",
-    "category": "Events"
+    "category": "Venues"
   },
   {
     "src": "/Remeritona Hotel Gallery/Conference room/IMG_6897.webp",
     "alt": "Event Space",
-    "category": "Events"
+    "category": "Venues"
   },
   {
     "src": "/Remeritona Hotel Gallery/Conference room/IMG_6899.webp",
     "alt": "Event Space",
-    "category": "Events"
+    "category": "Venues"
   },
   {
     "src": "/Remeritona Hotel Gallery/Conference room/IMG_6902.webp",
     "alt": "Event Space",
-    "category": "Events"
+    "category": "Venues"
   },
   {
     "src": "/Remeritona Hotel Gallery/Conference room/IMG_6907.webp",
     "alt": "Event Space",
-    "category": "Events"
+    "category": "Venues"
   },
   {
     "src": "/Remeritona Hotel Gallery/Conference room/IMG_6909.webp",
     "alt": "Event Space",
-    "category": "Events"
+    "category": "Venues"
   },
   {
     "src": "/Remeritona Hotel Gallery/Event Hall/IMG-20260713-WA0015.webp",
     "alt": "Event Space",
-    "category": "Events"
+    "category": "Venues"
   },
   {
     "src": "/Remeritona Hotel Gallery/Event Hall/IMG-20260713-WA0017.webp",
     "alt": "Event Space",
-    "category": "Events"
+    "category": "Venues"
   },
   {
     "src": "/Remeritona Hotel Gallery/Business Suite/IMG_7124.webp",

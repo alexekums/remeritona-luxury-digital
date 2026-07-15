@@ -145,6 +145,21 @@ function ReservationCard({ room }: { room: any }) {
 
   const totalPrice = room.price * nights;
 
+  const isWeekendEligible = useMemo(() => {
+    const start = new Date(checkIn);
+    const end = new Date(checkOut);
+    if (isNaN(start.getTime()) || isNaN(end.getTime())) return false;
+    const cur = new Date(start);
+    while (cur < end) {
+      const d = cur.getDay();
+      if (d === 5 || d === 6 || d === 0) return true;
+      cur.setDate(cur.getDate() + 1);
+    }
+    return false;
+  }, [checkIn, checkOut]);
+
+  const isLongStayEligible = nights >= 5;
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     navigate({
@@ -162,12 +177,26 @@ function ReservationCard({ room }: { room: any }) {
 
   return (
     <div className="bg-charcoal border border-gold/30 p-8 shadow-elegant text-foreground">
-      <div className="mb-6 pb-6 border-b border-border/60">
-        <p className="text-xs uppercase tracking-widest text-muted-foreground mb-1">Price per night</p>
-        <div className="flex items-baseline gap-1">
-          <span className="font-serif text-4xl text-gold font-bold">{formatNaira(room.price)}</span>
-          <span className="text-sm text-muted-foreground">/ night</span>
+      <div className="mb-6 pb-6 border-b border-border/60 space-y-3">
+        <div>
+          <p className="text-xs uppercase tracking-widest text-muted-foreground mb-1">Price per night</p>
+          <div className="flex items-baseline gap-1">
+            <span className="font-serif text-4xl text-gold font-bold">{formatNaira(room.price)}</span>
+            <span className="text-sm text-muted-foreground">/ night</span>
+          </div>
         </div>
+
+        {isWeekendEligible && (
+          <div className="border border-gold/40 bg-gold/5 px-3 py-2 text-xs text-gold flex items-center gap-1.5 rounded">
+            <span>✨ Weekend rate eligible! Use code <strong className="font-mono">FON-WEEKEND</strong> at checkout.</span>
+          </div>
+        )}
+
+        {isLongStayEligible && (
+          <div className="border border-emerald-500/40 bg-emerald-500/5 px-3 py-2 text-xs text-emerald-400 flex items-center gap-1.5 rounded">
+            <span>🔥 Long-stay discount eligible! Use code <strong className="font-mono text-gold">EXTENDED-STAY</strong> at checkout for 15% off.</span>
+          </div>
+        )}
       </div>
 
       <form onSubmit={handleSubmit} className="space-y-6">

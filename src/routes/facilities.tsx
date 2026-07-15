@@ -8,23 +8,38 @@ import dining from "@/assets/dining.jpg";
 import pool from "@/assets/pool.jpg";
 import spa from "@/assets/spa.jpg";
 
-export const Route = createFileRoute("/restaurant")({
+export const Route = createFileRoute("/facilities")({
   head: () => ({
     meta: [
-      { title: "Restaurant & Facilities — Remeritona Hotel Abakaliki" },
-      { name: "description", content: "Restaurant, bar, spa and wellness facilities at Remeritona Hotel and Suites in Abakaliki." },
+      { title: "Facilities — Remeritona Hotel Abakaliki" },
+      { name: "description", content: "Explore our premium facilities at Remeritona Hotel and Suites in Abakaliki, including The Foundry Restaurant and The Executive Salon." },
     ],
   }),
-  component: RestaurantPage,
+  component: FacilitiesPage,
 });
 
 const venues = [
-  { img: dining, tag: "Signature Restaurant", name: "The Foundry", desc: "A modern Nigerian kitchen serving refined takes on Igbo classics alongside continental favorites. Open daily for breakfast, lunch and dinner." },
-  { img: pool, tag: "Remeritona Bar", name: "Premium", desc: "Cocktails, small plates and Flex." },
-  { img: spa, tag: "Wellness", name: "Remeritona Spa", desc: "Full-service spa with massage, facials, sauna and steam. By appointment." },
+  {
+    img: dining,
+    tag: "Signature Restaurant",
+    name: "The Foundry Restaurant",
+    desc: "A modern kitchen serving refined local and continental dishes. Indulge in our premium Morning Breakfast Buffet and enjoy the ultimate convenience of room-service digital ordering directly from your suite."
+  },
+  {
+    img: pool,
+    tag: "Remeritona Bar",
+    name: "Premium Bar & Lounge",
+    desc: "Craft cocktails, select wines, and small plates in an elegant, relaxed atmosphere by the pool."
+  },
+  {
+    img: spa,
+    tag: "Grooming & Beauty",
+    name: "The Executive Salon",
+    desc: "Our premium grooming sanctuary offering master hair styling, haircuts, nail care, and professional beauty therapies designed to keep you looking your absolute best."
+  },
 ];
 
-function RestaurantPage() {
+function FacilitiesPage() {
   const [menuItems, setMenuItems] = useState<any[]>([]);
   const [menuLoading, setMenuLoading] = useState(true);
   const [menuError, setMenuError] = useState(false);

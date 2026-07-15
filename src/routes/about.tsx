@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { SiteHeader } from "@/components/SiteHeader";
 import { SiteFooter } from "@/components/SiteFooter";
-import lobby from "@/assets/lobby.jpg";
+const lobby = "/Remeritona Hotel Gallery/Looby/IMG_6817.webp";
 import hero from "@/assets/hero-exterior.jpg";
 
 export const Route = createFileRoute("/about")({
@@ -77,9 +77,9 @@ function AboutPage() {
           <h2 className="font-serif text-4xl md:text-5xl mb-12">All under one roof</h2>
           <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-6">
             {[
-              { t: "Fine Dining", d: "Two restaurants, one exclusive bar." },
-              { t: "Spa & Wellness", d: "Full-service spa and treatment rooms." },
-              { t: "Infinity Pool", d: "Infinity pool with skyline views." },
+              { t: "Fine Dining", d: "The Foundry Restaurant & Bar, featuring our signature morning breakfast buffet and luxury pool-side dining." },
+              { t: "Executive Salon", d: "Elite hair styling, manicures, pedicures, and professional beauty care." },
+              { t: "Outdoor Pool", d: "Our outdoor swimming pool, comfortable lounge chairs, and a scenic pergola deck." },
               { t: "Events", d: "500-seat ballroom + boardrooms." },
               { t: "Fitness", d: "24-hour gym with personal trainers." },
               { t: "Concierge", d: "Bespoke city tours and transfers." },

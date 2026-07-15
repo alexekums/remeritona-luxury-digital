@@ -4,7 +4,7 @@ import { SiteHeader } from "@/components/SiteHeader";
 import { SiteFooter } from "@/components/SiteFooter";
 import { rooms, formatNaira, getRoom } from "@/data/rooms";
 import { applyCoupon, type CouponResult } from "@/data/coupons";
-import { Check, CreditCard, Lock, Plus, Users, Briefcase, User, Tag, X, Clock, Wallet, Calendar } from "lucide-react";
+import { Check, CreditCard, Lock, Plus, Users, Briefcase, User, Tag, X, Clock, Wallet, Calendar, Printer } from "lucide-react";
 import { z } from "zod";
 import { saveBooking, type StoredBooking } from "@/data/bookings-store";
 import { sendBookingEmail } from "@/functions/sendBookingEmail";
@@ -69,6 +69,7 @@ const search = z.object({
   guests: z.coerce.number().optional(),
   adults: z.coerce.number().optional(),
   children: z.coerce.number().optional(),
+  promo: z.string().optional(),
 });
 
 export const Route = createFileRoute("/booking")({
@@ -85,10 +86,17 @@ export const Route = createFileRoute("/booking")({
 function BookingPage() {
   const sp = Route.useSearch();
   const today = new Date().toISOString().split("T")[0];
-  const tomorrow = new Date(Date.now() + 86400000).toISOString().split("T")[0];
+  const defaultNights = sp.promo?.toUpperCase() === "EXTENDED-STAY" ? 5 : 1;
+  const initialCheckIn = sp.checkIn ?? today;
+  const initialCheckOut = useMemo(() => {
+    if (sp.checkOut) return sp.checkOut;
+    const start = new Date(initialCheckIn);
+    start.setDate(start.getDate() + defaultNights);
+    return start.toISOString().split("T")[0];
+  }, [initialCheckIn, sp.checkOut, defaultNights]);
 
-  const [checkIn, setCheckIn] = useState(sp.checkIn ?? today);
-  const [checkOut, setCheckOut] = useState(sp.checkOut ?? tomorrow);
+  const [checkIn, setCheckIn] = useState(initialCheckIn);
+  const [checkOut, setCheckOut] = useState(initialCheckOut);
   const [bookingType, setBookingType] = useState<"self" | "family" | "corporate">("self");
   const [numRooms, setNumRooms] = useState<number>(1);
   const [step, setStep] = useState<1 | 2 | 3>(1);
@@ -124,8 +132,15 @@ function BookingPage() {
   // Synchronize state when URL search parameters change on navigation
   useEffect(() => {
     if (sp.checkIn) setCheckIn(sp.checkIn);
-    if (sp.checkOut) setCheckOut(sp.checkOut);
-  }, [sp.checkIn, sp.checkOut]);
+    if (sp.checkOut) {
+      setCheckOut(sp.checkOut);
+    } else if (sp.checkIn) {
+      const defaultNights = sp.promo?.toUpperCase() === "EXTENDED-STAY" ? 5 : 1;
+      const start = new Date(sp.checkIn);
+      start.setDate(start.getDate() + defaultNights);
+      setCheckOut(start.toISOString().split("T")[0]);
+    }
+  }, [sp.checkIn, sp.checkOut, sp.promo]);
 
   // Fetch public room rates from database on component mount
   useEffect(() => {
@@ -427,6 +442,18 @@ const scrollToSummary = () => {
     setCouponResult(re);
   }, [checkIn, checkOut, subtotal, nights]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  const promoAppliedRef = useRef(false);
+  // Auto-apply promo coupon from URL query parameters on load
+  useEffect(() => {
+    if (sp.promo && !promoAppliedRef.current && subtotal > 0) {
+      const code = sp.promo.trim().toUpperCase();
+      setCouponCode(code);
+      const result = applyCoupon(code, { checkIn, checkOut, subtotal, nights });
+      setCouponResult(result);
+      promoAppliedRef.current = true;
+    }
+  }, [sp.promo, checkIn, checkOut, subtotal, nights]);
+
   const handleApplyCoupon = () => {
     if (!couponCode.trim()) return;
     const result = applyCoupon(couponCode, { checkIn, checkOut, subtotal, nights });
@@ -721,18 +748,27 @@ const sendBookingEmails = async (reference: string) => {
   if (confirmed) {
     return (
       <div className="min-h-screen bg-background">
-        <SiteHeader />
-        <section className="pt-40 pb-24 px-6">
-          <div className="max-w-2xl mx-auto text-center bg-charcoal border border-gold/30 p-12">
-            <div className="w-16 h-16 rounded-full bg-gold text-primary-foreground grid place-items-center mx-auto mb-6">
+        <div className="print:hidden">
+          <SiteHeader />
+        </div>
+        <section className="pt-40 pb-24 px-6 print:pt-4 print:pb-4 print:px-0">
+          <div className="max-w-2xl mx-auto text-center bg-charcoal border border-gold/30 p-12 print:bg-white print:text-black print:border-zinc-300 print:p-8 print:max-w-none print:shadow-none">
+            {/* Print-only Hotel Letterhead */}
+            <div className="hidden print:block mb-8 text-center border-b border-gold/20 pb-6">
+              <h2 className="font-serif text-3xl tracking-wide text-zinc-950 uppercase">Re Meritona Hotel & Suites</h2>
+              <p className="text-xs tracking-widest text-zinc-500 uppercase mt-1">Abakaliki, Ebonyi State, Nigeria</p>
+              <p className="text-xs text-zinc-400 mt-0.5">Reservations: info@remeritona.com | +234 (0) 800-MERITONA</p>
+            </div>
+
+            <div className="w-16 h-16 rounded-full bg-gold text-primary-foreground grid place-items-center mx-auto mb-6 print:border-2 print:border-gold print:bg-transparent print:text-gold">
               <Check size={32} />
             </div>
-            <p className="text-gold text-xs uppercase tracking-[0.4em] mb-3">Reservation Confirmed</p>
-            <h1 className="font-serif text-4xl mb-4">Welcome to Remeritona, {guest.name.split(" ")[0]}.</h1>
-            <p className="text-muted-foreground mb-8">
-              A confirmation email is on its way to <span className="text-foreground">{guest.email}</span>. We look forward to hosting you on {new Date(checkIn).toLocaleDateString("en-NG", { dateStyle: "long" })}.
+            <p className="text-gold text-xs uppercase tracking-[0.4em] mb-3 print:text-zinc-500 print:font-semibold">Reservation Confirmed</p>
+            <h1 className="font-serif text-4xl mb-4 print:text-zinc-900 print:text-2xl print:mb-2">Welcome to Remeritona, {guest.name.split(" ")[0]}.</h1>
+            <p className="text-muted-foreground mb-8 print:text-zinc-600 print:mb-4 print:text-sm">
+              A confirmation email is on its way to <span className="text-foreground print:text-zinc-900 print:font-semibold">{guest.email}</span>. We look forward to hosting you on {new Date(checkIn).toLocaleDateString("en-NG", { dateStyle: "long" })}.
             </p>
-            <div className="text-left border-t border-border pt-6 space-y-2 text-sm">
+            <div className="text-left border-t border-border pt-6 space-y-2 text-sm print:border-t print:border-zinc-200">
               <Row label="Reference" value={savedReceipt?.reference ?? ""} />
               <Row label="Room" value={room.name} />
               <Row label="Check-in" value={new Date(checkIn).toLocaleDateString()} />
@@ -746,7 +782,7 @@ const sendBookingEmails = async (reference: string) => {
                 <>
                   <Row label="Tokenization Fee Paid" value={formatNaira(TOKENIZATION_FEE)} highlight />
                   <Row label="Pending Balance" value={formatNaira(savedReceipt.pendingBalance ?? total)} />
-                  <p className="text-xs text-muted-foreground pt-2">
+                  <p className="text-xs text-muted-foreground pt-2 print:text-zinc-500">
                     Your saved card will be automatically charged the pending balance at{" "}
                     {savedReceipt.scheduledChargeAt
                       ? new Date(savedReceipt.scheduledChargeAt).toLocaleString()
@@ -758,7 +794,7 @@ const sendBookingEmails = async (reference: string) => {
                 <Row label="Total Paid" value={formatNaira(total)} highlight />
               )}
             </div>
-            <div className="mt-8 flex flex-col sm:flex-row gap-3 justify-center">
+            <div className="mt-8 flex flex-col sm:flex-row gap-3 justify-center print:hidden">
               <button
                 onClick={() => {
                   setConfirmed(false);
@@ -771,14 +807,23 @@ const sendBookingEmails = async (reference: string) => {
                   setSavedReceipt(null);
                   window.scrollTo({ top: 0, behavior: "smooth" });
                 }}
-                className="px-8 py-3 bg-gold text-primary-foreground font-semibold uppercase tracking-widest text-sm hover:bg-gold-soft"
+                className="px-8 py-3 bg-zinc-800 text-foreground border border-border hover:bg-zinc-700 font-semibold uppercase tracking-widest text-sm transition-colors"
               >
                 Book Another Stay
+              </button>
+              <button
+                onClick={() => window.print()}
+                className="px-8 py-3 bg-gold text-primary-foreground font-semibold uppercase tracking-widest text-sm hover:bg-gold-soft flex items-center justify-center gap-2 transition-colors"
+              >
+                <Printer size={16} />
+                Print Voucher
               </button>
             </div>
           </div>
         </section>
-        <SiteFooter />
+        <div className="print:hidden">
+          <SiteFooter />
+        </div>
       </div>
     );
   }
@@ -1380,9 +1425,9 @@ function Input({ label, type = "text", value, onChange, min, required }: {
 
 function Row({ label, value, highlight }: { label: string; value: string; highlight?: boolean }) {
   return (
-    <div className="flex justify-between items-baseline gap-2">
-      <span className={highlight ? "font-serif text-base" : "text-muted-foreground"}>{label}</span>
-      <span className={highlight ? "font-serif text-2xl text-gold" : "text-foreground"}>{value}</span>
+    <div className="flex justify-between items-baseline gap-2 print:border-b print:border-zinc-100 print:pb-1">
+      <span className={highlight ? "font-serif text-base print:text-zinc-800 print:font-bold" : "text-muted-foreground print:text-zinc-500"}>{label}</span>
+      <span className={highlight ? "font-serif text-2xl text-gold print:text-amber-800 print:font-bold" : "text-foreground print:text-zinc-900"}>{value}</span>
     </div>
   );
 }

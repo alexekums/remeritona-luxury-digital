@@ -159,21 +159,21 @@ function Index() {
         </div>
       </section>
 
-      {/* Restaurant */}
+      {/* Facilities */}
       <section className="py-24 px-6 bg-zinc-900 border-y border-stone-800">
         <div className="max-w-7xl mx-auto grid lg:grid-cols-2 gap-12 items-center">
           <img src={diningImage} alt="The Foundry Restaurant" className="w-full aspect-[4/3] object-cover" loading="lazy" />
           <div>
-            <p className="text-gold text-xs uppercase tracking-[0.4em] mb-4">Restaurant</p>
-            <h2 className="font-serif text-4xl md:text-5xl mb-6">The Foundry Restaurant</h2>
+            <p className="text-gold text-xs uppercase tracking-[0.4em] mb-4">Dining & Facilities</p>
+            <h2 className="font-serif text-4xl md:text-5xl mb-6">World-Class Facilities</h2>
             <p className="text-muted-foreground text-lg leading-relaxed mb-8">
-              Experience refined Nigerian cuisine and continental favorites in an elegant setting. Open daily for breakfast, lunch and dinner.
+              From culinary excellence at The Foundry Restaurant with our Morning Breakfast Buffet and digital room service ordering, to premium beauty grooming at The Executive Salon.
             </p>
             <Link
-              to="/restaurant"
+              to="/facilities"
               className="inline-flex items-center gap-2 px-7 py-3.5 bg-gold text-primary-foreground font-semibold uppercase tracking-widest text-sm hover:bg-gold-soft hover-glow transition-all"
             >
-              View Restaurant <ArrowRight size={16} />
+              Explore Facilities <ArrowRight size={16} />
             </Link>
           </div>
         </div>

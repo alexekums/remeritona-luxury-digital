@@ -5,18 +5,58 @@ import { SiteFooter } from "@/components/SiteFooter";
 import { Check, Calendar } from "lucide-react";
 import { toast } from "sonner";
 import { formatNaira } from "@/data/rooms";
+import { z } from "zod";
 
 const HALL_PRICES = {
-  conference_room: 70000,
-  event_hall: 800000,
+  pool_hall: 300000,
+  board_room: 500000,
+  conference_hall: 700000,
+  penthouse: 800000,
+  banquet_hall: 2000000,
 };
 
 const HALL_LABELS = {
-  conference_room: "Conference Room (Round Table Setup)",
-  event_hall: "Large Event Hall (Multi-chair Setup)",
+  pool_hall: "Pool Hall (Outdoor Receptions & Parties)",
+  board_room: "Board Room (Executive Dark Boardroom Table)",
+  conference_hall: "Conference Hall (Round Banquet Table Layout)",
+  penthouse: "Penthouse (Red Theater Auditorium Seating)",
+  banquet_hall: "Banquet Hall (Grand Celebrations)",
 };
 
+const HALL_DETAILS = {
+  pool_hall: {
+    name: "Pool Hall",
+    img: "/Remeritona Hotel Gallery/Pool/IMG_6956.webp",
+    desc: "Outdoor Receptions & Parties. Ideal for breezy evening cocktail events and poolside celebrations.",
+  },
+  board_room: {
+    name: "Board Room",
+    img: "/Remeritona Hotel Gallery/Conference room/IMG_6890.webp",
+    desc: "Executive Dark Boardroom Table. Crafted for high-stakes corporate meetings and workshops.",
+  },
+  conference_hall: {
+    name: "Conference Hall",
+    img: "/Remeritona Hotel Gallery/Conference hall/IMG_7044.webp",
+    desc: "Round Banquet Table Layout. Optimized for seminars, banquets, and presentations.",
+  },
+  penthouse: {
+    name: "Penthouse",
+    img: "/Remeritona Hotel Gallery/Conference hall/IMG_7046.webp",
+    desc: "Red Theater Auditorium Seating. Features built-in screen projectors and luxury seating.",
+  },
+  banquet_hall: {
+    name: "Banquet Hall",
+    img: "/Remeritona Hotel Gallery/Event Hall/IMG-20260713-WA0015.webp",
+    desc: "Grand Celebrations. Ebonyi state's landmark spacious venue for weddings and grand banquets.",
+  },
+};
+
+const searchSchema = z.object({
+  type: z.enum(["pool_hall", "board_room", "conference_hall", "penthouse", "banquet_hall"]).optional(),
+});
+
 export const Route = createFileRoute("/venue-booking")({
+  validateSearch: (s) => searchSchema.parse(s),
   head: () => ({
     meta: [
       { title: "Venue & Hall Booking — Remeritona Hotel Abakaliki" },
@@ -27,7 +67,16 @@ export const Route = createFileRoute("/venue-booking")({
 });
 
 function VenueBookingPage() {
-  const [hallType, setHallType] = useState<"conference_room" | "event_hall">("conference_room");
+  const sp = Route.useSearch();
+  const [hallType, setHallType] = useState<keyof typeof HALL_PRICES>(
+    sp.type && sp.type in HALL_PRICES ? sp.type : "pool_hall"
+  );
+
+  useEffect(() => {
+    if (sp.type && sp.type in HALL_PRICES) {
+      setHallType(sp.type);
+    }
+  }, [sp.type]);
   const [selectedDate, setSelectedDate] = useState<string>("");
   const [bookedDates, setBookedDates] = useState<{ hall_type: string, booking_date: string }[]>([]);
   
@@ -195,36 +244,30 @@ function VenueBookingPage() {
             <div>
               <label className="block text-sm uppercase tracking-widest text-muted-foreground mb-3">Venue Type</label>
               <div className="grid sm:grid-cols-2 gap-4">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setHallType("conference_room");
-                    setSelectedDate("");
-                  }}
-                  className={`p-0 border text-left transition-colors overflow-hidden flex flex-col h-full ${hallType === "conference_room" ? "border-gold bg-gold/10" : "border-border hover:border-gold/30"}`}
-                >
-                  <img src="/Remeritona Hotel Gallery/Conference room/IMG_6890.webp" alt="Conference Room" className="w-full h-32 object-cover" />
-                  <div className="p-4">
-                    <div className="font-serif text-xl mb-1">Conference Room</div>
-                    <div className="text-gold mb-2">{formatNaira(HALL_PRICES["conference_room"])} / 24hrs</div>
-                    <div className="text-xs text-muted-foreground">Round Table Setup. Ideal for meetings and corporate offsites.</div>
-                  </div>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setHallType("event_hall");
-                    setSelectedDate("");
-                  }}
-                  className={`p-0 border text-left transition-colors overflow-hidden flex flex-col h-full ${hallType === "event_hall" ? "border-gold bg-gold/10" : "border-border hover:border-gold/30"}`}
-                >
-                  <img src="/Remeritona Hotel Gallery/Event Hall/IMG-20260713-WA0015.webp" alt="Large Event Hall" className="w-full h-32 object-cover" />
-                  <div className="p-4">
-                    <div className="font-serif text-xl mb-1">Large Event Hall</div>
-                    <div className="text-gold mb-2">{formatNaira(HALL_PRICES["event_hall"])} / 24hrs</div>
-                    <div className="text-xs text-muted-foreground">Multi-chair Setup. Perfect for weddings and large ceremonies.</div>
-                  </div>
-                </button>
+                {(Object.keys(HALL_PRICES) as Array<keyof typeof HALL_PRICES>).map((key) => {
+                  const detail = HALL_DETAILS[key];
+                  const active = hallType === key;
+                  return (
+                    <button
+                      key={key}
+                      type="button"
+                      onClick={() => {
+                        setHallType(key);
+                        setSelectedDate("");
+                      }}
+                      className={`p-0 border text-left transition-colors overflow-hidden flex flex-col h-full ${active ? "border-gold bg-gold/10" : "border-border hover:border-gold/30"}`}
+                    >
+                      <img src={detail.img} alt={detail.name} className="w-full h-32 object-cover" />
+                      <div className="p-4 flex-grow flex flex-col justify-between">
+                        <div>
+                          <div className="font-serif text-xl mb-1">{detail.name}</div>
+                          <div className="text-gold mb-2">{formatNaira(HALL_PRICES[key])} / 24hrs</div>
+                          <div className="text-xs text-muted-foreground">{detail.desc}</div>
+                        </div>
+                      </div>
+                    </button>
+                  );
+                })}
               </div>
             </div>
 
