@@ -1,5 +1,6 @@
 import { createServerFn } from "@tanstack/react-start";
 import { env } from "cloudflare:workers";
+import { resolveGuestProfile } from "../lib/guest-profile";
 
 const cfEnv = () => env as unknown as {
   remeritona_bookings: D1Database;
@@ -211,7 +212,7 @@ async function hashPassword(password: string): Promise<string> {
 }
 
 export const registerStaff = createServerFn({ method: "POST" })
-  .inputValidator((data: { username: string; password: string; fullName: string; role: 'front-desk' | 'accountant' | 'manager' | 'admin' | 'kitchen' | 'housekeeping' | 'spa' }) => data)
+  .inputValidator((data: { username: string; password: string; fullName: string; role: 'front-desk' | 'accountant' | 'manager' | 'admin' | 'kitchen' | 'housekeeping' | 'spa' | 'bar_staff' | 'pos_user' }) => data)
   .handler(async ({ data }): Promise<any> => {
     const db = cfEnv().remeritona_bookings;
 
@@ -423,7 +424,21 @@ export const getDashboardStats = createServerFn({ method: "POST" })
       db.prepare(`SELECT * FROM bookings WHERE hotel_id = 'remeritona' ORDER BY created_at DESC LIMIT 100`).all(),
       db.prepare(`SELECT * FROM room_status WHERE hotel_id = 'remeritona' ORDER BY CAST(room_number AS INTEGER) ASC`).all(),
       db.prepare(`SELECT SUM(total) as revenue FROM bookings WHERE hotel_id = 'remeritona' AND status IN ('confirmed','checked_in','checked_out') AND created_at >= date('now', 'start of month')`).first(),
-      db.prepare(`SELECT guest_email, guest_name, COUNT(*) as visit_count, SUM(total) as total_spent, MAX(created_at) as last_visit FROM bookings WHERE hotel_id = 'remeritona' AND status != 'cancelled' GROUP BY guest_email HAVING visit_count > 1 ORDER BY visit_count DESC LIMIT 20`).all(),
+      db.prepare(`
+        SELECT 
+          COALESCE(b.guest_profile_id, 0) as guest_profile_id,
+          COALESCE(hg.full_name, b.guest_name) as guest_name,
+          COALESCE(hg.email, b.guest_email) as guest_email,
+          COUNT(b.id) as visit_count,
+          SUM(b.total) as total_spent,
+          MAX(b.created_at) as last_visit
+        FROM bookings b
+        LEFT JOIN hotel_guests hg ON b.guest_profile_id = hg.id
+        WHERE b.hotel_id = 'remeritona' AND b.status != 'cancelled'
+        GROUP BY COALESCE(b.guest_profile_id, b.guest_email)
+        ORDER BY visit_count DESC
+        LIMIT 20
+      `).all(),
       db.prepare(`SELECT * FROM guest_requests WHERE status = 'pending' AND hotel_id = 'remeritona' ORDER BY created_at DESC`).all(),
       db.prepare(`SELECT * FROM room_orders WHERE status = 'pending' AND hotel_id = 'remeritona' ORDER BY created_at DESC`).all(),
       db.prepare(`
@@ -535,10 +550,15 @@ export const checkInGuest = createServerFn({ method: "POST" })
 
     const isEarlyCheckIn = originalBooking && data.checkIn < (originalBooking.check_in ?? "").split("T")[0];
 
-    // 2. Update booking: status, check_in (backdated if early), room_number, early_checkin flag, checked_in_by
+    const email = data.guestEmail || (originalBooking?.guest_email ?? "");
+    const phone = originalBooking?.guest_phone ?? "";
+    const name = originalBooking?.guest_name ?? data.guestName ?? "";
+    const guestProfileId = await resolveGuestProfile(db, name, email, phone);
+
+    // 2. Update booking: status, check_in (backdated if early), room_number, early_checkin flag, checked_in_by, guest_profile_id
     await db.prepare(
-      `UPDATE bookings SET status = 'checked_in', check_in = ?, room_number = ?, early_checkin = ?, checked_in_by = ? WHERE reference = ?`
-    ).bind(data.checkIn, data.roomNumber, isEarlyCheckIn ? 1 : 0, data.checkedInBy ?? "", data.reference).run();
+      `UPDATE bookings SET status = 'checked_in', check_in = ?, room_number = ?, early_checkin = ?, checked_in_by = ?, guest_profile_id = ? WHERE reference = ?`
+    ).bind(data.checkIn, data.roomNumber, isEarlyCheckIn ? 1 : 0, data.checkedInBy ?? "", guestProfileId, data.reference).run();
 
     // 3. Update room status to occupied
     await db.prepare(

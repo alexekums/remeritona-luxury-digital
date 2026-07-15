@@ -1,5 +1,5 @@
-// @ts-ignore
 import { createFileRoute } from "@tanstack/react-router";
+import { resolveGuestProfile } from "../../lib/guest-profile";
 
 export const Route = createFileRoute("/api/save-booking")({
   server: {
@@ -17,9 +17,16 @@ export const Route = createFileRoute("/api/save-booking")({
             });
           }
 
+          const guestProfileId = await resolveGuestProfile(
+            db,
+            data.guest.name,
+            data.guest.email,
+            data.guest.phone
+          );
+
           await db
             .prepare(
-              `INSERT OR IGNORE INTO bookings (reference, created_at, guest_name, guest_email, guest_phone, guest_notes, room_slug, room_name, room_price, check_in, check_out, nights, num_rooms, guests, addons, subtotal, discount, tax, total, gateway, payment_mode, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+              `INSERT OR IGNORE INTO bookings (reference, created_at, guest_name, guest_email, guest_phone, guest_notes, room_slug, room_name, room_price, check_in, check_out, nights, num_rooms, guests, addons, subtotal, discount, tax, total, gateway, payment_mode, status, guest_profile_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
             )
             .bind(
               data.reference,
@@ -43,7 +50,8 @@ export const Route = createFileRoute("/api/save-booking")({
               data.total,
               data.gateway,
               data.paymentMode,
-              data.status
+              data.status,
+              guestProfileId
             )
             .run();
 

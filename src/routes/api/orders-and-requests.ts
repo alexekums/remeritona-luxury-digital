@@ -92,11 +92,20 @@ export const Route = createFileRoute("/api/orders-and-requests")({
             new Date(a.created_at).getTime()
           );
           const settingsRows = await db.prepare(
-            `SELECT key, value FROM system_settings WHERE key IN ('escalation_warning_mins', 'escalation_critical_mins')`
+            `SELECT key, value FROM system_settings`
           ).all();
           
           const configMap = (settingsRows.results || []).reduce((acc: any, row: any) => {
-            acc[row.key] = parseInt(row.value, 10);
+            const val = row.value;
+            if (val === "true" || val === "1") {
+              acc[row.key] = true;
+            } else if (val === "false" || val === "0") {
+              acc[row.key] = false;
+            } else if (!isNaN(Number(val)) && val.trim() !== "") {
+              acc[row.key] = Number(val);
+            } else {
+              acc[row.key] = val;
+            }
             return acc;
           }, { escalation_warning_mins: 10, escalation_critical_mins: 20 });
 

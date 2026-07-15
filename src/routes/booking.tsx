@@ -25,12 +25,25 @@ const FLUTTERWAVE_PUBLIC_KEY = "FLWPUBK_TEST-c7659059ed4e5f5f6aa1fbb96055e919-X"
 const ADD_ONS = [
   { id: "pickup_morning", label: "Venue Pickup (Every Morning)", price: 7000 },
   { id: "drop", label: "Venue Drop", price: 7000 },
-  { id: "full_transfer", label: "Airport Pickup + Drop", price: 100000 },
   { id: "flowers", label: "Bouquet of Flowers in Room", price: 25000 },
   { id: "breakfast", label: "Breakfast Included (Per Person)", price: 5500 },
   { id: "cake", label: "Cake & Decoration", price: 30000 },
   { id: "champagne", label: "Champagne on Arrival", price: 250000 },
 ] as const;
+
+const LOGISTICS_VEHICLES = [
+  { id: "prado", label: "Toyota Prado (SUV)", multiplier: 1.0 },
+  { id: "land_cruiser", label: "Toyota Land Cruiser", multiplier: 1.3 },
+  { id: "hiace", label: "Toyota Hiace Bus", multiplier: 0.8 },
+  { id: "coaster", label: "Coaster Bus", multiplier: 1.4 },
+];
+
+const LOGISTICS_ROUTES = [
+  { id: "enugu_airport", label: "Enugu Airport (Akanu Ibiam)", basePrice: 60000 },
+  { id: "asaba_airport", label: "Asaba Airport", basePrice: 120000 },
+  { id: "owerri_airport", label: "Owerri Airport (Sam Mbakwe)", basePrice: 90000 },
+  { id: "port_harcourt", label: "Port Harcourt Airport", basePrice: 150000 },
+];
 
 type RoomAvailability = {
   total: number;
@@ -827,7 +840,7 @@ const sendBookingEmails = async (reference: string) => {
                       const availCount = availability[selectedSlug]?.available ?? 0;
                       if (availCount === 0) {
                         return (
-                          <p className="text-sm text-amber-400 border border-amber-700/50 bg-amber-900/20 px-3 py-3">
+                          <p className="text-sm text-gold border border-gold/50 bg-gold/10 px-3 py-3">
                             Fully Booked for Selected Dates
                           </p>
                         );
@@ -914,12 +927,12 @@ const sendBookingEmails = async (reference: string) => {
                             <div className="flex items-center gap-2 flex-wrap">
                               <p className="font-serif text-lg">{r.name}</p>
                               {availabilityLoaded && isFullyBooked && (
-                                <span className="text-[10px] uppercase tracking-widest bg-amber-900/30 text-amber-400 border border-amber-700 px-2 py-0.5">
+                                <span className="text-[10px] uppercase tracking-widest bg-gold/10 text-gold border border-gold/50 px-2 py-0.5">
                                   Fully Booked for Selected Dates
                                 </span>
                               )}
                               {isMounted && !isFullyBooked && availCount !== null && availCount <= 3 && (
-                                <span className="text-[10px] uppercase tracking-widest bg-amber-900/30 text-amber-400 border border-amber-500/20 px-2 py-0.5 rounded">
+                                <span className="text-[10px] uppercase tracking-widest bg-gold/10 text-gold border border-gold/20 px-2 py-0.5 rounded">
                                   Only {availCount} left
                                 </span>
                               )}

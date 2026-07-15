@@ -114,7 +114,7 @@ function Index() {
           </div>
           <div className="grid md:grid-cols-3 gap-6">
             {rooms.map((room) => (
-              <article key={room.slug} className="group bg-charcoal border border-border hover:border-gold/60 hover-glow transition-all overflow-hidden">
+              <article key={room.slug} className="group bg-zinc-900 border border-stone-800 hover:border-gold/60 hover-glow transition-all overflow-hidden">
                 <div className="aspect-[4/3] overflow-hidden">
                   <img src={room.image} alt={room.name} loading="lazy" className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700" />
                 </div>
@@ -159,21 +159,21 @@ function Index() {
         </div>
       </section>
 
-      {/* Dining */}
-      <section className="py-24 px-6 bg-background">
+      {/* Restaurant */}
+      <section className="py-24 px-6 bg-zinc-900 border-y border-stone-800">
         <div className="max-w-7xl mx-auto grid lg:grid-cols-2 gap-12 items-center">
           <img src={diningImage} alt="The Foundry Restaurant" className="w-full aspect-[4/3] object-cover" loading="lazy" />
           <div>
-            <p className="text-gold text-xs uppercase tracking-[0.4em] mb-4">Dining</p>
+            <p className="text-gold text-xs uppercase tracking-[0.4em] mb-4">Restaurant</p>
             <h2 className="font-serif text-4xl md:text-5xl mb-6">The Foundry Restaurant</h2>
             <p className="text-muted-foreground text-lg leading-relaxed mb-8">
               Experience refined Nigerian cuisine and continental favorites in an elegant setting. Open daily for breakfast, lunch and dinner.
             </p>
             <Link
-              to="/dining"
+              to="/restaurant"
               className="inline-flex items-center gap-2 px-7 py-3.5 bg-gold text-primary-foreground font-semibold uppercase tracking-widest text-sm hover:bg-gold-soft hover-glow transition-all"
             >
-              View Dining <ArrowRight size={16} />
+              View Restaurant <ArrowRight size={16} />
             </Link>
           </div>
         </div>

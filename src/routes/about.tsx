@@ -50,7 +50,7 @@ function AboutPage() {
         </div>
       </section>
 
-      <section className="py-20 px-6 bg-charcoal">
+      <section className="py-20 px-6 bg-zinc-900">
         <div className="max-w-7xl mx-auto grid md:grid-cols-2 gap-12 items-center">
           <img src={lobby} alt="Hotel lobby" className="w-full aspect-[4/3] object-cover" loading="lazy" />
           <div>

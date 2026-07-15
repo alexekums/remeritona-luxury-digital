@@ -9,8 +9,10 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
-import { Route as SpaManagementRouteImport } from './routes/spa-management'
+import { Route as VenueBookingRouteImport } from './routes/venue-booking'
+import { Route as SalonManagementRouteImport } from './routes/salon-management'
 import { Route as RoomsRouteImport } from './routes/rooms'
+import { Route as RestaurantRouteImport } from './routes/restaurant'
 import { Route as PoliciesRouteImport } from './routes/policies'
 import { Route as OrdersRequestsRouteImport } from './routes/orders-requests'
 import { Route as OffersRouteImport } from './routes/offers'
@@ -18,21 +20,24 @@ import { Route as MyBookingsRouteImport } from './routes/my-bookings'
 import { Route as MenuManagementRouteImport } from './routes/menu-management'
 import { Route as HotelAdminRouteImport } from './routes/hotel-admin'
 import { Route as GalleryRouteImport } from './routes/gallery'
-import { Route as DiningRouteImport } from './routes/dining'
 import { Route as ContactRouteImport } from './routes/contact'
 import { Route as BookingRouteImport } from './routes/booking'
 import { Route as AboutRouteImport } from './routes/about'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as RoomsSlugRouteImport } from './routes/rooms.$slug'
 import { Route as ApiSyncReservationsRouteImport } from './routes/api/sync-reservations'
-import { Route as ApiSpaBookingsRouteImport } from './routes/api/spa-bookings'
 import { Route as ApiSettingsRouteImport } from './routes/api/settings'
 import { Route as ApiSaveBookingRouteImport } from './routes/api/save-booking'
+import { Route as ApiSalonBookingsRouteImport } from './routes/api/salon-bookings'
 import { Route as ApiOrdersAndRequestsRouteImport } from './routes/api/orders-and-requests'
 import { Route as ApiNewBookingsCountRouteImport } from './routes/api/new-bookings-count'
 import { Route as ApiMenuItemsRouteImport } from './routes/api/menu-items'
+import { Route as ApiHallBookingsRouteImport } from './routes/api/hall-bookings'
 import { Route as ApiBookingsRecentRouteImport } from './routes/api/bookings-recent'
 import { Route as ApiBookingsActiveCountRouteImport } from './routes/api/bookings-active-count'
+import { Route as ApiPmsShiftCashoutRouteImport } from './routes/api/pms.shift-cashout'
+import { Route as ApiPmsRoomStatusRouteImport } from './routes/api/pms.room-status'
+import { Route as ApiPmsMigrateRouteImport } from './routes/api/pms.migrate'
 import { Route as ApiMessagesThreadRouteImport } from './routes/api/messages.thread'
 import { Route as ApiMessagesReplyRouteImport } from './routes/api/messages.reply'
 import { Route as ApiMessagesMessageRouteImport } from './routes/api/messages.message'
@@ -40,18 +45,28 @@ import { Route as ApiMessagesMarkReadRouteImport } from './routes/api/messages.m
 import { Route as ApiMessagesConversationsRouteImport } from './routes/api/messages.conversations'
 import { Route as ApiMessagesConversationRouteImport } from './routes/api/messages.conversation'
 import { Route as ApiMenuItemsIdRouteImport } from './routes/api/menu-items.$id'
-import { Route as ApiSpaBookingsIdStatusRouteImport } from './routes/api/spa-bookings.$id.status'
+import { Route as ApiSalonBookingsIdStatusRouteImport } from './routes/api/salon-bookings.$id.status'
 import { Route as ApiRoomOrdersIdStatusRouteImport } from './routes/api/room-orders.$id.status'
 import { Route as ApiGuestRequestsIdStatusRouteImport } from './routes/api/guest-requests.$id.status'
 
-const SpaManagementRoute = SpaManagementRouteImport.update({
-  id: '/spa-management',
-  path: '/spa-management',
+const VenueBookingRoute = VenueBookingRouteImport.update({
+  id: '/venue-booking',
+  path: '/venue-booking',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const SalonManagementRoute = SalonManagementRouteImport.update({
+  id: '/salon-management',
+  path: '/salon-management',
   getParentRoute: () => rootRouteImport,
 } as any)
 const RoomsRoute = RoomsRouteImport.update({
   id: '/rooms',
   path: '/rooms',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const RestaurantRoute = RestaurantRouteImport.update({
+  id: '/restaurant',
+  path: '/restaurant',
   getParentRoute: () => rootRouteImport,
 } as any)
 const PoliciesRoute = PoliciesRouteImport.update({
@@ -89,11 +104,6 @@ const GalleryRoute = GalleryRouteImport.update({
   path: '/gallery',
   getParentRoute: () => rootRouteImport,
 } as any)
-const DiningRoute = DiningRouteImport.update({
-  id: '/dining',
-  path: '/dining',
-  getParentRoute: () => rootRouteImport,
-} as any)
 const ContactRoute = ContactRouteImport.update({
   id: '/contact',
   path: '/contact',
@@ -124,11 +134,6 @@ const ApiSyncReservationsRoute = ApiSyncReservationsRouteImport.update({
   path: '/api/sync-reservations',
   getParentRoute: () => rootRouteImport,
 } as any)
-const ApiSpaBookingsRoute = ApiSpaBookingsRouteImport.update({
-  id: '/api/spa-bookings',
-  path: '/api/spa-bookings',
-  getParentRoute: () => rootRouteImport,
-} as any)
 const ApiSettingsRoute = ApiSettingsRouteImport.update({
   id: '/api/settings',
   path: '/api/settings',
@@ -137,6 +142,11 @@ const ApiSettingsRoute = ApiSettingsRouteImport.update({
 const ApiSaveBookingRoute = ApiSaveBookingRouteImport.update({
   id: '/api/save-booking',
   path: '/api/save-booking',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiSalonBookingsRoute = ApiSalonBookingsRouteImport.update({
+  id: '/api/salon-bookings',
+  path: '/api/salon-bookings',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiOrdersAndRequestsRoute = ApiOrdersAndRequestsRouteImport.update({
@@ -154,6 +164,11 @@ const ApiMenuItemsRoute = ApiMenuItemsRouteImport.update({
   path: '/api/menu-items',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiHallBookingsRoute = ApiHallBookingsRouteImport.update({
+  id: '/api/hall-bookings',
+  path: '/api/hall-bookings',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiBookingsRecentRoute = ApiBookingsRecentRouteImport.update({
   id: '/api/bookings-recent',
   path: '/api/bookings-recent',
@@ -162,6 +177,21 @@ const ApiBookingsRecentRoute = ApiBookingsRecentRouteImport.update({
 const ApiBookingsActiveCountRoute = ApiBookingsActiveCountRouteImport.update({
   id: '/api/bookings-active-count',
   path: '/api/bookings-active-count',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiPmsShiftCashoutRoute = ApiPmsShiftCashoutRouteImport.update({
+  id: '/api/pms/shift-cashout',
+  path: '/api/pms/shift-cashout',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiPmsRoomStatusRoute = ApiPmsRoomStatusRouteImport.update({
+  id: '/api/pms/room-status',
+  path: '/api/pms/room-status',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiPmsMigrateRoute = ApiPmsMigrateRouteImport.update({
+  id: '/api/pms/migrate',
+  path: '/api/pms/migrate',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiMessagesThreadRoute = ApiMessagesThreadRouteImport.update({
@@ -200,11 +230,12 @@ const ApiMenuItemsIdRoute = ApiMenuItemsIdRouteImport.update({
   path: '/$id',
   getParentRoute: () => ApiMenuItemsRoute,
 } as any)
-const ApiSpaBookingsIdStatusRoute = ApiSpaBookingsIdStatusRouteImport.update({
-  id: '/$id/status',
-  path: '/$id/status',
-  getParentRoute: () => ApiSpaBookingsRoute,
-} as any)
+const ApiSalonBookingsIdStatusRoute =
+  ApiSalonBookingsIdStatusRouteImport.update({
+    id: '/$id/status',
+    path: '/$id/status',
+    getParentRoute: () => ApiSalonBookingsRoute,
+  } as any)
 const ApiRoomOrdersIdStatusRoute = ApiRoomOrdersIdStatusRouteImport.update({
   id: '/api/room-orders/$id/status',
   path: '/api/room-orders/$id/status',
@@ -222,7 +253,6 @@ export interface FileRoutesByFullPath {
   '/about': typeof AboutRoute
   '/booking': typeof BookingRoute
   '/contact': typeof ContactRoute
-  '/dining': typeof DiningRoute
   '/gallery': typeof GalleryRoute
   '/hotel-admin': typeof HotelAdminRoute
   '/menu-management': typeof MenuManagementRoute
@@ -230,16 +260,19 @@ export interface FileRoutesByFullPath {
   '/offers': typeof OffersRoute
   '/orders-requests': typeof OrdersRequestsRoute
   '/policies': typeof PoliciesRoute
+  '/restaurant': typeof RestaurantRoute
   '/rooms': typeof RoomsRouteWithChildren
-  '/spa-management': typeof SpaManagementRoute
+  '/salon-management': typeof SalonManagementRoute
+  '/venue-booking': typeof VenueBookingRoute
   '/api/bookings-active-count': typeof ApiBookingsActiveCountRoute
   '/api/bookings-recent': typeof ApiBookingsRecentRoute
+  '/api/hall-bookings': typeof ApiHallBookingsRoute
   '/api/menu-items': typeof ApiMenuItemsRouteWithChildren
   '/api/new-bookings-count': typeof ApiNewBookingsCountRoute
   '/api/orders-and-requests': typeof ApiOrdersAndRequestsRoute
+  '/api/salon-bookings': typeof ApiSalonBookingsRouteWithChildren
   '/api/save-booking': typeof ApiSaveBookingRoute
   '/api/settings': typeof ApiSettingsRoute
-  '/api/spa-bookings': typeof ApiSpaBookingsRouteWithChildren
   '/api/sync-reservations': typeof ApiSyncReservationsRoute
   '/rooms/$slug': typeof RoomsSlugRoute
   '/api/menu-items/$id': typeof ApiMenuItemsIdRoute
@@ -249,16 +282,18 @@ export interface FileRoutesByFullPath {
   '/api/messages/message': typeof ApiMessagesMessageRoute
   '/api/messages/reply': typeof ApiMessagesReplyRoute
   '/api/messages/thread': typeof ApiMessagesThreadRoute
+  '/api/pms/migrate': typeof ApiPmsMigrateRoute
+  '/api/pms/room-status': typeof ApiPmsRoomStatusRoute
+  '/api/pms/shift-cashout': typeof ApiPmsShiftCashoutRoute
   '/api/guest-requests/$id/status': typeof ApiGuestRequestsIdStatusRoute
   '/api/room-orders/$id/status': typeof ApiRoomOrdersIdStatusRoute
-  '/api/spa-bookings/$id/status': typeof ApiSpaBookingsIdStatusRoute
+  '/api/salon-bookings/$id/status': typeof ApiSalonBookingsIdStatusRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/about': typeof AboutRoute
   '/booking': typeof BookingRoute
   '/contact': typeof ContactRoute
-  '/dining': typeof DiningRoute
   '/gallery': typeof GalleryRoute
   '/hotel-admin': typeof HotelAdminRoute
   '/menu-management': typeof MenuManagementRoute
@@ -266,16 +301,19 @@ export interface FileRoutesByTo {
   '/offers': typeof OffersRoute
   '/orders-requests': typeof OrdersRequestsRoute
   '/policies': typeof PoliciesRoute
+  '/restaurant': typeof RestaurantRoute
   '/rooms': typeof RoomsRouteWithChildren
-  '/spa-management': typeof SpaManagementRoute
+  '/salon-management': typeof SalonManagementRoute
+  '/venue-booking': typeof VenueBookingRoute
   '/api/bookings-active-count': typeof ApiBookingsActiveCountRoute
   '/api/bookings-recent': typeof ApiBookingsRecentRoute
+  '/api/hall-bookings': typeof ApiHallBookingsRoute
   '/api/menu-items': typeof ApiMenuItemsRouteWithChildren
   '/api/new-bookings-count': typeof ApiNewBookingsCountRoute
   '/api/orders-and-requests': typeof ApiOrdersAndRequestsRoute
+  '/api/salon-bookings': typeof ApiSalonBookingsRouteWithChildren
   '/api/save-booking': typeof ApiSaveBookingRoute
   '/api/settings': typeof ApiSettingsRoute
-  '/api/spa-bookings': typeof ApiSpaBookingsRouteWithChildren
   '/api/sync-reservations': typeof ApiSyncReservationsRoute
   '/rooms/$slug': typeof RoomsSlugRoute
   '/api/menu-items/$id': typeof ApiMenuItemsIdRoute
@@ -285,9 +323,12 @@ export interface FileRoutesByTo {
   '/api/messages/message': typeof ApiMessagesMessageRoute
   '/api/messages/reply': typeof ApiMessagesReplyRoute
   '/api/messages/thread': typeof ApiMessagesThreadRoute
+  '/api/pms/migrate': typeof ApiPmsMigrateRoute
+  '/api/pms/room-status': typeof ApiPmsRoomStatusRoute
+  '/api/pms/shift-cashout': typeof ApiPmsShiftCashoutRoute
   '/api/guest-requests/$id/status': typeof ApiGuestRequestsIdStatusRoute
   '/api/room-orders/$id/status': typeof ApiRoomOrdersIdStatusRoute
-  '/api/spa-bookings/$id/status': typeof ApiSpaBookingsIdStatusRoute
+  '/api/salon-bookings/$id/status': typeof ApiSalonBookingsIdStatusRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -295,7 +336,6 @@ export interface FileRoutesById {
   '/about': typeof AboutRoute
   '/booking': typeof BookingRoute
   '/contact': typeof ContactRoute
-  '/dining': typeof DiningRoute
   '/gallery': typeof GalleryRoute
   '/hotel-admin': typeof HotelAdminRoute
   '/menu-management': typeof MenuManagementRoute
@@ -303,16 +343,19 @@ export interface FileRoutesById {
   '/offers': typeof OffersRoute
   '/orders-requests': typeof OrdersRequestsRoute
   '/policies': typeof PoliciesRoute
+  '/restaurant': typeof RestaurantRoute
   '/rooms': typeof RoomsRouteWithChildren
-  '/spa-management': typeof SpaManagementRoute
+  '/salon-management': typeof SalonManagementRoute
+  '/venue-booking': typeof VenueBookingRoute
   '/api/bookings-active-count': typeof ApiBookingsActiveCountRoute
   '/api/bookings-recent': typeof ApiBookingsRecentRoute
+  '/api/hall-bookings': typeof ApiHallBookingsRoute
   '/api/menu-items': typeof ApiMenuItemsRouteWithChildren
   '/api/new-bookings-count': typeof ApiNewBookingsCountRoute
   '/api/orders-and-requests': typeof ApiOrdersAndRequestsRoute
+  '/api/salon-bookings': typeof ApiSalonBookingsRouteWithChildren
   '/api/save-booking': typeof ApiSaveBookingRoute
   '/api/settings': typeof ApiSettingsRoute
-  '/api/spa-bookings': typeof ApiSpaBookingsRouteWithChildren
   '/api/sync-reservations': typeof ApiSyncReservationsRoute
   '/rooms/$slug': typeof RoomsSlugRoute
   '/api/menu-items/$id': typeof ApiMenuItemsIdRoute
@@ -322,9 +365,12 @@ export interface FileRoutesById {
   '/api/messages/message': typeof ApiMessagesMessageRoute
   '/api/messages/reply': typeof ApiMessagesReplyRoute
   '/api/messages/thread': typeof ApiMessagesThreadRoute
+  '/api/pms/migrate': typeof ApiPmsMigrateRoute
+  '/api/pms/room-status': typeof ApiPmsRoomStatusRoute
+  '/api/pms/shift-cashout': typeof ApiPmsShiftCashoutRoute
   '/api/guest-requests/$id/status': typeof ApiGuestRequestsIdStatusRoute
   '/api/room-orders/$id/status': typeof ApiRoomOrdersIdStatusRoute
-  '/api/spa-bookings/$id/status': typeof ApiSpaBookingsIdStatusRoute
+  '/api/salon-bookings/$id/status': typeof ApiSalonBookingsIdStatusRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -333,7 +379,6 @@ export interface FileRouteTypes {
     | '/about'
     | '/booking'
     | '/contact'
-    | '/dining'
     | '/gallery'
     | '/hotel-admin'
     | '/menu-management'
@@ -341,16 +386,19 @@ export interface FileRouteTypes {
     | '/offers'
     | '/orders-requests'
     | '/policies'
+    | '/restaurant'
     | '/rooms'
-    | '/spa-management'
+    | '/salon-management'
+    | '/venue-booking'
     | '/api/bookings-active-count'
     | '/api/bookings-recent'
+    | '/api/hall-bookings'
     | '/api/menu-items'
     | '/api/new-bookings-count'
     | '/api/orders-and-requests'
+    | '/api/salon-bookings'
     | '/api/save-booking'
     | '/api/settings'
-    | '/api/spa-bookings'
     | '/api/sync-reservations'
     | '/rooms/$slug'
     | '/api/menu-items/$id'
@@ -360,16 +408,18 @@ export interface FileRouteTypes {
     | '/api/messages/message'
     | '/api/messages/reply'
     | '/api/messages/thread'
+    | '/api/pms/migrate'
+    | '/api/pms/room-status'
+    | '/api/pms/shift-cashout'
     | '/api/guest-requests/$id/status'
     | '/api/room-orders/$id/status'
-    | '/api/spa-bookings/$id/status'
+    | '/api/salon-bookings/$id/status'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
     | '/about'
     | '/booking'
     | '/contact'
-    | '/dining'
     | '/gallery'
     | '/hotel-admin'
     | '/menu-management'
@@ -377,16 +427,19 @@ export interface FileRouteTypes {
     | '/offers'
     | '/orders-requests'
     | '/policies'
+    | '/restaurant'
     | '/rooms'
-    | '/spa-management'
+    | '/salon-management'
+    | '/venue-booking'
     | '/api/bookings-active-count'
     | '/api/bookings-recent'
+    | '/api/hall-bookings'
     | '/api/menu-items'
     | '/api/new-bookings-count'
     | '/api/orders-and-requests'
+    | '/api/salon-bookings'
     | '/api/save-booking'
     | '/api/settings'
-    | '/api/spa-bookings'
     | '/api/sync-reservations'
     | '/rooms/$slug'
     | '/api/menu-items/$id'
@@ -396,16 +449,18 @@ export interface FileRouteTypes {
     | '/api/messages/message'
     | '/api/messages/reply'
     | '/api/messages/thread'
+    | '/api/pms/migrate'
+    | '/api/pms/room-status'
+    | '/api/pms/shift-cashout'
     | '/api/guest-requests/$id/status'
     | '/api/room-orders/$id/status'
-    | '/api/spa-bookings/$id/status'
+    | '/api/salon-bookings/$id/status'
   id:
     | '__root__'
     | '/'
     | '/about'
     | '/booking'
     | '/contact'
-    | '/dining'
     | '/gallery'
     | '/hotel-admin'
     | '/menu-management'
@@ -413,16 +468,19 @@ export interface FileRouteTypes {
     | '/offers'
     | '/orders-requests'
     | '/policies'
+    | '/restaurant'
     | '/rooms'
-    | '/spa-management'
+    | '/salon-management'
+    | '/venue-booking'
     | '/api/bookings-active-count'
     | '/api/bookings-recent'
+    | '/api/hall-bookings'
     | '/api/menu-items'
     | '/api/new-bookings-count'
     | '/api/orders-and-requests'
+    | '/api/salon-bookings'
     | '/api/save-booking'
     | '/api/settings'
-    | '/api/spa-bookings'
     | '/api/sync-reservations'
     | '/rooms/$slug'
     | '/api/menu-items/$id'
@@ -432,9 +490,12 @@ export interface FileRouteTypes {
     | '/api/messages/message'
     | '/api/messages/reply'
     | '/api/messages/thread'
+    | '/api/pms/migrate'
+    | '/api/pms/room-status'
+    | '/api/pms/shift-cashout'
     | '/api/guest-requests/$id/status'
     | '/api/room-orders/$id/status'
-    | '/api/spa-bookings/$id/status'
+    | '/api/salon-bookings/$id/status'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -442,7 +503,6 @@ export interface RootRouteChildren {
   AboutRoute: typeof AboutRoute
   BookingRoute: typeof BookingRoute
   ContactRoute: typeof ContactRoute
-  DiningRoute: typeof DiningRoute
   GalleryRoute: typeof GalleryRoute
   HotelAdminRoute: typeof HotelAdminRoute
   MenuManagementRoute: typeof MenuManagementRoute
@@ -450,16 +510,19 @@ export interface RootRouteChildren {
   OffersRoute: typeof OffersRoute
   OrdersRequestsRoute: typeof OrdersRequestsRoute
   PoliciesRoute: typeof PoliciesRoute
+  RestaurantRoute: typeof RestaurantRoute
   RoomsRoute: typeof RoomsRouteWithChildren
-  SpaManagementRoute: typeof SpaManagementRoute
+  SalonManagementRoute: typeof SalonManagementRoute
+  VenueBookingRoute: typeof VenueBookingRoute
   ApiBookingsActiveCountRoute: typeof ApiBookingsActiveCountRoute
   ApiBookingsRecentRoute: typeof ApiBookingsRecentRoute
+  ApiHallBookingsRoute: typeof ApiHallBookingsRoute
   ApiMenuItemsRoute: typeof ApiMenuItemsRouteWithChildren
   ApiNewBookingsCountRoute: typeof ApiNewBookingsCountRoute
   ApiOrdersAndRequestsRoute: typeof ApiOrdersAndRequestsRoute
+  ApiSalonBookingsRoute: typeof ApiSalonBookingsRouteWithChildren
   ApiSaveBookingRoute: typeof ApiSaveBookingRoute
   ApiSettingsRoute: typeof ApiSettingsRoute
-  ApiSpaBookingsRoute: typeof ApiSpaBookingsRouteWithChildren
   ApiSyncReservationsRoute: typeof ApiSyncReservationsRoute
   ApiMessagesConversationRoute: typeof ApiMessagesConversationRoute
   ApiMessagesConversationsRoute: typeof ApiMessagesConversationsRoute
@@ -467,17 +530,27 @@ export interface RootRouteChildren {
   ApiMessagesMessageRoute: typeof ApiMessagesMessageRoute
   ApiMessagesReplyRoute: typeof ApiMessagesReplyRoute
   ApiMessagesThreadRoute: typeof ApiMessagesThreadRoute
+  ApiPmsMigrateRoute: typeof ApiPmsMigrateRoute
+  ApiPmsRoomStatusRoute: typeof ApiPmsRoomStatusRoute
+  ApiPmsShiftCashoutRoute: typeof ApiPmsShiftCashoutRoute
   ApiGuestRequestsIdStatusRoute: typeof ApiGuestRequestsIdStatusRoute
   ApiRoomOrdersIdStatusRoute: typeof ApiRoomOrdersIdStatusRoute
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
-    '/spa-management': {
-      id: '/spa-management'
-      path: '/spa-management'
-      fullPath: '/spa-management'
-      preLoaderRoute: typeof SpaManagementRouteImport
+    '/venue-booking': {
+      id: '/venue-booking'
+      path: '/venue-booking'
+      fullPath: '/venue-booking'
+      preLoaderRoute: typeof VenueBookingRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/salon-management': {
+      id: '/salon-management'
+      path: '/salon-management'
+      fullPath: '/salon-management'
+      preLoaderRoute: typeof SalonManagementRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/rooms': {
@@ -485,6 +558,13 @@ declare module '@tanstack/react-router' {
       path: '/rooms'
       fullPath: '/rooms'
       preLoaderRoute: typeof RoomsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/restaurant': {
+      id: '/restaurant'
+      path: '/restaurant'
+      fullPath: '/restaurant'
+      preLoaderRoute: typeof RestaurantRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/policies': {
@@ -536,13 +616,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof GalleryRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/dining': {
-      id: '/dining'
-      path: '/dining'
-      fullPath: '/dining'
-      preLoaderRoute: typeof DiningRouteImport
-      parentRoute: typeof rootRouteImport
-    }
     '/contact': {
       id: '/contact'
       path: '/contact'
@@ -585,13 +658,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiSyncReservationsRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/api/spa-bookings': {
-      id: '/api/spa-bookings'
-      path: '/api/spa-bookings'
-      fullPath: '/api/spa-bookings'
-      preLoaderRoute: typeof ApiSpaBookingsRouteImport
-      parentRoute: typeof rootRouteImport
-    }
     '/api/settings': {
       id: '/api/settings'
       path: '/api/settings'
@@ -604,6 +670,13 @@ declare module '@tanstack/react-router' {
       path: '/api/save-booking'
       fullPath: '/api/save-booking'
       preLoaderRoute: typeof ApiSaveBookingRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/salon-bookings': {
+      id: '/api/salon-bookings'
+      path: '/api/salon-bookings'
+      fullPath: '/api/salon-bookings'
+      preLoaderRoute: typeof ApiSalonBookingsRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/orders-and-requests': {
@@ -627,6 +700,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiMenuItemsRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/hall-bookings': {
+      id: '/api/hall-bookings'
+      path: '/api/hall-bookings'
+      fullPath: '/api/hall-bookings'
+      preLoaderRoute: typeof ApiHallBookingsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/bookings-recent': {
       id: '/api/bookings-recent'
       path: '/api/bookings-recent'
@@ -639,6 +719,27 @@ declare module '@tanstack/react-router' {
       path: '/api/bookings-active-count'
       fullPath: '/api/bookings-active-count'
       preLoaderRoute: typeof ApiBookingsActiveCountRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/pms/shift-cashout': {
+      id: '/api/pms/shift-cashout'
+      path: '/api/pms/shift-cashout'
+      fullPath: '/api/pms/shift-cashout'
+      preLoaderRoute: typeof ApiPmsShiftCashoutRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/pms/room-status': {
+      id: '/api/pms/room-status'
+      path: '/api/pms/room-status'
+      fullPath: '/api/pms/room-status'
+      preLoaderRoute: typeof ApiPmsRoomStatusRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/pms/migrate': {
+      id: '/api/pms/migrate'
+      path: '/api/pms/migrate'
+      fullPath: '/api/pms/migrate'
+      preLoaderRoute: typeof ApiPmsMigrateRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/messages/thread': {
@@ -690,12 +791,12 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiMenuItemsIdRouteImport
       parentRoute: typeof ApiMenuItemsRoute
     }
-    '/api/spa-bookings/$id/status': {
-      id: '/api/spa-bookings/$id/status'
+    '/api/salon-bookings/$id/status': {
+      id: '/api/salon-bookings/$id/status'
       path: '/$id/status'
-      fullPath: '/api/spa-bookings/$id/status'
-      preLoaderRoute: typeof ApiSpaBookingsIdStatusRouteImport
-      parentRoute: typeof ApiSpaBookingsRoute
+      fullPath: '/api/salon-bookings/$id/status'
+      preLoaderRoute: typeof ApiSalonBookingsIdStatusRouteImport
+      parentRoute: typeof ApiSalonBookingsRoute
     }
     '/api/room-orders/$id/status': {
       id: '/api/room-orders/$id/status'
@@ -736,24 +837,22 @@ const ApiMenuItemsRouteWithChildren = ApiMenuItemsRoute._addFileChildren(
   ApiMenuItemsRouteChildren,
 )
 
-interface ApiSpaBookingsRouteChildren {
-  ApiSpaBookingsIdStatusRoute: typeof ApiSpaBookingsIdStatusRoute
+interface ApiSalonBookingsRouteChildren {
+  ApiSalonBookingsIdStatusRoute: typeof ApiSalonBookingsIdStatusRoute
 }
 
-const ApiSpaBookingsRouteChildren: ApiSpaBookingsRouteChildren = {
-  ApiSpaBookingsIdStatusRoute: ApiSpaBookingsIdStatusRoute,
+const ApiSalonBookingsRouteChildren: ApiSalonBookingsRouteChildren = {
+  ApiSalonBookingsIdStatusRoute: ApiSalonBookingsIdStatusRoute,
 }
 
-const ApiSpaBookingsRouteWithChildren = ApiSpaBookingsRoute._addFileChildren(
-  ApiSpaBookingsRouteChildren,
-)
+const ApiSalonBookingsRouteWithChildren =
+  ApiSalonBookingsRoute._addFileChildren(ApiSalonBookingsRouteChildren)
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AboutRoute: AboutRoute,
   BookingRoute: BookingRoute,
   ContactRoute: ContactRoute,
-  DiningRoute: DiningRoute,
   GalleryRoute: GalleryRoute,
   HotelAdminRoute: HotelAdminRoute,
   MenuManagementRoute: MenuManagementRoute,
@@ -761,16 +860,19 @@ const rootRouteChildren: RootRouteChildren = {
   OffersRoute: OffersRoute,
   OrdersRequestsRoute: OrdersRequestsRoute,
   PoliciesRoute: PoliciesRoute,
+  RestaurantRoute: RestaurantRoute,
   RoomsRoute: RoomsRouteWithChildren,
-  SpaManagementRoute: SpaManagementRoute,
+  SalonManagementRoute: SalonManagementRoute,
+  VenueBookingRoute: VenueBookingRoute,
   ApiBookingsActiveCountRoute: ApiBookingsActiveCountRoute,
   ApiBookingsRecentRoute: ApiBookingsRecentRoute,
+  ApiHallBookingsRoute: ApiHallBookingsRoute,
   ApiMenuItemsRoute: ApiMenuItemsRouteWithChildren,
   ApiNewBookingsCountRoute: ApiNewBookingsCountRoute,
   ApiOrdersAndRequestsRoute: ApiOrdersAndRequestsRoute,
+  ApiSalonBookingsRoute: ApiSalonBookingsRouteWithChildren,
   ApiSaveBookingRoute: ApiSaveBookingRoute,
   ApiSettingsRoute: ApiSettingsRoute,
-  ApiSpaBookingsRoute: ApiSpaBookingsRouteWithChildren,
   ApiSyncReservationsRoute: ApiSyncReservationsRoute,
   ApiMessagesConversationRoute: ApiMessagesConversationRoute,
   ApiMessagesConversationsRoute: ApiMessagesConversationsRoute,
@@ -778,6 +880,9 @@ const rootRouteChildren: RootRouteChildren = {
   ApiMessagesMessageRoute: ApiMessagesMessageRoute,
   ApiMessagesReplyRoute: ApiMessagesReplyRoute,
   ApiMessagesThreadRoute: ApiMessagesThreadRoute,
+  ApiPmsMigrateRoute: ApiPmsMigrateRoute,
+  ApiPmsRoomStatusRoute: ApiPmsRoomStatusRoute,
+  ApiPmsShiftCashoutRoute: ApiPmsShiftCashoutRoute,
   ApiGuestRequestsIdStatusRoute: ApiGuestRequestsIdStatusRoute,
   ApiRoomOrdersIdStatusRoute: ApiRoomOrdersIdStatusRoute,
 }

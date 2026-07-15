@@ -1,8 +1,9 @@
+import { useState, useEffect } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { SiteHeader } from "@/components/SiteHeader";
 import { SiteFooter } from "@/components/SiteFooter";
 import { rooms, formatNaira } from "@/data/rooms";
-import { ArrowRight, Users, Bed, Maximize, CheckCircle, XCircle, AlertCircle } from "lucide-react";
+import { ArrowRight, Users, Bed, Maximize, CheckCircle, XCircle, AlertCircle, ChevronLeft, ChevronRight } from "lucide-react";
 
 export const Route = createFileRoute("/rooms")({
   head: () => ({
@@ -13,6 +14,103 @@ export const Route = createFileRoute("/rooms")({
   }),
   component: RoomsPage,
 });
+
+function RoomCardSlider({
+  gallery,
+  image,
+  name,
+}: {
+  gallery?: string[];
+  image: string;
+  name: string;
+}) {
+  const images = gallery && gallery.length > 0 ? gallery : [image];
+  const [currentIndex, setCurrentIndex] = useState(0);
+
+  useEffect(() => {
+    if (images.length <= 1) return;
+    const interval = setInterval(() => {
+      setCurrentIndex((prev) => (prev + 1) % images.length);
+    }, 3000);
+    return () => clearInterval(interval);
+  }, [images.length]);
+
+  const handlePrev = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setCurrentIndex((prev) => (prev === 0 ? images.length - 1 : prev - 1));
+  };
+
+  const handleNext = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setCurrentIndex((prev) => (prev + 1) % images.length);
+  };
+
+  const handleDot = (e: React.MouseEvent, index: number) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setCurrentIndex(index);
+  };
+
+  return (
+    <div className="relative w-full aspect-[4/3] overflow-hidden group">
+      {/* Slides container */}
+      <div
+        className="flex w-full h-full transition-transform duration-700 ease-in-out"
+        style={{ transform: `translateX(-${currentIndex * 100}%)` }}
+      >
+        {images.map((src, idx) => (
+          <img
+            key={idx}
+            src={src}
+            alt={`${name} view ${idx + 1}`}
+            loading="lazy"
+            width={1280}
+            height={832}
+            className="w-full h-full object-cover shrink-0"
+          />
+        ))}
+      </div>
+
+      {/* Navigation Arrows (visible on hover) */}
+      {images.length > 1 && (
+        <>
+          <button
+            onClick={handlePrev}
+            className="absolute left-3 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-black/40 text-white hover:bg-gold hover:text-primary-foreground flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all duration-300 z-10"
+            aria-label="Previous image"
+          >
+            <ChevronLeft size={18} />
+          </button>
+          <button
+            onClick={handleNext}
+            className="absolute right-3 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-black/40 text-white hover:bg-gold hover:text-primary-foreground flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all duration-300 z-10"
+            aria-label="Next image"
+          >
+            <ChevronRight size={18} />
+          </button>
+        </>
+      )}
+
+      {/* Dot Indicators */}
+      {images.length > 1 && (
+        <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex gap-1.5 z-10">
+          {images.map((_, idx) => (
+            <button
+              key={idx}
+              onClick={(e) => handleDot(e, idx)}
+              className={`w-2 h-2 rounded-full transition-all duration-300 ${
+                idx === currentIndex ? "bg-gold w-4" : "bg-white/50 hover:bg-white"
+              }`}
+              aria-label={`Go to slide ${idx + 1}`}
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
 
 function RoomsPage() {
   return (
@@ -38,15 +136,8 @@ function RoomsPage() {
               key={room.slug}
               className={`grid lg:grid-cols-2 gap-10 items-center ${i % 2 === 1 ? "lg:[&>*:first-child]:order-2" : ""}`}
             >
-              <Link to="/rooms/$slug" params={{ slug: room.slug }} className="block overflow-hidden group">
-                <img
-                  src={room.image}
-                  alt={room.name}
-                  loading="lazy"
-                  width={1280}
-                  height={832}
-                  className="w-full aspect-[4/3] object-cover group-hover:scale-105 transition-transform duration-700"
-                />
+              <Link to="/rooms/$slug" params={{ slug: room.slug }} className="block overflow-hidden">
+                <RoomCardSlider gallery={room.gallery} image={room.image} name={room.name} />
               </Link>
               <div>
                 <p className="text-gold text-xs uppercase tracking-[0.4em] mb-3">{room.tagline}</p>

@@ -7,11 +7,12 @@ import {
 } from "@/functions/adminAuth";
 import { cancelBooking } from "@/functions/cancelBooking";
 import { OrdersRequestsView } from "@/components/OrdersRequestsView";
-import { SpaManagementView } from "@/components/SpaManagementView";
+import { SalonManagementView } from "@/components/SalonManagementView";
 import { MenuManagementView } from "@/components/MenuManagementView";
 import { ChatManagementView } from "@/components/ChatManagementView";
 import { SystemSettingsView } from "@/components/SystemSettingsView";
 import { StaffProfileView } from "@/components/StaffProfileView";
+import { BarPosView } from "@/components/BarPosView";
 import { fetchOrdersAndRequests, patchItemStatus } from "@/lib/orders-api-client";
 import {
   formatOrderItemsSummary,
@@ -25,7 +26,7 @@ import {
   LogOut, Moon, Sun, Users, Hotel, TrendingUp,
   CheckCircle, XCircle, Clock, Search, RefreshCw,
   BedDouble, Sparkles, AlertCircle, ChevronDown, ChevronRight, X,
-  LayoutDashboard, Calendar, Plus, Menu, Bell, MessageCircle, DollarSign, History, BarChart3, Settings
+  LayoutDashboard, Calendar, Plus, Menu, Bell, MessageCircle, DollarSign, History, BarChart3, Settings, ShieldCheck, ShieldAlert
 } from "lucide-react";
 import logo from "@/assets/logo.png";
 import lobbyImage from "@/assets/lobby.jpg";
@@ -207,11 +208,11 @@ body { margin: 0; padding: 0; font-family: Arial, sans-serif; font-size: 11px; c
 
 type AdminTab =
   | "dashboard" | "bookings" | "rooms" | "reports" | "room-rates" | "guest-history"
-  | "occupancy-forecast" | "orders-requests" | "spa-management" | "menu-management" | "chat-management" | "settings";
+  | "occupancy-forecast" | "orders-requests" | "salon-management" | "menu-management" | "chat-management" | "settings" | "bar-pos";
 
 const PMS_ROUTE_MAP: Partial<Record<AdminTab, string>> = {
   "orders-requests": "/orders-requests",
-  "spa-management": "/spa-management",
+  "salon-management": "/salon-management",
   "menu-management": "/menu-management",
 };
 
@@ -219,28 +220,51 @@ export function AdminPage({ initialTab }: { initialTab?: AdminTab } = {}) {
   const router = useRouter();
   const [theme, setTheme] = useState<"dark" | "light">("dark");
   const [token, setToken] = useState<string | null>(null);
+  const [privacyMode, setPrivacyMode] = useState(false);
+
+  const renderNaira = (amount: number, customStyle?: React.CSSProperties) => {
+    return (
+      <span style={{
+        filter: privacyMode ? "blur(5px)" : "none",
+        transition: "filter 0.2s ease",
+        display: "inline-block",
+        ...customStyle
+      }}>
+        {formatNaira(amount)}
+      </span>
+    );
+  };
   const [staffName, setStaffName] = useState("");
   const [pin, setPin] = useState("");
   const [loginError, setLoginError] = useState("");
   const [loginLoading, setLoginLoading] = useState(false);
   const [stats, setStats] = useState<any>(null);
+  const [systemSettings, setSystemSettings] = useState<any>(null);
   const [loading, setLoading] = useState(false);
-  const [activeTab, setActiveTab] = useState<AdminTab>(initialTab ?? "dashboard");
+  const [activeTab, setActiveTab] = useState<AdminTab>(() => {
+    if (initialTab) return initialTab;
+    if (typeof window !== "undefined") {
+      const saved = sessionStorage.getItem("pms_active_tab") as AdminTab | null;
+      if (saved) return saved;
+    }
+    return "dashboard";
+  });
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   const isOrdersPage = pathname === "/orders-requests" || activeTab === "orders-requests";
-  const isSpaPage = pathname === "/spa-management" || activeTab === "spa-management";
+  const isSalonPage = pathname === "/salon-management" || activeTab === "salon-management";
   const isMenuPage = pathname === "/menu-management" || activeTab === "menu-management";
   const isChatPage = pathname === "/chat-management" || activeTab === "chat-management";
-  const isPmsSubPage = isOrdersPage || isSpaPage || isMenuPage || isChatPage;
+  const isPmsSubPage = isOrdersPage || isSalonPage || isMenuPage || isChatPage;
 
   const navigateToTab = (tab: AdminTab) => {
     setActiveTab(tab);
+    sessionStorage.setItem("pms_active_tab", tab);
     setShowStaffManagement(false);
     if (window.innerWidth < 768) setMobileSidebarOpen(false);
     const targetRoute = PMS_ROUTE_MAP[tab];
     if (targetRoute && pathname !== targetRoute) {
       router.navigate({ to: targetRoute });
-    } else if (!targetRoute && (pathname === "/orders-requests" || pathname === "/spa-management" || pathname === "/menu-management" || pathname === "/chat-management")) {
+    } else if (!targetRoute && (pathname === "/orders-requests" || pathname === "/salon-management" || pathname === "/menu-management" || pathname === "/chat-management")) {
       router.navigate({ to: "/hotel-admin" });
     }
   };
@@ -261,7 +285,7 @@ export function AdminPage({ initialTab }: { initialTab?: AdminTab } = {}) {
   const [newStaffFullName, setNewStaffFullName] = useState("");
   const [newStaffUsername, setNewStaffUsername] = useState("");
   const [newStaffPassword, setNewStaffPassword] = useState("");
-  const [newStaffRole, setNewStaffRole] = useState<"front-desk" | "accountant" | "manager" | "admin" | "kitchen" | "housekeeping" | "spa">("front-desk");
+  const [newStaffRole, setNewStaffRole] = useState<"front-desk" | "accountant" | "manager" | "admin" | "kitchen" | "housekeeping" | "spa" | "bar_staff" | "pos_user">("front-desk");
   const [newStaffLoading, setNewStaffLoading] = useState(false);
   const [staffList, setStaffList] = useState<any[]>([]);
   const [staffListLoading, setStaffListLoading] = useState(false);
@@ -275,6 +299,99 @@ export function AdminPage({ initialTab }: { initialTab?: AdminTab } = {}) {
   const [activityLoading, setActivityLoading] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState<any>(null);
   const [deleteLoading, setDeleteLoading] = useState(false);
+
+  // 10-Second Sidebar Auto-Fold Trigger
+  useEffect(() => {
+    if (token && sidebarExpanded) {
+      const timer = setTimeout(() => {
+        setSidebarExpanded(false);
+      }, 10000);
+      return () => clearTimeout(timer);
+    }
+  }, [token]);
+
+  // User/Admin live UI preferences states
+  const [toggleSystemActivities, setToggleSystemActivities] = useState(() => {
+    if (typeof window !== "undefined") {
+      const v = localStorage.getItem("pms_toggle_system_activities");
+      return v !== null ? v === "true" : true;
+    }
+    return true;
+  });
+  const [dashboardCardDensity, setDashboardCardDensity] = useState(() => {
+    if (typeof window !== "undefined") {
+      return localStorage.getItem("pms_dashboard_card_density") || "glance";
+    }
+    return "glance";
+  });
+  const [chatNotificationSound, setChatNotificationSound] = useState(() => {
+    if (typeof window !== "undefined") {
+      const v = localStorage.getItem("pms_chat_notification_sound");
+      return v !== null ? v === "true" : true;
+    }
+    return true;
+  });
+  const [timeFormat, setTimeFormat] = useState(() => {
+    if (typeof window !== "undefined") {
+      return localStorage.getItem("pms_time_format") || "12h";
+    }
+    return "12h";
+  });
+  const [settingsSection, setSettingsSection] = useState<'profile' | 'security' | 'display' | 'system'>('profile');
+
+  const getUsername = () => {
+    try {
+      const saved = localStorage.getItem("remeritona_staff_session");
+      if (saved) return JSON.parse(saved).username || "admin";
+    } catch {}
+    return "admin";
+  };
+
+  // Sync live preferences from D1 database systemSettings
+  useEffect(() => {
+    if (systemSettings) {
+      const currentUsername = getUsername();
+      
+      // Theme preference sync
+      const dbTheme = systemSettings[`user_pref_${currentUsername}_theme`] as "dark" | "light" | undefined;
+      if (dbTheme && dbTheme !== theme) {
+        setTheme(dbTheme);
+        localStorage.setItem(THEME_KEY, dbTheme);
+      }
+
+      // Time format sync
+      const dbTimeFormat = systemSettings[`user_pref_${currentUsername}_time_format`] as "12h" | "24h" | undefined;
+      if (dbTimeFormat && dbTimeFormat !== timeFormat) {
+        setTimeFormat(dbTimeFormat);
+        localStorage.setItem("pms_time_format", dbTimeFormat);
+      }
+
+      // Admin options sync
+      const dbShowActivities = systemSettings["admin_show_activities"];
+      if (dbShowActivities !== undefined) {
+        const show = dbShowActivities === true || dbShowActivities === 1 || dbShowActivities === "true" || dbShowActivities === "1";
+        if (show !== toggleSystemActivities) {
+          setToggleSystemActivities(show);
+          localStorage.setItem("pms_toggle_system_activities", String(show));
+        }
+      }
+
+      const dbCardDensity = systemSettings["admin_dashboard_density"] as string | undefined;
+      if (dbCardDensity && dbCardDensity !== dashboardCardDensity) {
+        setDashboardCardDensity(dbCardDensity);
+        localStorage.setItem("pms_dashboard_card_density", dbCardDensity);
+      }
+
+      const dbChatSound = systemSettings["admin_chat_sound"];
+      if (dbChatSound !== undefined) {
+        const sound = dbChatSound === true || dbChatSound === 1 || dbChatSound === "true" || dbChatSound === "1";
+        if (sound !== chatNotificationSound) {
+          setChatNotificationSound(sound);
+          localStorage.setItem("pms_chat_notification_sound", String(sound));
+        }
+      }
+    }
+  }, [systemSettings]);
 
   // Reports tab state (admin/manager/accountant only)
   const [reportDateFrom, setReportDateFrom] = useState("");
@@ -388,7 +505,6 @@ export function AdminPage({ initialTab }: { initialTab?: AdminTab } = {}) {
   // Notifications panel state
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [notificationItems, setNotificationItems] = useState<any[]>([]);
-  const [systemSettings, setSystemSettings] = useState<any>(null);
   const [notificationPendingCount, setNotificationPendingCount] = useState(0);
   const lastCountRef = useRef<number>(0);
   const isFirstPollRef = useRef<boolean>(true);
@@ -475,6 +591,19 @@ export function AdminPage({ initialTab }: { initialTab?: AdminTab } = {}) {
       }
     }
   }, []);
+
+  useEffect(() => {
+    if (staffRole === "kitchen" || staffRole === "housekeeping") {
+      setActiveTab("orders-requests");
+      sessionStorage.setItem("pms_active_tab", "orders-requests");
+    } else if (staffRole === "salon") {
+      setActiveTab("salon-management");
+      sessionStorage.setItem("pms_active_tab", "salon-management");
+    } else if (staffRole === "bar_staff" || staffRole === "bar" || staffRole === "pos_user") {
+      setActiveTab("bar-pos");
+      sessionStorage.setItem("pms_active_tab", "bar-pos");
+    }
+  }, [staffRole]);
 
   // Hide Tidio chat widget (and late-injected nodes) in PMS
   useEffect(() => {
@@ -1248,6 +1377,7 @@ export function AdminPage({ initialTab }: { initialTab?: AdminTab } = {}) {
   const handleLogout = () => {
     localStorage.removeItem(TOKEN_KEY);
     localStorage.removeItem("remeritona_staff_session");
+    sessionStorage.removeItem("pms_active_tab");
     setToken(null);
     setStats(null);
     setStaffName("");
@@ -2002,6 +2132,24 @@ export function AdminPage({ initialTab }: { initialTab?: AdminTab } = {}) {
 
         {/* Right Side: Notifications + Theme + Profile */}
         <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+          {/* Privacy Mode Toggle */}
+          <button
+            onClick={() => setPrivacyMode(!privacyMode)}
+            style={{
+              background: "none", border: `1px solid ${colors.border}`, cursor: "pointer",
+              color: privacyMode ? colors.gold : colors.textMuted,
+              padding: "6px 12px", borderRadius: 6,
+              display: "flex", alignItems: "center", gap: 6,
+              fontSize: 11, fontWeight: 600,
+              textTransform: "uppercase", letterSpacing: "0.05em",
+              transition: "all 0.2s",
+              marginRight: 8
+            }}
+          >
+            <ShieldAlert size={14} />
+            <span>{privacyMode ? "Privacy On" : "Privacy Off"}</span>
+          </button>
+
           {/* Notification Bell */}
           <button onClick={() => setNotificationsOpen(!notificationsOpen)} style={{
             background: "none", border: "none", cursor: "pointer",
@@ -2106,14 +2254,16 @@ export function AdminPage({ initialTab }: { initialTab?: AdminTab } = {}) {
           {/* Navigation Groups */}
           <div style={{ padding: "8px 0" }}>
           {/* FRONT DESK Group */}
-          {staffRole !== "spa" && (
+          {(staffRole === "admin" || staffRole === "manager" || staffRole === "front-desk" || staffRole === "accountant") && (
             <div>
-              <button onClick={() => {
+              <button onClick={(e) => {
+                e.stopPropagation();
+                e.preventDefault();
                 const newGroups = new Set(expandedGroups);
                 if (newGroups.has("front-desk")) newGroups.delete("front-desk");
                 else newGroups.add("front-desk");
                 setExpandedGroups(newGroups);
-              }} style={{
+              }} type="button" style={{
                 background: "none", border: "none", cursor: "pointer",
                 padding: sidebarExpanded ? "8px 12px" : "8px",
                 width: "100%",
@@ -2209,7 +2359,7 @@ export function AdminPage({ initialTab }: { initialTab?: AdminTab } = {}) {
                     </button>
                   )}
                   {/* Orders & Requests (kitchen, housekeeping, front-desk, admin, manager) */}
-                  {staffRole !== "accountant" && staffRole !== "spa" && (
+                  {staffRole !== "accountant" && (
                     <Link
                       to="/orders-requests"
                       onClick={() => navigateToTab("orders-requests")}
@@ -2229,7 +2379,7 @@ export function AdminPage({ initialTab }: { initialTab?: AdminTab } = {}) {
                     </Link>
                   )}
                   {/* Guest Messages (not for accountant, kitchen, housekeeping, spa) */}
-                  {staffRole !== "accountant" && staffRole !== "kitchen" && staffRole !== "housekeeping" && staffRole !== "spa" && (
+                  {staffRole !== "accountant" && (
                     <button
                       onClick={() => navigateToTab("chat-management")}
                       style={{
@@ -2253,14 +2403,16 @@ export function AdminPage({ initialTab }: { initialTab?: AdminTab } = {}) {
           )}
 
           {/* ROOMS Group (housekeeping, admin, manager, front-desk only) */}
-          {staffRole !== "accountant" && staffRole !== "kitchen" && staffRole !== "spa" && (
+          {(staffRole === "admin" || staffRole === "manager" || staffRole === "front-desk" || staffRole === "housekeeping") && (
             <div>
-              <button onClick={() => {
+              <button onClick={(e) => {
+                e.stopPropagation();
+                e.preventDefault();
                 const newGroups = new Set(expandedGroups);
                 if (newGroups.has("rooms")) newGroups.delete("rooms");
                 else newGroups.add("rooms");
                 setExpandedGroups(newGroups);
-              }} style={{
+              }} type="button" style={{
                 background: "none", border: "none", cursor: "pointer",
                 padding: sidebarExpanded ? "8px 12px" : "8px", width: "100%",
                 display: "flex", alignItems: "center", justifyContent: sidebarExpanded ? "space-between" : "center",
@@ -2305,12 +2457,14 @@ export function AdminPage({ initialTab }: { initialTab?: AdminTab } = {}) {
           {/* SERVICES Group (spa, admin, manager, front-desk only) */}
           {staffRole !== "accountant" && staffRole !== "kitchen" && staffRole !== "housekeeping" && (
             <div>
-              <button onClick={() => {
+              <button onClick={(e) => {
+                e.stopPropagation();
+                e.preventDefault();
                 const newGroups = new Set(expandedGroups);
                 if (newGroups.has("services")) newGroups.delete("services");
                 else newGroups.add("services");
                 setExpandedGroups(newGroups);
-              }} style={{
+              }} type="button" style={{
                 background: "none", border: "none", cursor: "pointer",
                 padding: sidebarExpanded ? "8px 12px" : "8px", width: "100%",
                 display: "flex", alignItems: "center", justifyContent: sidebarExpanded ? "space-between" : "center",
@@ -2322,23 +2476,25 @@ export function AdminPage({ initialTab }: { initialTab?: AdminTab } = {}) {
               </button>
               {expandedGroups.has("services") && (
                 <div style={{ marginLeft: sidebarExpanded ? 8 : 0 }}>
-                  <Link
-                    to="/spa-management"
-                    onClick={() => navigateToTab("spa-management")}
-                    style={{
-                      display: "flex", alignItems: "center", justifyContent: sidebarExpanded ? "flex-start" : "center", gap: (sidebarExpanded ? 8 : 0),
-                      padding: sidebarExpanded ? "8px 12px" : "12px", width: "100%",
-                      textDecoration: "none",
-                      color: isSpaPage ? colors.gold : colors.textMuted,
-                      fontSize: 12,
-                      borderLeft: isSpaPage ? `3px solid ${colors.gold}` : "3px solid transparent",
-                      paddingLeft: isSpaPage ? 9 : 12,
-                      boxSizing: "border-box",
-                    }}
-                  >
-                    <span style={{ fontSize: 16, lineHeight: 1 }}>💆</span>
-                    {sidebarExpanded && <span>Spa & Wellness</span>}
-                  </Link>
+                  {staffRole !== "bar_staff" && staffRole !== "pos_user" && (
+                    <Link
+                      to="/salon-management"
+                      onClick={() => navigateToTab("salon-management")}
+                      style={{
+                        display: "flex", alignItems: "center", justifyContent: sidebarExpanded ? "flex-start" : "center", gap: (sidebarExpanded ? 8 : 0),
+                        padding: sidebarExpanded ? "8px 12px" : "12px", width: "100%",
+                        textDecoration: "none",
+                        color: isSalonPage ? colors.gold : colors.textMuted,
+                        fontSize: 12,
+                        borderLeft: isSalonPage ? `3px solid ${colors.gold}` : "3px solid transparent",
+                        paddingLeft: isSalonPage ? 9 : 12,
+                        boxSizing: "border-box",
+                      }}
+                    >
+                      <span style={{ fontSize: 16, lineHeight: 1 }}>💆</span>
+                      {sidebarExpanded && <span>Spa & Wellness</span>}
+                    </Link>
+                  )}
                   {canManageMenu && (
                     <Link
                       to="/menu-management"
@@ -2358,6 +2514,24 @@ export function AdminPage({ initialTab }: { initialTab?: AdminTab } = {}) {
                       {sidebarExpanded && <span>Menu & Pricing</span>}
                     </Link>
                   )}
+                  {(staffRole === "admin" || staffRole === "manager" || staffRole === "bar_staff" || staffRole === "bar" || staffRole === "pos_user") && (
+                    <button
+                      onClick={() => navigateToTab("bar-pos")}
+                      style={{
+                        display: "flex", alignItems: "center", justifyContent: sidebarExpanded ? "flex-start" : "center", gap: (sidebarExpanded ? 8 : 0),
+                        padding: sidebarExpanded ? "8px 12px" : "12px", width: "100%",
+                        background: "none", border: "none", cursor: "pointer",
+                        color: activeTab === "bar-pos" ? colors.gold : colors.textMuted,
+                        fontSize: 12,
+                        borderLeft: activeTab === "bar-pos" ? `3px solid ${colors.gold}` : "3px solid transparent",
+                        paddingLeft: activeTab === "bar-pos" ? 9 : 12,
+                        boxSizing: "border-box",
+                      }}
+                    >
+                      <span style={{ fontSize: 16, lineHeight: 1 }}>🍸</span>
+                      {sidebarExpanded && <span>Bar & POS Check</span>}
+                    </button>
+                  )}
                 </div>
               )}
             </div>
@@ -2366,12 +2540,14 @@ export function AdminPage({ initialTab }: { initialTab?: AdminTab } = {}) {
           {/* FINANCE Group (admin, manager, accountant) */}
           {(staffRole === "admin" || staffRole === "manager" || staffRole === "accountant") && (
             <div>
-              <button onClick={() => {
+              <button onClick={(e) => {
+                e.stopPropagation();
+                e.preventDefault();
                 const newGroups = new Set(expandedGroups);
                 if (newGroups.has("finance")) newGroups.delete("finance");
                 else newGroups.add("finance");
                 setExpandedGroups(newGroups);
-              }} style={{
+              }} type="button" style={{
                 background: "none", border: "none", cursor: "pointer",
                 padding: sidebarExpanded ? "8px 12px" : "8px", width: "100%",
                 display: "flex", alignItems: "center", justifyContent: sidebarExpanded ? "space-between" : "center",
@@ -2413,12 +2589,14 @@ export function AdminPage({ initialTab }: { initialTab?: AdminTab } = {}) {
           {/* STAFF Group (admin, manager only) */}
           {(staffRole === "admin" || staffRole === "manager") && (
             <div>
-              <button onClick={() => {
+              <button onClick={(e) => {
+                e.stopPropagation();
+                e.preventDefault();
                 const newGroups = new Set(expandedGroups);
                 if (newGroups.has("staff")) newGroups.delete("staff");
                 else newGroups.add("staff");
                 setExpandedGroups(newGroups);
-              }} style={{
+              }} type="button" style={{
                 background: "none", border: "none", cursor: "pointer",
                 padding: sidebarExpanded ? "8px 12px" : "8px", width: "100%",
                 display: "flex", alignItems: "center", justifyContent: sidebarExpanded ? "space-between" : "center",
@@ -2449,12 +2627,14 @@ export function AdminPage({ initialTab }: { initialTab?: AdminTab } = {}) {
           {/* SETTINGS Group (visible to all logged-in staff) */}
           {staffRole && staffRole !== "" && (
             <div>
-              <button onClick={() => {
+              <button onClick={(e) => {
+                e.stopPropagation();
+                e.preventDefault();
                 const newGroups = new Set(expandedGroups);
                 if (newGroups.has("settings")) newGroups.delete("settings");
                 else newGroups.add("settings");
                 setExpandedGroups(newGroups);
-              }} style={{
+              }} type="button" style={{
                 background: "none", border: "none", cursor: "pointer",
                 padding: sidebarExpanded ? "8px 12px" : "8px", width: "100%",
                 display: "flex", alignItems: "center", justifyContent: sidebarExpanded ? "space-between" : "center",
@@ -2516,7 +2696,7 @@ export function AdminPage({ initialTab }: { initialTab?: AdminTab } = {}) {
         )}
 
         {/* ===== ORDERS & REQUESTS ===== */}
-        {isOrdersPage && staffRole !== "accountant" && token && (
+        {isOrdersPage && staffRole !== "accountant" && staffRole !== "bar_staff" && staffRole !== "bar" && staffRole !== "pos_user" && token && (
           <OrdersRequestsView token={token} colors={colors} onToast={showToast} staffRole={staffRole} />
         )}
 
@@ -2527,11 +2707,11 @@ export function AdminPage({ initialTab }: { initialTab?: AdminTab } = {}) {
         )}
 
         {/* ===== SPA & WELLNESS ===== */}
-        {isSpaPage && staffRole !== "accountant" && token && (
-          <SpaManagementView token={token} colors={colors} onToast={showToast} />
+        {isSalonPage && staffRole !== "accountant" && token && (
+          <SalonManagementView token={token} colors={colors} onToast={showToast} />
         )}
 
-        {isSpaPage && staffRole === "accountant" && (
+        {isSalonPage && staffRole === "accountant" && (
           <p style={{ color: colors.textMuted, textAlign: "center", padding: 40 }}>
             You do not have access to Spa & Wellness.
           </p>
@@ -2553,24 +2733,122 @@ export function AdminPage({ initialTab }: { initialTab?: AdminTab } = {}) {
           <ChatManagementView token={token} colors={colors} onToast={showToast} />
         )}
 
-        {activeTab === "chat-management" && (staffRole === "accountant" || staffRole === "kitchen" || staffRole === "housekeeping" || staffRole === "spa") && (
+        {activeTab === "chat-management" && (staffRole === "accountant" || staffRole === "kitchen" || staffRole === "housekeeping" || staffRole === "salon") && (
           <p style={{ color: colors.textMuted, textAlign: "center", padding: 40 }}>
             You do not have access to Guest Messages.
           </p>
         )}
 
-        {/* ===== SYSTEM SETTINGS ===== */}
-        {activeTab === "settings" && staffRole === "admin" && token && (
-          <div>
-            <SystemSettingsView token={token} colors={colors} onToast={showToast} initialSettings={systemSettings} />
-            <div style={{ borderTop: `1px solid ${colors.border}`, margin: "40px 0" }} />
-            <StaffProfileView token={token} colors={colors} onToast={showToast} />
+        {/* ===== SETTINGS SPLIT-PANE LAYOUT ===== */}
+        {activeTab === "settings" && token && (
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 3fr", gap: 24, background: colors.surface, border: `1px solid ${colors.border}`, borderRadius: 12, overflow: "hidden", minHeight: 600 }}>
+            {/* Left Pane (25% Width) */}
+            <div style={{ background: colors.surface2, borderRight: `1px solid ${colors.border}`, padding: "24px 16px", display: "flex", flexDirection: "column", gap: 8 }}>
+              <button
+                type="button"
+                onClick={() => setSettingsSection('profile')}
+                style={{
+                  background: settingsSection === 'profile' ? colors.gold : "none",
+                  color: settingsSection === 'profile' ? "#0a0a0a" : colors.text,
+                  border: "none", borderRadius: 6, padding: "12px 16px", fontSize: 13, fontWeight: 600,
+                  textAlign: "left", cursor: "pointer", display: "flex", alignItems: "center", gap: 10
+                }}
+              >
+                <Users size={16} /> My Profile
+              </button>
+              
+              <button
+                type="button"
+                onClick={() => setSettingsSection('security')}
+                style={{
+                  background: settingsSection === 'security' ? colors.gold : "none",
+                  color: settingsSection === 'security' ? "#0a0a0a" : colors.text,
+                  border: "none", borderRadius: 6, padding: "12px 16px", fontSize: 13, fontWeight: 600,
+                  textAlign: "left", cursor: "pointer", display: "flex", alignItems: "center", gap: 10
+                }}
+              >
+                <ShieldCheck size={16} /> Security & Password
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setSettingsSection('display')}
+                style={{
+                  background: settingsSection === 'display' ? colors.gold : "none",
+                  color: settingsSection === 'display' ? "#0a0a0a" : colors.text,
+                  border: "none", borderRadius: 6, padding: "12px 16px", fontSize: 13, fontWeight: 600,
+                  textAlign: "left", cursor: "pointer", display: "flex", alignItems: "center", gap: 10
+                }}
+              >
+                <Sun size={16} /> Display Preferences
+              </button>
+
+              {(staffRole === 'admin' || staffRole === 'manager') && (
+                <button
+                  type="button"
+                  onClick={() => setSettingsSection('system')}
+                  style={{
+                    background: settingsSection === 'system' ? colors.gold : "none",
+                    color: settingsSection === 'system' ? "#0a0a0a" : colors.text,
+                    border: "none", borderRadius: 6, padding: "12px 16px", fontSize: 13, fontWeight: 600,
+                    textAlign: "left", cursor: "pointer", display: "flex", alignItems: "center", gap: 10
+                  }}
+                >
+                  <Settings size={16} /> System Settings
+                </button>
+              )}
+            </div>
+
+            {/* Right Pane (75% Width) */}
+            <div style={{ padding: 32, overflowY: "auto" }}>
+              {settingsSection === 'profile' && (
+                <div style={{ maxWidth: 600 }}>
+                  <h2 style={{ color: colors.gold, fontSize: 20, fontWeight: 400, letterSpacing: "0.05em", margin: "0 0 8px" }}>
+                    My Profile
+                  </h2>
+                  <p style={{ color: colors.textMuted, fontSize: 13, marginBottom: 24 }}>
+                    Your PMS staff profile and credentials overview.
+                  </p>
+                  
+                  <div style={{ display: "flex", flexDirection: "column", gap: 16, background: colors.surface2, padding: 24, borderRadius: 8, border: `1px solid ${colors.border}` }}>
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr 2fr", gap: 16, borderBottom: `1px solid ${colors.border}33`, paddingBottom: 12 }}>
+                      <span style={{ color: colors.textMuted, fontSize: 11, textTransform: "uppercase" }}>Full Name</span>
+                      <span style={{ color: colors.text, fontSize: 14, fontWeight: 500 }}>{staffName}</span>
+                    </div>
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr 2fr", gap: 16, borderBottom: `1px solid ${colors.border}33`, paddingBottom: 12 }}>
+                      <span style={{ color: colors.textMuted, fontSize: 11, textTransform: "uppercase" }}>Username</span>
+                      <span style={{ color: colors.text, fontSize: 14, fontWeight: 500 }}>{getUsername()}</span>
+                    </div>
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr 2fr", gap: 16, borderBottom: `1px solid ${colors.border}33`, paddingBottom: 12 }}>
+                      <span style={{ color: colors.textMuted, fontSize: 11, textTransform: "uppercase" }}>Role / Designation</span>
+                      <span style={{ color: colors.gold, fontSize: 14, fontWeight: 600, textTransform: "capitalize" }}>{staffRole.replace(/-/g, " ")}</span>
+                    </div>
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr 2fr", gap: 16 }}>
+                      <span style={{ color: colors.textMuted, fontSize: 11, textTransform: "uppercase" }}>Account Status</span>
+                      <span style={{ color: "#22c55e", fontSize: 14, fontWeight: 600 }}>Active & Approved</span>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {settingsSection === 'security' && (
+                <StaffProfileView token={token} colors={colors} onToast={showToast} onlySecurity={true} />
+              )}
+
+              {settingsSection === 'display' && (
+                <StaffProfileView token={token} colors={colors} onToast={showToast} onlyDisplay={true} username={getUsername()} />
+              )}
+
+              {settingsSection === 'system' && (
+                <SystemSettingsView token={token} colors={colors} onToast={showToast} initialSettings={systemSettings} />
+              )}
+            </div>
           </div>
         )}
 
-        {/* ===== STAFF PROFILE ===== */}
-        {activeTab === "settings" && staffRole !== "admin" && token && (
-          <StaffProfileView token={token} colors={colors} onToast={showToast} />
+        {/* ===== BAR & POS CHECK ===== */}
+        {activeTab === "bar-pos" && token && (
+          <BarPosView token={token} colors={colors} onToast={showToast} />
         )}
 
         {/* ===== STAFF MANAGEMENT TAB ===== */}
@@ -2653,6 +2931,7 @@ export function AdminPage({ initialTab }: { initialTab?: AdminTab } = {}) {
                       <option value="kitchen">Kitchen</option>
                       <option value="housekeeping">Housekeeping</option>
                       <option value="spa">Spa</option>
+                      <option value="bar_staff">Bar Staff</option>
                       {staffRole === "admin" && <option value="manager">Manager</option>}
                       {staffRole === "admin" && <option value="admin">Admin</option>}
                     </select>
@@ -2932,7 +3211,7 @@ export function AdminPage({ initialTab }: { initialTab?: AdminTab } = {}) {
         )}
 
         {/* ===== DASHBOARD TAB ===== */}
-        {!loading && !isPmsSubPage && activeTab === "dashboard" && !showStaffManagement && stats && (
+        {!loading && !isPmsSubPage && activeTab === "dashboard" && !showStaffManagement && stats && staffRole !== "bar_staff" && staffRole !== "pos_user" && (
           <div style={{
             background: colors.surface,
             border: `1px solid ${colors.border}`,
@@ -2942,118 +3221,139 @@ export function AdminPage({ initialTab }: { initialTab?: AdminTab } = {}) {
             boxShadow: "0 8px 32px rgba(0, 0, 0, 0.1)"
           }}>
             {/* Top Layout Grid: Metrics Cards (Left) + Shift Summary (Right) */}
-            <div style={{ display: "grid", gridTemplateColumns: "2.5fr 1fr", gap: 20, marginBottom: 32 }}>
-              {/* Stats Cards */}
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: 20 }}>
-                {[
-                  {
-                    label: "Today's Arrivals",
-                    value: `${todayArrivals}`,
-                    icon: (
-                      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                        <path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
-                        <circle cx="8.5" cy="7" r="4" />
-                        <line x1="20" y1="8" x2="20" y2="14" />
-                        <line x1="23" y1="11" x2="17" y2="11" />
-                      </svg>
-                    ),
-                    color: "#3b82f6",
-                    gradient: "linear-gradient(135deg, rgba(59, 130, 246, 0.15) 0%, rgba(59, 130, 246, 0.05) 100%)"
-                  },
-                  {
-                    label: "Today's Departures",
-                    value: `${todayDepartures}`,
-                    icon: (
-                      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                        <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
-                        <polyline points="16 17 21 12 16 7" />
-                        <line x1="21" y1="12" x2="9" y2="12" />
-                      </svg>
-                    ),
-                    color: "#22c55e",
-                    gradient: "linear-gradient(135deg, rgba(34, 197, 94, 0.15) 0%, rgba(34, 197, 94, 0.05) 100%)"
-                  },
-                  {
-                    label: "Occupied Rooms",
-                    value: `${occupiedRooms} / ${stats.roomStatuses?.length ?? 96}`,
-                    icon: (
-                      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                        <path d="M2 4v16" />
-                        <path d="M2 8h18a2 2 0 0 1 2 2v10" />
-                        <path d="M2 17h20" />
-                        <path d="M6 8v9" />
-                      </svg>
-                    ),
-                    color: "#ef4444",
-                    gradient: "linear-gradient(135deg, rgba(239, 68, 68, 0.15) 0%, rgba(239, 68, 68, 0.05) 100%)"
-                  },
-                  ...(staffRole !== "front-desk" ? [{
-                    label: "Monthly Revenue",
-                    value: formatNaira(stats.monthlyRevenue ?? 0),
-                    icon: (
-                      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                        <line x1="12" y1="1" x2="12" y2="23" />
-                        <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
-                      </svg>
-                    ),
-                    color: colors.gold,
-                    gradient: `linear-gradient(135deg, rgba(212, 175, 55, 0.2) 0%, rgba(212, 175, 55, 0.08) 100%)`
-                  }] : []),
-                ].map(card => (
-                  <div key={card.label} style={{
-                    background: card.gradient,
-                    border: `1px solid ${card.color}30`,
-                    padding: 24,
-                    display: "flex",
-                    flexDirection: "column",
-                    gap: 16,
-                    borderRadius: 8,
-                    backdropFilter: "blur(10px)",
-                    boxShadow: `0 4px 20px ${card.color}15`,
-                    transition: "all 0.3s ease"
-                  }}>
-                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                      <span style={{
-                        fontSize: 10,
-                        color: colors.textMuted,
-                        letterSpacing: "0.2em",
-                        textTransform: "uppercase",
-                        fontWeight: 600
-                      }}>{card.label}</span>
-                      <span style={{ color: card.color, opacity: 0.9 }}>{card.icon}</span>
-                    </div>
-                    <span style={{
-                      fontSize: 32,
-                      color: card.color,
-                      fontWeight: 300,
-                      letterSpacing: "-0.02em",
-                      fontFamily: "Georgia, serif"
-                    }}>{card.value}</span>
-                  </div>
-                ))}
-              </div>
+            {(staffRole === 'admin' || staffRole === 'manager' || staffRole === 'front-desk' || staffRole === 'accountant') && (
+              <div style={{ display: "grid", gridTemplateColumns: "2.5fr 1fr", gap: 20, marginBottom: 32 }}>
+                {/* Stats Cards */}
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: 20 }}>
+                  {[
+                    {
+                      label: "Today's Arrivals",
+                      value: `${todayArrivals}`,
+                      icon: (
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                          <path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+                          <circle cx="8.5" cy="7" r="4" />
+                          <line x1="20" y1="8" x2="20" y2="14" />
+                          <line x1="23" y1="11" x2="17" y2="11" />
+                        </svg>
+                      ),
+                      color: "#3b82f6",
+                      gradient: "linear-gradient(135deg, rgba(59, 130, 246, 0.15) 0%, rgba(59, 130, 246, 0.05) 100%)"
+                    },
+                    {
+                      label: "Today's Departures",
+                      value: `${todayDepartures}`,
+                      icon: (
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                          <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+                          <polyline points="16 17 21 12 16 7" />
+                          <line x1="21" y1="12" x2="9" y2="12" />
+                        </svg>
+                      ),
+                      color: "#22c55e",
+                      gradient: "linear-gradient(135deg, rgba(34, 197, 94, 0.15) 0%, rgba(34, 197, 94, 0.05) 100%)"
+                    },
+                    {
+                      label: "Occupied Rooms",
+                      value: `${occupiedRooms} / ${stats.roomStatuses?.length ?? 96}`,
+                      icon: (
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                          <path d="M2 4v16" />
+                          <path d="M2 8h18a2 2 0 0 1 2 2v10" />
+                          <path d="M2 17h20" />
+                          <path d="M6 8v9" />
+                        </svg>
+                      ),
+                      color: "#ef4444",
+                      gradient: "linear-gradient(135deg, rgba(239, 68, 68, 0.15) 0%, rgba(239, 68, 68, 0.05) 100%)"
+                    },
+                    ...(staffRole !== "front-desk" ? [{
+                      label: "Monthly Revenue",
+                      value: formatNaira(stats.monthlyRevenue ?? 0),
+                      icon: (
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                          <line x1="12" y1="1" x2="12" y2="23" />
+                          <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
+                        </svg>
+                      ),
+                      color: colors.gold,
+                      gradient: `linear-gradient(135deg, rgba(212, 175, 55, 0.2) 0%, rgba(212, 175, 55, 0.08) 100%)`
+                    }] : []),
+                  ].map(card => {
+                    const isCompact = dashboardCardDensity === "compact";
+                    return (
+                      <div key={card.label} style={{
+                        background: card.gradient,
+                        border: `1px solid ${card.color}30`,
+                        padding: isCompact ? 12 : 24,
+                        display: "flex",
+                        flexDirection: "column",
+                        gap: isCompact ? 8 : 16,
+                        borderRadius: 8,
+                        backdropFilter: "blur(10px)",
+                        boxShadow: `0 4px 20px ${card.color}15`,
+                        transition: "all 0.3s ease"
+                      }}>
+                        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                          <span style={{
+                            fontSize: 10,
+                            color: colors.textMuted,
+                            letterSpacing: "0.2em",
+                            textTransform: "uppercase",
+                            fontWeight: 600
+                          }}>{card.label}</span>
+                          <span style={{ color: card.color, opacity: 0.9 }}>{card.icon}</span>
+                        </div>
+                        {card.label === "Monthly Revenue" && privacyMode ? (
+                          <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 4 }}>
+                            <span style={{
+                              fontSize: isCompact ? 16 : 22,
+                              color: colors.gold,
+                              fontWeight: 600,
+                              display: "flex",
+                              alignItems: "center",
+                              gap: 4
+                            }}>
+                              <TrendingUp size={isCompact ? 14 : 18} /> +12.4%
+                            </span>
+                            <span style={{ fontSize: 10, color: colors.textMuted, textTransform: "uppercase", letterSpacing: "0.05em" }}>growth</span>
+                          </div>
+                        ) : (
+                          <span style={{
+                            fontSize: isCompact ? 22 : 32,
+                            color: card.color,
+                            fontWeight: 300,
+                            letterSpacing: "-0.02em",
+                            fontFamily: "Georgia, serif"
+                          }}>{card.value}</span>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
 
-              {/* Shift Summary */}
-              <div style={{ background: colors.surface, border: `1px solid ${colors.border}`, padding: 20, borderRadius: 8, display: "flex", flexDirection: "column", justifyContent: "center" }}>
-                <p style={{ margin: 0, fontSize: 10, color: colors.textMuted, letterSpacing: "0.2em", textTransform: "uppercase" }}>
-                  Shift Summary
-                </p>
-                <h3 style={{ margin: "10px 0 6px", fontSize: 22, color: colors.text, fontWeight: 400, fontFamily: "Georgia, serif" }}>
-                  {getShiftGreeting()}, {staffName}
-                </h3>
-                <p style={{ margin: 0, fontSize: 13, color: colors.gold, textTransform: "capitalize" }}>
-                  {staffRole.replace(/-/g, " ")} · Front-of-house operations
-                </p>
-                <p style={{ margin: "12px 0 0", fontSize: 12, color: colors.textMuted, lineHeight: 1.5 }}>
-                  {todayArrivals} arrival{todayArrivals !== 1 ? "s" : ""} and {todayDepartures} departure{todayDepartures !== 1 ? "s" : ""} scheduled today.
-                  {missedArrivals.length > 0 && (
-                    <span style={{ color: "#ef4444", marginLeft: 8 }}>
-                      {missedArrivals.length} missed arrival{missedArrivals.length !== 1 ? "s" : ""}.
-                    </span>
-                  )}
-                </p>
+                {/* Shift Summary */}
+                <div style={{ background: colors.surface, border: `1px solid ${colors.border}`, padding: 20, borderRadius: 8, display: "flex", flexDirection: "column", justifyContent: "center" }}>
+                  <p style={{ margin: 0, fontSize: 10, color: colors.textMuted, letterSpacing: "0.2em", textTransform: "uppercase" }}>
+                    Shift Summary
+                  </p>
+                  <h3 style={{ margin: "10px 0 6px", fontSize: 22, color: colors.text, fontWeight: 400, fontFamily: "Georgia, serif" }}>
+                    {getShiftGreeting()}, {staffName}
+                  </h3>
+                  <p style={{ margin: 0, fontSize: 13, color: colors.gold, textTransform: "capitalize" }}>
+                    {staffRole.replace(/-/g, " ")} · Front-of-house operations
+                  </p>
+                  <p style={{ margin: "12px 0 0", fontSize: 12, color: colors.textMuted, lineHeight: 1.5 }}>
+                    {todayArrivals} arrival{todayArrivals !== 1 ? "s" : ""} and {todayDepartures} departure{todayDepartures !== 1 ? "s" : ""} scheduled today.
+                    {missedArrivals.length > 0 && (
+                      <span style={{ color: "#ef4444", marginLeft: 8 }}>
+                        {missedArrivals.length} missed arrival{missedArrivals.length !== 1 ? "s" : ""}.
+                      </span>
+                    )}
+                  </p>
+                </div>
               </div>
-            </div>
+            )}
 
             {/* Phase 3 Operational Dashboard Grid */}
             {/* Row 1: Arrivals & Departures (Side-by-Side Horizontal Scroll) */}
@@ -3130,45 +3430,47 @@ export function AdminPage({ initialTab }: { initialTab?: AdminTab } = {}) {
 
               {/* Row 2: System Activity & Missed Arrivals (Dynamic Grid) */}
               <div style={{
-                display: missedArrivals.length > 0 ? "grid" : "block",
-                gridTemplateColumns: missedArrivals.length > 0 ? "1fr 1fr" : "1fr",
-                gap: missedArrivals.length > 0 ? 20 : 0
+                display: (toggleSystemActivities && missedArrivals.length > 0) ? "grid" : "block",
+                gridTemplateColumns: (toggleSystemActivities && missedArrivals.length > 0) ? "1fr 1fr" : "1fr",
+                gap: (toggleSystemActivities && missedArrivals.length > 0) ? 20 : 0
               }}>
 
                 {/* System Activity Feed */}
-                <div style={{ background: colors.surface, border: `1px solid ${colors.border}`, padding: 20 }}>
-                  <h3 style={{ color: colors.gold, fontSize: 12, letterSpacing: "0.2em", textTransform: "uppercase", margin: "0 0 16px" }}>
-                    System Activity
-                  </h3>
-                  <div className="pr-1" style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-                    {systemActivityFeed.length === 0 ? (
-                      <p style={{ color: colors.textMuted, fontSize: 13 }}>No recent room updates</p>
-                    ) : (
-                      systemActivityFeed.map((entry: any, idx: number) => (
-                        <div key={`${entry.room_number}-${entry.updated_at}-${idx}`} style={{
-                          background: colors.surface2, padding: 10, borderLeft: `3px solid ${getStatusColor(entry.status)}`
-                        }}>
-                          <div style={{ display: "flex", justifyContent: "space-between", gap: 8, alignItems: "flex-start" }}>
-                            <p style={{ margin: 0, fontSize: 13, color: colors.text }}>
-                              Room {entry.room_number}
+                {toggleSystemActivities && (
+                  <div style={{ background: colors.surface, border: `1px solid ${colors.border}`, padding: 20 }}>
+                    <h3 style={{ color: colors.gold, fontSize: 12, letterSpacing: "0.2em", textTransform: "uppercase", margin: "0 0 16px" }}>
+                      System Activity
+                    </h3>
+                    <div className="pr-1" style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                      {systemActivityFeed.length === 0 ? (
+                        <p style={{ color: colors.textMuted, fontSize: 13 }}>No recent room updates</p>
+                      ) : (
+                        systemActivityFeed.map((entry: any, idx: number) => (
+                          <div key={`${entry.room_number}-${entry.updated_at}-${idx}`} style={{
+                            background: colors.surface2, padding: 10, borderLeft: `3px solid ${getStatusColor(entry.status)}`
+                          }}>
+                            <div style={{ display: "flex", justifyContent: "space-between", gap: 8, alignItems: "flex-start" }}>
+                              <p style={{ margin: 0, fontSize: 13, color: colors.text }}>
+                                Room {entry.room_number}
+                              </p>
+                              <span style={{ fontSize: 10, color: colors.textMuted, whiteSpace: "nowrap" }}>
+                                {entry.updated_at ? new Date(entry.updated_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "—"}
+                              </span>
+                            </div>
+                            <p style={{ margin: "4px 0 0", fontSize: 11, color: getStatusColor(entry.status) }}>
+                              {getStatusLabel(entry.status)}
                             </p>
-                            <span style={{ fontSize: 10, color: colors.textMuted, whiteSpace: "nowrap" }}>
-                              {entry.updated_at ? new Date(entry.updated_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "—"}
-                            </span>
+                            {entry.updated_by && (
+                              <p style={{ margin: "2px 0 0", fontSize: 10, color: colors.textMuted }}>
+                                by {entry.updated_by}
+                              </p>
+                            )}
                           </div>
-                          <p style={{ margin: "4px 0 0", fontSize: 11, color: getStatusColor(entry.status) }}>
-                            {getStatusLabel(entry.status)}
-                          </p>
-                          {entry.updated_by && (
-                            <p style={{ margin: "2px 0 0", fontSize: 10, color: colors.textMuted }}>
-                              by {entry.updated_by}
-                            </p>
-                          )}
-                        </div>
-                      ))
-                    )}
+                        ))
+                      )}
+                    </div>
                   </div>
-                </div>
+                )}
 
                 {/* Missed Arrivals */}
                 {missedArrivals.length > 0 && (
@@ -3238,7 +3540,7 @@ export function AdminPage({ initialTab }: { initialTab?: AdminTab } = {}) {
         )}
 
         {/* ===== BOOKINGS TAB ===== */}
-        {!loading && !isOrdersPage && activeTab === "bookings" && !showStaffManagement && stats && (
+        {!loading && !isOrdersPage && activeTab === "bookings" && (staffRole === "admin" || staffRole === "manager" || staffRole === "front-desk" || staffRole === "accountant") && !showStaffManagement && stats && (
           <div style={{
             background: colors.surface,
             border: `1px solid ${colors.border}`,
@@ -3379,7 +3681,7 @@ export function AdminPage({ initialTab }: { initialTab?: AdminTab } = {}) {
         )}
 
         {/* ===== ROOMS TAB ===== */}
-        {!loading && !isPmsSubPage && activeTab === "rooms" && !showStaffManagement && stats && (
+        {!loading && !isPmsSubPage && activeTab === "rooms" && (staffRole === "admin" || staffRole === "manager" || staffRole === "front-desk" || staffRole === "housekeeping") && !showStaffManagement && stats && (
           <div style={{
             background: colors.surface,
             border: `1px solid ${colors.border}`,
@@ -3787,7 +4089,7 @@ export function AdminPage({ initialTab }: { initialTab?: AdminTab } = {}) {
                 <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 16, marginBottom: 32 }}>
                   <div style={{ background: colors.surface, border: `1px solid ${colors.border}`, padding: 20, display: "flex", flexDirection: "column", gap: 12 }}>
                     <span style={{ fontSize: 11, color: colors.textMuted, letterSpacing: "0.15em", textTransform: "uppercase" }}>Total Revenue</span>
-                    <span style={{ fontSize: 28, color: colors.gold, fontWeight: 400 }}>{formatNaira(reportData.totalRevenue)}</span>
+                    <span style={{ fontSize: 28, color: colors.gold, fontWeight: 400 }}>{renderNaira(reportData.totalRevenue)}</span>
                   </div>
                   <div style={{ background: colors.surface, border: `1px solid ${colors.border}`, padding: 20, display: "flex", flexDirection: "column", gap: 12 }}>
                     <span style={{ fontSize: 11, color: colors.textMuted, letterSpacing: "0.15em", textTransform: "uppercase" }}>Total Bookings</span>
@@ -3795,7 +4097,7 @@ export function AdminPage({ initialTab }: { initialTab?: AdminTab } = {}) {
                   </div>
                   <div style={{ background: colors.surface, border: `1px solid ${colors.border}`, padding: 20, display: "flex", flexDirection: "column", gap: 12 }}>
                     <span style={{ fontSize: 11, color: colors.textMuted, letterSpacing: "0.15em", textTransform: "uppercase" }}>Avg per Booking</span>
-                    <span style={{ fontSize: 28, color: colors.text, fontWeight: 400 }}>{formatNaira(reportData.avgPerBooking)}</span>
+                    <span style={{ fontSize: 28, color: colors.text, fontWeight: 400 }}>{renderNaira(reportData.avgPerBooking)}</span>
                   </div>
                 </div>
 
@@ -3818,7 +4120,7 @@ export function AdminPage({ initialTab }: { initialTab?: AdminTab } = {}) {
                         <tr key={item.roomType} style={{ borderBottom: `1px solid ${colors.border}` }}>
                           <td style={{ padding: "12px 16px", fontSize: 13, color: colors.text }}>{item.roomType}</td>
                           <td style={{ padding: "12px 16px", fontSize: 13, color: colors.text }}>{item.count}</td>
-                          <td style={{ padding: "12px 16px", fontSize: 13, color: colors.gold }}>{formatNaira(item.revenue)}</td>
+                          <td style={{ padding: "12px 16px", fontSize: 13, color: colors.gold }}>{renderNaira(item.revenue)}</td>
                           <td style={{ padding: "12px 16px", fontSize: 13, color: colors.text }}>{item.percentage}%</td>
                         </tr>
                       ))}
@@ -3844,7 +4146,7 @@ export function AdminPage({ initialTab }: { initialTab?: AdminTab } = {}) {
                         <tr key={item.method} style={{ borderBottom: `1px solid ${colors.border}` }}>
                           <td style={{ padding: "12px 16px", fontSize: 13, color: colors.text }}>{item.method}</td>
                           <td style={{ padding: "12px 16px", fontSize: 13, color: colors.text }}>{item.count}</td>
-                          <td style={{ padding: "12px 16px", fontSize: 13, color: colors.gold }}>{formatNaira(item.revenue)}</td>
+                          <td style={{ padding: "12px 16px", fontSize: 13, color: colors.gold }}>{renderNaira(item.revenue)}</td>
                         </tr>
                       ))}
                     </tbody>
@@ -3880,7 +4182,7 @@ export function AdminPage({ initialTab }: { initialTab?: AdminTab } = {}) {
                             <td style={{ padding: "12px 16px", fontSize: 13, color: colors.text }}>{new Date(b.check_in).toLocaleDateString()}</td>
                             <td style={{ padding: "12px 16px", fontSize: 13, color: colors.text }}>{new Date(b.check_out).toLocaleDateString()}</td>
                             <td style={{ padding: "12px 16px", fontSize: 13, color: colors.text }}>{b.nights}</td>
-                            <td style={{ padding: "12px 16px", fontSize: 13, color: colors.gold }}>{formatNaira(b.total)}</td>
+                            <td style={{ padding: "12px 16px", fontSize: 13, color: colors.gold }}>{renderNaira(b.total)}</td>
                             <td style={{ padding: "12px 16px", fontSize: 13, color: colors.text }}>{b.gateway}</td>
                             <td style={{ padding: "12px 16px", fontSize: 13, color: colors.text }}>{b.status}</td>
                           </tr>
@@ -3991,7 +4293,7 @@ export function AdminPage({ initialTab }: { initialTab?: AdminTab } = {}) {
         )}
 
         {/* ===== GUEST HISTORY TAB ===== */}
-        {!loading && !isPmsSubPage && activeTab === "guest-history" && !showStaffManagement && stats && (
+        {!loading && !isPmsSubPage && activeTab === "guest-history" && (staffRole === "admin" || staffRole === "manager" || staffRole === "front-desk" || staffRole === "accountant") && !showStaffManagement && stats && (
           <div style={{
             background: colors.surface,
             border: `1px solid ${colors.border}`,
@@ -4019,11 +4321,11 @@ export function AdminPage({ initialTab }: { initialTab?: AdminTab } = {}) {
                   </thead>
                   <tbody>
                     {stats.returningGuests.map((guest: any) => (
-                      <tr key={guest.guest_email} style={{ borderBottom: `1px solid ${colors.border}` }}>
+                      <tr key={guest.guest_profile_id || guest.guest_email} style={{ borderBottom: `1px solid ${colors.border}` }}>
                         <td style={{ padding: "12px 16px", fontSize: 13, color: colors.text }}>{guest.guest_name}</td>
                         <td style={{ padding: "12px 16px", fontSize: 13, color: colors.text }}>{guest.guest_email}</td>
                         <td style={{ padding: "12px 16px", fontSize: 13, color: colors.text }}>{guest.visit_count}</td>
-                        <td style={{ padding: "12px 16px", fontSize: 13, color: colors.gold }}>{formatNaira(guest.total_spent)}</td>
+                        <td style={{ padding: "12px 16px", fontSize: 13, color: colors.gold }}>{renderNaira(guest.total_spent)}</td>
                         <td style={{ padding: "12px 16px", fontSize: 13, color: colors.text }}>{new Date(guest.last_visit).toLocaleDateString()}</td>
                       </tr>
                     ))}
@@ -4035,7 +4337,7 @@ export function AdminPage({ initialTab }: { initialTab?: AdminTab } = {}) {
         )}
 
         {/* ===== OCCUPANCY FORECAST TAB ===== */}
-        {!loading && !isPmsSubPage && activeTab === "occupancy-forecast" && !showStaffManagement && (
+        {!loading && !isPmsSubPage && activeTab === "occupancy-forecast" && (staffRole === "admin" || staffRole === "manager" || staffRole === "front-desk" || staffRole === "housekeeping") && !showStaffManagement && (
           <div style={{
             background: colors.surface,
             border: `1px solid ${colors.border}`,
@@ -4653,7 +4955,7 @@ export function AdminPage({ initialTab }: { initialTab?: AdminTab } = {}) {
       )}
 
       {/* ==================== WALK-IN BOOKING MODAL ==================== */}
-      {showWalkIn && (
+      {showWalkIn && (staffRole === "admin" || staffRole === "manager" || staffRole === "front-desk") && (
         <div style={{
           position: "fixed", inset: 0, background: "rgba(0,0,0,0.8)",
           zIndex: 400, display: "flex", alignItems: "center", justifyContent: "center", padding: 20

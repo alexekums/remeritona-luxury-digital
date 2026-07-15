@@ -15,7 +15,7 @@ export const Route = createFileRoute("/gallery")({
   component: GalleryPage,
 });
 
-const categories = ["All", "Interior", "Rooms", "Dining", "Facilities", "Events", "Exterior"];
+const categories = ["All", "Interior", "Rooms", "Restaurant", "Facilities", "Events", "Exterior"];
 
 function GalleryPage() {
   const [filter, setFilter] = useState("All");
@@ -26,7 +26,7 @@ function GalleryPage() {
     <div className="min-h-screen bg-background">
       <SiteHeader />
 
-      <section className="pt-40 pb-12 px-6 bg-charcoal text-center">
+      <section className="pt-40 pb-12 px-6 bg-zinc-900 text-center">
         <p className="text-gold text-xs uppercase tracking-[0.4em] mb-4">Visual Stories</p>
         <h1 className="font-serif text-5xl md:text-6xl">Gallery</h1>
       </section>
@@ -46,7 +46,7 @@ function GalleryPage() {
             {items.map((img, i) => (
               <button key={i} onClick={() => setOpen(i)} className="group relative overflow-hidden aspect-square">
                 <img src={img.src} alt={img.alt} loading="lazy" className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700" />
-                <div className="absolute inset-0 bg-onyx/0 group-hover:bg-onyx/40 transition-colors grid place-items-center">
+                <div className="absolute inset-0 bg-zinc-900/0 group-hover:bg-zinc-900/60 transition-colors grid place-items-center">
                   <span className="text-gold text-xs uppercase tracking-widest opacity-0 group-hover:opacity-100">{img.category}</span>
                 </div>
               </button>
@@ -56,7 +56,7 @@ function GalleryPage() {
       </section>
 
       {open !== null && (
-        <div className="fixed inset-0 z-50 bg-onyx/95 grid place-items-center p-4" onClick={() => setOpen(null)}>
+        <div className="fixed inset-0 z-50 bg-zinc-900/95 grid place-items-center p-4" onClick={() => setOpen(null)}>
           <button className="absolute top-6 right-6 text-foreground hover:text-gold" onClick={() => setOpen(null)}><X size={32} /></button>
           <img src={items[open].src} alt={items[open].alt} className="max-h-[90vh] max-w-[95vw] object-contain" />
         </div>
